@@ -1,0 +1,14 @@
+#!/bin/bash   
+
+#get the directory of this bash
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+JANUSLIB="$DIR/../lib"
+JANUSBIN="$DIR/../bin"
+
+if [ $(uname -m) == 'x86_64' ]; then
+  TOOLDIR="$DIR/../external/DynamoRIO-Linux-7.0.0-RC1/"
+elif [ $(uname -m) == 'aarch64' ]; then
+  TOOLDIR="$DIR/../external/DynamoRIO-AArch64-Linux-7.0.0-RC1/"
+fi
+

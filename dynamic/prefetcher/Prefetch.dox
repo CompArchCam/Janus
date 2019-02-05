@@ -1,0 +1,34 @@
+/*!
+    \page Prefetch
+
+    This page gives an overview on how a rule program is read and executed by the dynamic translator.
+
+    Rules are first retrieved, then ordered and then the specific handlers are called at the right addresses. This is achived by DynamoRIO's event callback (*event_basic_block*).
+
+    Error handling                  {#ErrorHandling}
+    ==============
+
+     Experiments suggest, that faults are rare to occur, therefore we want to have an error handling mechanism, that does not induce a huge overhead, but can restore the application context in case a prefetch sequence faults. This is achieved by dividing each prefetch sequence into four parts:
+        - Saving
+        - Actual address generation and prefetch instruction
+        - A bitpattern marking the start of the restore block
+        - Restoring
+
+    The idea is that first we save all the registers that are
+        - live at the point where the prefetch code is inserted, and
+        - moved or overwritten at any point where the inserted code could potentially fault (memory accesses)
+
+    The location of each saved register remains constant throughout the execution of the prefetch code. These locations and which registers need saving are determined by the static analyser and passed to the dynamic part as *restore rules*.
+
+    The dynamic translator inserts instructions to perform the given save operations. Then it inserts the prefetch code. Afterwards four NOP instructions are inserted as a bitpattern (0x90909090). This pattern is assumed to never occur in the prefetch sequence. Then the restore operations are inserted (in reverse order, so that stack push and pop operations restore the values to the same registers).
+
+    This structure is useful, because in the case of a fault, our signal handler can look ahead from the position pointed to by the program counter for the bitpattern, and simply increase the program counter to that address. Hence we will execute the save instructions, then some code that does not modify any live registers other than the saved ones, and does not modify any of the saved contents, and then the restore instructions. This way it will always be the case, irrespective of whether the prefetch code faults and if so where the fault occurs within the code.
+
+    This error handling is costly when a fault occurs, however, if no fault occurs, it does not involve any additional conditional code. (The four NOP instructions only result in a negligible overhead).
+
+    Custom Stack                    {#CustomStack}
+    ============
+
+    In the static analysis we may determine that some variables need to be saved upon entry to a function and restored upon exit from it. In that case we can not use the application's stack, since that may interfere with the original application's behaviour. Therefore in the rule program upon entry to a new thread we allocate a custom stack for that thread, and will use that stack for our saving and restoring mechanism. This is achieved by allocating a block of memory (currently 8192 bytes), and setting the first entry to be the custom stack pointer, ie make it point to the memory address right after the allocated block. When that stack is used, we first save the original stack pointer to a spill slot, and then copy the custom stack pointer to the stack register (RSP). After that the custom stack can be normally used. When we have performed the desired push/pop operations, the stack register is written back to the start of the custom stack's block, and the original stack pointer is retrieved.
+
+*/

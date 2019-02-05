@@ -1,0 +1,6 @@
+# Dr. Memory tool config file
+FRONTEND_REL=drmemory//./bin64/drmemory
+TOOL_OP=-dr
+TOOL_OP_DR_PATH
+TOOL_OP_DR_BUNDLE=-dr_ops
+USER_NOTICE=Support for 64-bit applications under this tool is experimental.  Please report issues to http://drmemory.org/issues.

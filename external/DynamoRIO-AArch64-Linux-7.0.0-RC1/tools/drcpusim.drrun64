@@ -1,0 +1,2 @@
+# drcpusim tool config file
+CLIENT_REL=tools/lib64/release/libdrcpusim.so

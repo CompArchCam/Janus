@@ -1,0 +1,281 @@
+/*!
+    \page RuleGeneration
+This page describes the main ideas and algorithms behind the static analysis, the recognition of prefetch opportunities and the generation of the actual prefetch rules to be passed to the dynamic part.
+
+Summary:
+========
+
+- The rule generation starts by a [static analysis](#StaticAnalysis), where the code is disassembled, operands are retrieved, variables are defined, and an SSA graph is built and information is retrieved about functions and loops.
+
+- From these data structures [further analysis](#LoopVarAnalysis) is performed to recognize SSA variables that are constant within a loop (or a set of loops), and induction variables are also recognized.
+
+- Then we iterate over each *MachineInstruction* within a loop, and for any memory operand that is loaded (read), we determine whether it is possible to generate a prefetch sequence from the information we have or not. We are looking for loads that are located in at least one loop, in which the loaded address is not constant, but can be calculated from induction and constant SSA variables (relative to that loop). (See [Prefetch Sequence Recognition](#PrefetchRecognition).)
+
+- The next phase is to traverse the SSA graph forward starting from each prefetched load, to count the number of other prefetched load instructions that depend on the result of the current load. This is necessary, so that we can [calculate the offset](#OffsetCalculation) for the prefetch (see section 4.4 of the <a href="https://www.cl.cam.ac.uk/~sa614/papers/Software-Prefetching-CGO2017.pdf">software prefetching paper</a> for details).
+
+- The next phase is to traverse the SSA graph backwards from prefetchable load operands to find a way to compute the address of the load *offset* iterations in the future. We want to keep each prefetch sequence continuous, so that they can be inserted as a single block of new instructions before the prefetched load. This is beneficial, since this way we only have to use registers locally, which makes saving/restoring the original state easier, and reduces the interference within different prefetch sequences. On the other hand, this means that most of the instructions originally used will have to be relocated, and some of the input variables originally used may not be available at the point where we insert the prefetch sequence. The details of the solutions can be found in the [Evaluating the future value of a loop-dependant variable](#varEvaluation) section.
+
+- The previous phase computes the computation sequence in terms of abstract variables. This means that it generates code that describes what computation should be performed, but does not assign specific locations to the intermediate values, instead it only references them by unique variable IDs. This form describes which variables are the inputs/outputs of a specific instruction, and the main instructions are stored in order in the data structure, however the final computation may have slightly more instructions to move the abstract variables around in the hardware registers. In the next phase we will generate abstract variable - register assignments, however, first we need to find which registers can be used at each location. We can start with the data structures generated in the [original static analysis](#StaticAnalysis), but we have to refine this, as the registers available at a given prefetch address will also depend on which registers we are using as part of future prefetch sequences. In the [Available register analysis](#RegistersAvailable) phase we analyse these dependencies.
+
+- Now we have all the information we need to generate actual machine instructions that can perform the computations found in the [Variable Evaluation](#varEvaluation) phase. We work with several sets of registers and try to minimize the amount of code we have to generate, and especially the number of registers we have to save/write to memory, since even cached memory accesses appear to be costly compared to the gains we can achieve by prefetching. We primarily try to work with non-live registers (ie the ones that are overwritten before being read), then with registers that are not live within the function (ie ones that can be saved at the start of the current function and restored before returning), and then if necessary, we can also use registers that are not needed for the current prefetch sequence, but are otherwise live (in this case we have to make sure to save them before starting the sequence and then restoring at the end of the sequence -- see [saving & restoring registers](#SaveAndRestore)). In [this phase](#registerAssignment) actual static rules are generated for each new instruction inserted and these are stored to be later passed to the dynamic part.
+
+
+
+Static Analysis                                             {#StaticAnalysis}
+===============
+
+The machine code is divided into [functions](@ref janus::Function), and within each function the code is further divided into [basic blocks](@ref janus::BasicBlock), which are units of code executed sequentially (ie only the last instruction may be a jump, however, jumping to the middle of a basic block is allowed). [Loops](@ref janus::Loop) are also recognized. Within a basic block each instruction is disassembled and stored into a *MachineInstruction* object, with all the information retrieved, such as operands.
+
+The heart of the static analysis for prefetch generation is the Single Static Assignment (<a href="https://en.wikipedia.org/wiki/Static_single_assignment_form">SSA</a>) form. In this project we use a graph structure to represent the SSA form efficiently (SSA graph). This graph has different types of nodes: Initial values, Memory operands, Phi nodes, Machine instructions and Normal variables. The structure of the graph is described in more detail in the documentation of the *VariableState* class, which represents a single SSA variable. This graph has edges for each data dependency.
+
+\note currently some dependencies between partial registers such as *ax*, *al*, *ah* are not included in the SSA graph, however, dependencies between the 32-bit registers and their 64-bit counterparts are picked up correctly.
+
+The graph is constructed by creating *VariableState* objects for all inputs and outputs, and then finding the dominance frontiers of the set of basic blocks in the Control Flow Graph containing a definition (assingment) of each given variable (register), inserting a phi node into each basic block in the dominance frontier, and then traversing the CFG, linking together all the nodes (*VariableState*, *MachineInstruction*) to form the SSA graph. The SSA graph of an executable file can be constructed and printed to a pdf by the following commands:
+
+~~~~~~~~~~
+cd <path_to_executable>
+<path_to_gpft>/bin/analyze -a <executable_name>
+<path_to_gpft>/janus/graph <executable_name>.SSA
+<path_to_gpft>/janus/graph <executable_name>.loop.SSA
+~~~~~~~~~~
+
+Then the file *executable_name.SSA.pdf* contains the ssa graph for all functions.
+The file *executable_name.loop.SSA.pdf* contains the ssa graph for all loops They can be viewed by a standard pdf viewer.
+
+In the SSA Graph PDF:
+    - diamond-shaped boxes represent phi nodes or memory operands
+    - elliptic boxes represent *MachineInstruction* objects
+    - rectangular boxes represent normal variables, initial values or memory operands
+
+Furthermore,
+    - <span style="color:red">red arrows</span> represent input relations
+    - dashed arrows represent output relations
+    - continuous black arrows represent value inheritance (to phi nodes, memory operands)
+
+Colours:
+    - <span style="color:orange">Memory operands</span> are coloured <span style="color:orange">orange</span>.
+    - <span style="color:darkturquoise">Stack-based variables</span> are coloured <span style="color:darkturquoise">darkturquoise</span>.
+    - <span style="color:dodgerblue">Global (PC-relative) variables</span> are coloured <span style="color:dodgerblue">dodgerblue</span>.
+    - <span style="color:aquamarine">Loop variables</span> are coloured <span style="color:aquamarine">aquamarine</span>.
+    - <span style="color:gold">Loop instructions</span> are coloured <span style="color:gold">gold</span>.
+
+Details of the analysis performed for the different data structures can be found in the documentation files. The main data structures are
+    - [Function](@ref janus::Function)
+    - [Loop](@ref janus::Loop)
+    - [BasicBlock](@ref janus::BasicBlock)
+    - [MachineInstruction](@ref janus::MachineInstruction)
+
+Some of the most important features for prefetch generation are:
+    - dominator relations in the CFG (see [BasicBlock::dominates](@ref janus::BasicBlock::dominates), [BasicBlock::idom](@ref janus::BasicBlock::idom))
+    - dominance frontiers (see [BasicBlock::dominanceFrontier](@ref janus::BasicBlock::dominanceFrontier))
+    - relations between nested loops (see [Loop::isAncestorOf](@ref janus::Loop::isAncestorOf), [Loop::hasAsAncestor](@ref janus::Loop::hasAsAncestor), [Loop::LCAwith](@ref janus::Loop::LCAwith), [Loop::parentLoop](@ref janus::Loop::parentLoop))
+    - register information, usage, reach and liveness analysis (see [Function::regDefs](@ref janus::Function::regDefs), [Function::regUses](@ref janus::Function::regUses), [Function::liveRegIn](@ref janus::Function::liveRegIn), [Function::liveRegOut](@ref janus::Function::liveRegOut), [Function::reachRegOut](@ref janus::Function::reachRegOut), [BasicBlock::isRegLive](@ref janus::BasicBlock::isRegLive), [BasicBlock::liveRegSet](@ref janus::BasicBlock::liveRegSet), [BasicBlock::doesReachOutside](@ref janus::BasicBlock::doesReachOutside), [BasicBlock::reachRegOutSet](@ref janus::BasicBlock::reachRegOutSet))
+    - information about induction variables and constants ([see the next section](#LoopVarAnalysis))
+    - functions to locate the current version of a given location (see [BasicBlock::alive](@ref janus::BasicBlock::alive))
+
+Constant and induction variable analysis                    {#LoopVarAnalysis}
+========================================
+
+Constants
+---------
+
+Ideal definition: An SSA variable is constant with respect to a specific loop, if its value is the same in every iteration of the loop.
+
+Definition used for the sake of simplicity: An SSA variable is assumed to be constant in a loop if its assigned value is the value of another constant variable in the same loop, or is made outside of the body of the loop. Note, that in the following loop, no variable would be considered constant according to this definition, despite both x and y being constant:
+~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+int x;
+int y = x+10;
+for (int i=0; i<N; i++) {
+    y = x+10;
+    x = y-10;
+}
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Whereas, in this code all versions of x, y and z would be constant:
+~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+int x,z;
+int y = x+10;
+for (int i=0; i<N; i++) {
+    z = y;
+    y = z;
+
+    x = x;
+}
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+More precisely, a variable is assumed to be constant iff:
+
+-# Its assignment is made outside of the body of the loop (by the properties of the SSA form, if the variable is not constant, there must be a phi node in the entry block).
+-# The value assigned is a memory address assumed to be constant, unless it is a recognized stack-based or rip-relative variable.
+    \note Currently all memory addresses are assumed to be constant.
+-# The value assigned is an obvious constant (recognized earlier).
+-# The value assigned is another version of the same constant.
+
+The recognition of *4.)* is done by running a traversal on the SSA graph starting from a phi node in the entry block of the loop. This traverses *VariableState* objects defined within the same loop, including phi nodes. We only traverse through `mov` instructions, and phi nodes if all possible definitions inherited by the phi node have been traversed already. All reached states are considered constant if and only if all possible inherited definitions of the starting phi node come from outside of the loop or from a variable traversed.
+    \warning This algorithm is not perfect, and does not pick up some constants (eg if there are more than one entry blocks to the loop)
+
+This analysis finds the outermost loop in which each variable is constant and stores it in [VariableState::constLoop](@ref janus::VariableState::constLoop). This is used internally in the implementation of [Loop::isConstant(VariableState* vs)](@ref janus::Loop::isConstant). The properties of variables used are:
+- A variable constant in a loop is constant in all nested loops.
+- An induction variable in a loop is constant in all nested loops.
+- A variable defined outside of the body of a loop is always constant.
+
+We also link variables that we find as equal together to form an "equal group". This can later be queried by calling [VariableState::equals](@ref janus::VariableState::equals).
+
+\note This could be updated to use a similar method as induction variables, considering constants to be induction variables with a constant update of 0.
+
+Induction variables
+-------------------
+
+Short description: An SSA variable is considered an induction variable if it is incremented by an equivalent sum of variables in each iteration (irrespective of the codepath we go down), and all of the variables are recognized as constant in the current loop.
+
+Details:
+
+We perform a similar traversal as before. The difference is that we also traverse through add and sub instructions, if the other argument is a recognized constant in the loop. While doing so, we keep the sequence of updates in an [UpdateSequence](@ref janus::UpdateSequence) object. The [equals operator](@ref janus::UpdateSequence) is aimed to be defined in such a way, that equivalent update sequences can be recognized. This is used during the traversal: When we reach a phi node, we only traverse through it if 
+- all possible inherited definitions have been traversed, and
+- they were all found equal (ie had equivalent update sequences).
+
+This way, when we finish we only have to test whether all paths back to the original phi node lead to equivalent update sequences. If so, we mark the whole group as equivalent induction variables up to a constant difference. We also store that constant difference in the *UpdateSequence* object [VariableState::constDifference](@ref janus::VariableState::constDifference). This field can be used together with [VariableState::repInductionVar](@ref janus::VariableState::repInductionVar) to find an equivalent induction variable in the loop, and calculate the value of this induction variable at any arbitrary point in the loop.
+
+This part is implemented in *Analysis.cpp* in the function *VariableAnalysis(janus::Loop *loop)*.
+
+Finding prefetchable loads                                  {#PrefetchRecognition}
+==========================
+
+What values are we prefetching?                             {#PrefetchableDef}
+-------------------------------
+
+Currently we prefetch every address that we are able to prefetch, ie no analysis is done on whether something is profitable to be prefetched or not.
+
+Let us first define the term *precomputable values* with respect to a given loop, as values that are either
+    -# recognized constants in the loop, or
+    -# recognized induction variables in the loop, or
+    -# or other variables, for which there exists a sequence consisting of a constant number of instructions excluding control flow instructions, that takes only variables of type 1) or 2) as inputs and results in the value of the given variable in each iteration (ie the exact same instructions must result in the value of that variable in each and every iteration of the loop).
+
+We are trying to prefetch memory operands, which are read, and the address of which is a *precomputable value* according to the previous definition (let us refer to these as *prefetchable loads*). In addition, we may [cross phi nodes](@ref phiCross) under specific circumstances.
+
+We may also exclude from prefetching some loads, for which the sequence of calculations seems to be too costly to insert (ie uses too many registers) and/or the sequence generation fails for some reason. (Currently the possible reason for failure is not being able to find a register assignment).
+
+Crossing PHI nodes                                          {#phiCross}
+------------------
+
+Phi nodes are crossed only under limited circumstances to prefetch the first element in an otherwise not prefetchable data structure, that is traversed in an nested loop. It is often the case, that a program holds an array of some special data structures. Eg an array of linked lists. If the program accesses each element in all of the lists in sequential order, then although it is not possible to prefetch the traversal down each individual list, it is often the case that a large number of those lists are empty or nearly empty. In this case it is profitable to prefetch the first elements of subsequent lists in the outer loop. To achieve this, we are looking for memory operands that are
+    -directly connected to a phi node
+    -and that phi node only has one *initialization*, ie only one ancestor outside of the loop
+    -and that ancestor is precomputable
+
+In this case a prefetch is inserted to right before jumping into the loop (may be inserted before the instruction setting the flag for a conditional jump to avoid having to save the flags register). This way we can get cache hits on the first accesses speeding up the computation in case there are only few elements in the next lists, on the other hand, we do not make a huge negative impact on the performance otherwise (since the outer loop will not execute many times compared to the inner loop).
+
+How are we finding *prefetchable loads*?
+----------------------------------------
+
+We start backwards traversals from each load operand in some loop, calling the function *findPrefetch* in *OptRule.cpp*. This function tries to find and store for each SSA variable it reaches the outermost loop, in which it is not constant but can be calculated from induction variables and constants, if such loop exists.
+- For variables defined outside of any loops, we return NULL
+- For induction variables we return their induction loops
+- For any other phi nodes we return NULL (we don't cross non-induction phi nodes, as that may require more sophisticated control flow analysis)
+- For memory operands, we just recurse
+- For normal variables (defined as the output of an instruction), we recurse into each of the inputs, and do the following:
+
+We consider prefetching in the context of the block of the defining machine instruction. We keep two pointers simultaneously: an inner and an outer pointer. The outer one points to a loop that is an ancestor of the current loop, such that the set of loops for which all input variables can be computed is the set of loops strictly nested inside the outer limit. The inner one points to the innermost loop for which one or more of the inputs of the machine instruction depends on induction variables of that loop. Therefore the only loop in which it is worth prefetching is the one pointed to by the inner pointer, but it is only possible to prefetch if it is strictly nested inside the outer pointer.
+
+For the last paragraph an example is the following code:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.cpp}
+int v=0;
+for(int i=0; i<N; i++) {
+    for (int j=0; j<foo(i); j++) {
+        v++;
+    }
+
+    for (int j=0; j<i; j++) {
+        cout << a[i+v] << endl; //load #1
+        cout << a[j+v] << endl; //load #2
+    }
+}
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Here the outer pointer for both loads is the outer loop (since that is the LCA of the defining loop of v and the loop containing the load, and v is not constant in that loop), and the inner pointer points to the outer loop for *load #1* and to the (second) inner loop for *load #2*. Hence only *load #2* is prefetched. This makes sense, since *load #1* can be calculated in the inner loop, but it loads the value from a constant location, and con not be calculated in the outer loop, since v is not easily computable. However, *load #2* can be prefetched in the inner loop.
+
+When this function returns, we will have a list of prefetchable load operands and the loop in which thay can be prefetched.
+
+Calculating the offset to prefetch                          {#OffsetCalculation}
+==================================
+
+Here we start from each prefetched load, and use recursion with memoization to calculate the number of loads that depend on the value loaded by the current instruction. We recurse through all machine instructions and variable definitions.
+
+We can only achieve significant speedup in hot loops, ie loops in which the program spends most of its time, and only if the loop in which we are prefetching makes a large number of iterations. On the other hand, if a loop does not meet the above description, then inserting unnecessary prefetch instructions is not expected to result in a significant slowdown. Therefore we will just assume that every loop that we are looking at is of this form. That means that we expect the loop to make a large number of iterations, and hence nested loops are expected to only run a few number of times (eg to loop through short linked lists, ...). If this assumption turns out to be wrong, and nested loops make a large number of iterations, then the main loop can not execute a significantly large number of times relative to the running time of the whole program.
+
+This means, that for calculating the offset we will only consider load instructions that are located within the body of the current loop, and we will not consider any load instructions in nested loops.
+
+The prefetchable load instructions within a function must form a Directed Acyclic Graph (DAG) (in which every load instruction is a node and there is an edge from load instruction A to load instruction B iff the *address* loaded by B is influenced by the *value* loaded by A). This can be proven from the definition of [prefetchable loads](#PrefetchableDef).
+
+Therefore from each prefetchable instruction there must be a well-defined longest path (to a leaf). Let us calculate the offset to prefetch based on the length of that path, as
+\f[\frac{c \cdot \left(l+1\right)}{t}\f]
+where *l* is the length of the longest path from the given load, *t* is the length of the longest path in the DAG of loads in the given loop (excluding nested loops), and *c* is an "architecture-dependent constant".
+
+Using this formula, each value is going to be brought into the cache exactly\f$\frac{c}{t}\f$ iterations, and hence (about) \f$c\f$ load instructions before its first use. We will assume that it will stay in cache until its last use (although this could later be improved by considering values that are used a large number of "levels" later (ie in a load that has a much lower *l* value)).
+
+
+Evaluating the future value of a loop-dependant variable    {#varEvaluation}
+========================================================
+
+Here we use the function called *evaluate*. It can evaluate the value of a given SSA variable at a given index, a given *offset* number of iterations in the future of the given *loop*.
+
+It traverses the data dependence (SSA) graph backwards, doing the following:
+
+For constants it attempts to find an equivalent constant, and copies it.
+
+For induction variables it finds an induction variable which only differs by a constant, copies it, evaluates and adds the constant difference to it. The class [UpdateSequence](@ref janus::UpdateSequence) is heavily used in this part. Then it evaluates the update sequence of the induction variable, multiplies it by *offset* and adds it to the current copy. Some of these operations can be merged to optimize them (eg constant updates are just added as a constant instead of loading the update to a register, multiplying it and adding it...).
+
+For other variables it looks at the machine instruction defining them, calculates each input (the register contents of input operands), and then applies the machine instruction. If the machine instruction has implicit operands, then it is marked to use the same registers as it did before and it is not modified whatsoever. For other instructions, we record which operand corresponds to which abstract variable and clone the instruction.
+
+This could be improved in the future by using memoization to only compute each state once, however, this creates additional challanges, since these variables are not in SSA form, hence we would also have to store which version of the given variable we mean, and be able to add additional instructions to preserve the requested states, as well as code to decide whether it is worth recalculating or preserving.
+
+The current data structure for evaluation is a vector of [new_instr](@ref new_instr) objects, each of which contains one single instruction with abstract variables as operands. Instructions may be clones of original instructions or brand-new instructions. In the former case if the original instruction had implicit operands, then we mark it to use the exact same registers as the original instruction did, since some of them may be fixed, otherwise we will leave it up to the register assignment phase to decide the register allocation. New instructions are inserted as part of evaluating induction variables (eg adding the offset), and for copying of read-only registers. A variable is first "defined" by inserting a new instruction of type *NEWINSTR_DEF*, which binds the variable id to the register, and then it may be copied to a new variable if the old one may be used later. The copying is decided here, but the register allocation is not, hence later more copy instructions may be added.
+
+Available register analysis                                 {#RegistersAvailable}
+===========================
+
+The mechanisms described in this section are closely connected to the code described in the [next section](#registerAssignemnt) and the also [saving and restoring](#SaveAndRestore), since it is crucial to use only available registers, or if other registers are used, then arrange that they are saved to specific locations, and we are able to recover them in the event that our code faults. The fault recovery mechanism is described under [saving and restoring](#SaveAndRestore). Experiment results seem to suggest that using anything other than registers is often too costly to be overweighted by the performance increase achieved by prefetching, hence an accurate analysis here has a noticeable impact on the final runtime performance of the binaries. A too optimistic analysis on the other hand can easily lead to the loss of correctness.
+
+During the execution of the assignment algorithm, we will keep track of
+    - original registers that are live at the current position (used later by the original application or other prefetch sequences), and their current stores.
+    - original registers that are used later in the same prefetch sequence
+    - free scratch registers and freeing up registers
+We start with a set of live registers used by original application code. This is directly available from the static analysis. The current analysis assumes the use of a standard x64 calling convention to deal with function boundaries. Any registers overwritten before the exit from the function are considered not live. On the other hand, the analysis of indirect branches (jumps) is not straightforward, hence the tool pessimisticly assumes each indirect jump or jump outside of the body of the current function to be a **possible** return or call. Callee-saved registers that are not read in the same function are considered to be in use by the calling function, and hence they may be used, but then the function has to [save and restore](#calleeSaveAndRestore) them.
+
+We merge this information with the information about the original register contents used by each prefetch sequence. This is performed by simply traversing from each prefetch sequence up to the definition of each variable that they use. We mark the registers live in each prefetch sequence that we encounter during our traversal. We don't mark them live for the original sequence yet.
+
+This will give us a list of registers that we can not modify in each prefetch sequence. This information will be combined with the set of original registers used by the current sequence and register usage by our own variables to determine which registers we are using in the register assignment phase.
+
+Assigning specific registers and generating the actual code {#registerAssignment}
+===========================================================
+
+The evaluation phase never concerns itself with the specifics of register usage and the scope of variables. It only decides which original registers to read (at definitions). Therefore we now scan through the generated sequence to find the times when each variable is first written and last read, and also store a list of all read times. The last read time of each original register is also computed. These will be used in the automatic freeUp mechanism. We keep all the necessary information in an *AssignmentContext* object (defined in *OptRule.cpp*) to be able to efficiently pass it to functions. We will go through the list of instructions and at each point keep the current assignments of variables in this datastructure and also keep the current assignment of original registers. These are used if a fixed-register instruction is encountered, which makes us relocate an original register that is later read in this sequence.
+
+When we assign or move variable or register contents, we keep the last use times in the freeUp field up to date, which is used for cleanup after each instruction.
+
+Whenever a new abstract variable is assigned, we look for a free register. This means first looking for a register that is not live (both in the application and in this sequence). If one is found, we simply return it. Otherwise, we look for variables that are savable. Any register that is marked as being used by the very next instruction is discarded, otherwise the first register is returned from the queue *savable*, which starts with registers that are never used by the current prefetch sequence, but are live in the application code (hence we can save them without ever having to worry about bringing them back in the middle of the prefetch sequence, which means that saving them is more efficient, since they only have to be saved once, after which they will remain free until the end of the current prefetch sequence). For reasons described in the [error handling](@ref Prefetch) section, these registers are not saved locally, but rather at the start of the sequence (and restored at the end). The second part of savable contains registers that are read during this sequence. If we have chosen a savable register, then we spill it into the next available spill slot, and mark the register reserve the newly freed register for the variable.
+
+The instruction generation works by taking instructions in turns, and
+    - For definitions, assign the given variable id to the given register. Cleanup should already be scheduled if applicable.
+    - For normal instructions, we assign registers to each of the output variables, and call the rule generator, which modifies the operands of the instruction to use the assigned registers instead of the ones originally used (for newly created instructions we assign arbitrary registers in the evaluation phase to be able to handle them in the same way). 
+    - For fixed-register instructions, we copy all already defined variables to their place (moving the contents of those registers if necessary), and then free and reserve the other registers used for the outputs.
+
+Rules are continuously generated, but only added if the prefetch generation succeeds. If at any point we cannot find enough free registers, we throw an exception, which is handled and the prefetch sequence is not inserted.
+
+After this all the save and restore rules are inserted.
+
+Saving & Restoring registers                                {#SaveAndRestore}
+============================
+
+Locally saving and restoring                                {#localSaveAndRestore}
+----------------------------
+
+Any live original register that is overwritten or is moved out of its original position at any instruction that could fault is saved to some location before the prefetch sequence and restored to its original place afterwards (See [error handling](@ref Prefetch) for details of why this is necessary). Here we have to concern ourselves with the allocation of spare space for saving. Firstly we look for free non-live registers at the specific address that are not used by the prefetch sequence, then we look for spill slots offered by the dynamic binary translator, and finally save to the stack (using push and pop). The latter two approaches appeared rather costly in experiments, since they could incur a cache miss, or increase cache usage which may interfere with the prefetch algorithm, hence their use is currently limited (to the first 4 spill slots only). Saving here to the stack is more straightforward than that described in the next section, since these operations are only performed locally.
+
+Saving & Restoring callee-saved registers on function boundaries    {#calleeSaveAndRestore}
+----------------------------------------------------------------
+
+If the register assignment decides to use a callee-saved register, that is not overwritten before the end of the function, then we have to save and restore that register at entry to and exit from the function. This is only possible if we know where the entry and exit points are. Therefore we restrict this behaviour to functions that do not have indirect jumps. Such jumps are currently not analyzed, and so we take the pessimistic approach to guarantee correctness. But even then, saving is not entirely straightforward, since using the application stack would often interfere with the function's use use of the stack. It would be complicated and costly to translate the function to avoid interference, hence we will set up a [custom stack](@ref Prefetch) for each thread in the dynamic part, and use it as part of our own saving and restoring mechanism for callee-saved registers that need saving in addition to the application's saving mechanism.
+
+*/

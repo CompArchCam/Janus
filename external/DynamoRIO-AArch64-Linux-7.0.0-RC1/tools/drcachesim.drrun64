@@ -1,0 +1,7 @@
+# drcachesim tool config file
+FRONTEND_REL=tools/bin64/drcachesim
+TOOL_OP=-dr
+TOOL_OP_DR_PATH
+TOOL_OP_DR_BUNDLE=-dr_ops
+TOOL_OP=-tracer
+CLIENT_REL=tools/lib64/release/libdrmemtrace.so

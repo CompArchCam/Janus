@@ -1,0 +1,33 @@
+#!/bin/bash     
+
+function usage {
+    echo "GABP CFG Printer"
+    echo "Usage: "
+    echo "./graph <executable>.cfg"
+    echo "A pdf containing all the CFG will be generated"
+}
+
+if [ $# -lt "1" ]
+then 
+	usage
+	exit
+fi
+
+binfile=$1
+dotfile="$binfile"
+tempfile="$binfile.temp"
+
+if [ -f $dotfile ];
+then
+   echo "Found cfg file $dotfile"
+else
+   echo "Dot file $dotfile does not exist in the binaries folder, please run the static analyser first."
+   exit
+fi
+
+dot -Tpdf $dotfile | csplit --quiet --elide-empty-files --prefix=$tempfile - "/%%EOF/+1" "{*}" 
+pdftk $tempfile* cat output $binfile.pdf 
+rm -f $tempfile*
+
+echo "CFG graph $binfile.pdf created"
+
