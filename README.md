@@ -22,16 +22,14 @@ JFet firstly performs a static analysis on the input binary using *analyze* and 
 ## Installation ##
 Janus uses [cmake](https://cmake.org/) for building its whole components. There is no need to install additional libraries. Simply create a new build folder and invoke cmake.
 
-```
-#!bash
+```bash
 mkdir build
 cd build
 cmake ..
 make -j
 ```
 You can also build Janus with `VERBOSE` mode enabled.
-```
-#!bash
+```bash
 cmake -DVERBOSE=ON ..
 ```
 
@@ -55,15 +53,13 @@ There are a few convenient bash scripts in the **janus** folder.
 * **janus/run_many.sh**: measure the timing of the input command for 10 times.
 
 For convenience, you can add these scripts into PATH:
-```
-#!bash
+```bash
 export PATH=$PATH:${YOUR_PATH_TO_JANUS}/janus/
 ```
 ## Run correctness tests ##
 Once it is built. You can test Janus on your x86 or AArch64 machine. Please ensure that you have at least four cores in your test machine.
 Simply type:
-```
-#!bash
+```bash
 make test
 ```
 It runs the native binaries first and then runs Janus paralleliser with the same binary.
@@ -71,13 +67,11 @@ It runs the native binaries first and then runs Janus paralleliser with the same
 
 ## Run a single test ##
 To test a specific executable, you can simply invoke the corresponding Janus script.
-```
-#!bash
+```bash
 jpar <num_threads> <executable> <arguments>
 ```
 For example, to parallelise an executable "2mm" with 4 threads, you can simply type:
-```
-#!bash
+```bash
 jpar 4 2mm
 ```
 
@@ -98,14 +92,12 @@ Option:
 ```
 
 For example. you can run the static binary analyzer:
-```
-#!bash
+```bash
 analyze -p 2mm
 ```
 A **Janus Rewrite Schedule** (JRS) file "2mm.jrs" is generated.
 This file is obfuscated but you can examine the contents using the "schedump" tool.
-```
-#!bash
+```bash
 schedump 2mm.jrs
 ```
 The rewrite schedule file is actually a list of "rewrite rules" to be interpreted by the dynamic binary translation tool.
@@ -115,14 +107,12 @@ The list of rewrite rules can be found in "shared/sched_rule.h".
 It also generates the detailed report of the binary analysis in "2mm.loop.log" and "2mm.loop.alias.log".
 
 If the rewrite rule exist along with the binary. You can invoke janus without re-generating new rewrite schedules
-```
-#!bash
+```bash
 jpar 4 2mm
 ```
 ## Janus Static Analyzer Options ##
 By using Janus static analyzer, you can generate different rewrite schedules from the same binary:
-```
-#!bash
+```bash
 ${YOUR_PATH_TO_JANUS}/bin/analyze <options> <binary>
 ```
 
@@ -137,8 +127,7 @@ And we do welcome anyone to contribute in this project and make this tool more u
 The Janus development documentation can be built using *DoxyGen*. You can follow the steps described [here](https://www.stack.nl/~dimitri/doxygen/manual/install.html) to install *DoxyGen*.
 
 Then run (in the root folder of the project):
-```
-#!bash
+```bash
 doxygen Doxyfile
 ```
 
@@ -164,15 +153,13 @@ This generates the html documentation into the *docs/html* folder. Open *docs/ht
 
 ### Debuggng ###
 The debugging build will print many event information to help you debug.
-```
-#!bash
+```bash
 cd build
 cmake -DVERBOSE=ON ..
 make -j
 ```
 You can also invoke the jpar with gdb
-```
-#!bash
+```bash
 ${YOUR_PATH_TO_JANUS}/janus/jpar_debug <num_threads> <binary> <arguments>
 ```
 
@@ -190,8 +177,7 @@ You can also rebuild with the following macros to generate a SIGTRAP at specific
 Janus static analyser has -a mode which can dump the information it retrieves from the static analysis.
 It generates the CFG as the dot format so that you can visualise the CFG in the pdf format.
 From the pdf you can understand the binary better.
-```
-#!bash
+```bash
 sudo apt-get install graphviz pdftk
 
 #run static analyser
