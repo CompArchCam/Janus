@@ -2,9 +2,31 @@
 
 Janus is a same-ISA dynamic binary modification tool that is controlled through static analysis.
 It first performs an analysis of a binary executable to determine the transformations required. These transformations are then encoded into a series of rewrite rules specific to that binary.
-The Janus dynamic modifier, based on [DynamoRIO](http://dynamorio.org/), reads these rewrite rules and carries out the transformation as instructed when it encounters the relevant machine code.
+Janus dynamic modifier is implemented as a client of [DynamoRIO](http://dynamorio.org/). It reads these rewrite rules and carries out the transformation as instructed when it encounters the relevant machine code.
 
 ![Overview](http://www.cl.cam.ac.uk/~rkz20/img/overview.png)
+
+## What can Janus do ##
+Janus is designed to perform sophisticated modifications and optimizations on generic x86-64 and AArch64 ELF binaries. It augments DynamoRIO with a static binary analyser and a runtime client. With a combination of static binary analysis and dynamic binary modification controlled by domain-specific rewrite rules (DSL), Janus is able to perform a series of tasks that other tools might not provide:
+
+* End-to-End solutions to enable automatic parallelization, vectorization and software prefetch on executables
+* Statically-guided binary instrumentation
+* A platform for testing thread-level speculation on real systems
+
+## What can future Janus do ##
+We are still working on Janus to make it better and useful. Here are our objectives:
+
+* A domain specific language and compiler to generate Janus rewrite rule definitions, static rule generation and dynamic rule interpreters automatically.
+* A better binary alias analysis and interprocedural analysis
+* Support different parallelism and schedule policies for automatic parallelization using the new DSL
+* New tools such as: statically-guided softbound checker, parallel execution models, cache execution models for performance analysis
+
+
+## Disclaimer ##
+Janus is still in its prototype stage and it is not in the best production quality.
+We cannot guarantee fault-free execution or parallelisation performance on binaries other than those provided,
+although we expect that other binaries (especially small and simple binary) will work correctly in parallel.
+And we do welcome anyone to contribute in this project and make this tool more useful. Please contact [Ruoyu Zhou](https://www.cl.cam.ac.uk/~rkz20/) if you have questions.
 
 ## Components ##
 ### Analyze ###
@@ -14,10 +36,13 @@ A static binary analyzer that examines input binaries and identifies opportuniti
 JPar firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and performs automatic parallelization on the same binary.
 
 ### JVec ###
-JVec firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and performs automatic vectorization on the same binary. Currently not yet released.
+JVec firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and performs automatic vectorization on the same binary. Currently it is not fully operational.
 
 ### JFet ###
-JFet firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and performs automatic memory prefetch on the same binary. Currently not yet released.
+JFet firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and performs automatic memory prefetch on the same binary. Currently it is not fully operational.
+
+### JITSTM ###
+JITSTM is a software transactional memory that is generated at runtime. It redirects generic memory accesses to the speculative read/write buffers. The design is similar to [JudoSTM](https://ieeexplore.ieee.org/document/4336226). Currently it is not fully operational and its performance is not optimized.
 
 ## Installation ##
 Janus uses [cmake](https://cmake.org/) for building its whole components. There is no need to install additional libraries. Simply create a new build folder and invoke cmake.
@@ -75,6 +100,13 @@ For example, to parallelise an executable "2mm" with 4 threads, you can simply t
 jpar 4 2mm
 ```
 
+## Run on your own executable ##
+Once you add Janus into PATH, you can try Janus on your own binary:
+```bash
+jpar_all <num_threads> <executable> <arguments>
+```
+It runs Janus profiler, static analyzer, dynamic parallelizer in one go. It might take a while to do the profiling and analysis. At end it should generate a rewrite schedule so you can reuse it and invoke dynamic parallelizer directly. It is natural that you might find bugs, infinite loops and segfaults. We are slowly working on this to make Janus more robust and useful.
+
 ## Janus break down step by step ##
 Janus performs static binary analysis and generates a rewrite schedule to guide the binary translation.
 The static analyzer has lots of rule generation mode. 
@@ -102,7 +134,7 @@ schedump 2mm.jrs
 ```
 The rewrite schedule file is actually a list of "rewrite rules" to be interpreted by the dynamic binary translation tool.
 
-The list of rewrite rules can be found in "shared/sched_rule.h".
+The list of rewrite rules can be found in "shared/rule_isa.h".
 
 It also generates the detailed report of the binary analysis in "2mm.loop.log" and "2mm.loop.alias.log".
 
@@ -115,12 +147,14 @@ By using Janus static analyzer, you can generate different rewrite schedules fro
 ```bash
 ${YOUR_PATH_TO_JANUS}/bin/analyze <options> <binary>
 ```
+## Publication ##
+[Janus: Statically-Driven and Profile-Guided Automatic Dynamic Binary Parallelisation](https://www.cl.cam.ac.uk/~rkz20/paper/cgo19janus.pdf)
+Ruoyu Zhou and Timothy M. Jones 
+International Symposium on Code Generation and Optimization (CGO), February 2019
 
-## Disclaimer ##
-Janus is still in its prototype stage and it is not in the best production quality.
-We cannot guarantee fault-free execution or parallelisation performance on binaries other than those provided,
-although we expect that other binaries (especially small and simple binary) will work correctly in parallel.
-And we do welcome anyone to contribute in this project and make this tool more useful.
+The Janus Triad: Exploiting Parallelism Through Dynamic Binary Modification 
+Ruoyu Zhou, George Wort, Márton Erdős and Timothy M. Jones 
+International Conference on Virtual Execution Environments (VEE), April 2019
 
 ## Development Notes ##
 ### Documentation ###
@@ -136,7 +170,7 @@ This generates the html documentation into the *docs/html* folder. Open *docs/ht
 ### Source structure ###
 
 * The **static** folder contains the source for the Janalyze static binary analyser.
-  * **core**: data structure definations of core components, instruction, basic block, function etc.
+  * **core**: data structure definitions of core components, instruction, basic block, function etc.
   * **loader**: parse the input executable and retrieve the .text section
   * **arch**: architecture specific code
   * **analysis**: control, data flow and dependence analysis.
@@ -147,11 +181,11 @@ This generates the html documentation into the *docs/html* folder. Open *docs/ht
   * **parallel**: code for implementing the dynamic binary parallelizer.
   * **prefetcher**: code for implementing the dynamic binary prefetcher.
 
-* The **shared** folder contains the interface shared between the static and dyanmic components.
-  * **sched_rule.h**: define your new rewrite rules here
+* The **shared** folder contains the interface shared between the static and dynamic components.
+  * **rule_isa.h**: define your new rewrite rules here
 
 
-### Debuggng ###
+### Debug ###
 The debugging build will print many event information to help you debug.
 ```bash
 cd build
@@ -165,12 +199,12 @@ ${YOUR_PATH_TO_JANUS}/janus/jpar_debug <num_threads> <binary> <arguments>
 
 You can also rebuild with the following macros to generate a SIGTRAP at specific locations:
 
-* -DJANUS_DEBUG_RUN_ITERATION_END : insert a SIGTRAP at each loop start and loop finish at main thread.
-* -DJANUS_DEBUG_RUN_THREADED : insert a SIGTRAP when a new Janus thread is going to execute the loop.
-* -DJANUS_DEBUG_RUN_ITERATION_START : insert a SIGTRAP at each start of the loop iteration. It applies to all the threads.
-* -DHALT_MAIN_THREAD : make the main thread spins in a infinite loop when the loop starts. The rest of threads are not affected.
-* -DHALT_PARALLEL_THREAD : make the parallel threads spins in a infinite loop when the loop starts. The main thread are not affected.
-* -JANUS_STATS : collects the runtime stats for this parallel run. For example, the number of iterations, invocations, rollbacks, segfaults etc.
+* `-DJANUS_DEBUG_RUN_ITERATION_END` : insert a SIGTRAP at each loop start and loop finish at main thread.
+* `-DJANUS_DEBUG_RUN_THREADED` : insert a SIGTRAP when a new Janus thread is going to execute the loop.
+* `-DJANUS_DEBUG_RUN_ITERATION_START` : insert a SIGTRAP at each start of the loop iteration. It applies to all the threads.
+* `-DHALT_MAIN_THREAD` : make the main thread spins in a infinite loop when the loop starts. The rest of threads are not affected.
+* `-DHALT_PARALLEL_THREAD` : make the parallel threads spins in a infinite loop when the loop starts. The main thread are not affected.
+* `-JANUS_STATS` : collects the runtime stats for this parallel run. For example, the number of iterations, invocations, rollbacks, segfaults etc.
 
 
 ### How to visualise loops in your executable ###
