@@ -1,7 +1,9 @@
 # Janus: Static Guided Dynamic Binary Modification #
 
 Janus is a same-ISA dynamic binary modification tool that is controlled through static analysis.
-It first performs an analysis of a binary executable to determine the transformations required. These transformations are then encoded into a series of rewrite rules specific to that binary.
+It is developed at the University of Cambridge Computer Laboratory and available under an Apache licence.  If you use Janus in your work, please cite our [CGO 2019 publication](#publication).
+
+Janus first performs an analysis of a binary executable to determine the transformations required. These transformations are then encoded into a series of rewrite rules specific to that binary.
 Janus dynamic modifier is implemented as a client of [DynamoRIO](http://dynamorio.org/). It reads these rewrite rules and carries out the transformation as instructed when it encounters the relevant machine code.
 
 ![Overview](http://www.cl.cam.ac.uk/~rkz20/img/overview.png)
