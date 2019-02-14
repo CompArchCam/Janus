@@ -129,6 +129,10 @@ void buildExpr(Expr &expr, set<Expr*> &exprs, Instruction *instr)
     if (instr->inputs.size() == 0) return;
 
     if (instr->opcode == Instruction::Add) {
+        if (instr->inputs.size()<2) {
+            LOOPLOG("Irregular instruction "<<*instr<<" not yet handled"<<endl);
+            return;
+        }
         expr.kind = Expr::BINARY;
         expr.b.op = Expr::ADD;
         expr.b.e1 = instr->inputs[0]->expr;
@@ -137,6 +141,10 @@ void buildExpr(Expr &expr, set<Expr*> &exprs, Instruction *instr)
         else //duplicate the operands for "add x0, x0"
             expr.b.e2 = instr->inputs[0]->expr;
     } else if (instr->opcode == Instruction::Sub) {
+        if (instr->inputs.size()<2) {
+            LOOPLOG("Irregular instruction "<<*instr<<" not yet handled"<<endl);
+            return;
+        }
         expr.kind = Expr::BINARY;
         expr.b.op = Expr::SUB;
         expr.b.e1 = instr->inputs[0]->expr;

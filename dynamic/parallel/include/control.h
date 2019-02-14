@@ -30,18 +30,31 @@ typedef struct _shared_state {
      * there is no need to avoid false sharing */
     volatile uint64_t       current_pc;
     volatile uint32_t       ready;
+    ///A flag to tell the warden thread to start JIT compilation
     volatile uint32_t       code_gen_start;
+    ///All code has finished JITing.
     volatile uint32_t       code_ready;
+    ///A flag to tell all threads to leave thread pool and jump to a PC
     volatile uint32_t       start_run;
+    ///A flag to tell all threads to jump back to thread pool
     volatile uint32_t       need_yield;
+    ///A flag to tell all threads to terminate
     volatile uint32_t       need_exit;
+    ///The code is working on an allocated stack insted of original stack
     volatile uint32_t       stack_allocated;
+    ///The code is in a parallelising loop if set
     volatile uint32_t       loop_on;
-
+#ifdef JANUS_JITSTM
+    ///The code is in speculative mode if set
+    volatile uint32_t       speculate_on;
+    ///Currently not yet used
+    volatile uint32_t       speculate_dummy;
+#endif
+    /** \brief runtime flag to indicate the runtime check fails */
+    volatile uint32_t       runtime_check_fail;
     /* Record of all functions that are involved */
     uint32_t                number_of_functions;
     //dynamic_code_t          **functions;
-
     uint64_t                warden_thread;
     uint64_t                *lockArray;
     /* Shared stacks */

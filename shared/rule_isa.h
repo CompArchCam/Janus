@@ -56,8 +56,18 @@ typedef enum _rr_type {
     MEM_MAIN_STACK,
     ///Spill the value of four scratch registers to TLS
     MEM_SPILL_REG,
-    /* recover the value from given registers from stack */
+    ///Runtime array base bound check
     MEM_BOUNDS_CHECK,
+    ///Save runtime bounds in thread local storage
+    MEM_RECORD_BOUNDS,
+    ///Start a software transaction
+    TX_START,
+    ///Validate and commit a software transaction
+    TX_FINISH,
+    ///Schedule threads to jump to a code address. (Separated rule)
+    THREAD_SCHEDULE,
+    ///Send threads back to the thread pool
+    THREAD_YIELD,
 
     /* ----------------------------------------------------
      * Automatic Vectorisation Rewrite Rules 

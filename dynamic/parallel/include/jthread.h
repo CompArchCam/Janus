@@ -9,6 +9,11 @@
 #include "stats.h"
 #endif
 
+#ifdef JANUS_JITSTM
+/* JANUS Software Transactional Memory internal API */
+#include "jitstm.h"
+#endif
+
 #include <stddef.h>
 
 #define JANUS_THREAD_STACK_SIZE   (32*1024)
@@ -30,10 +35,14 @@ typedef struct _private_state {
     uint64_t                check;      /* + 48 */
     uint64_t                block;      /* + 56 */
 
-    uint64_t                slot1;      /* + 64 */
+    uint64_t                slot0;      /* + 64 */
+    uint64_t                slot1;      /* */
     uint64_t                slot2;      /* */
     uint64_t                slot3;      /* */
     uint64_t                slot4;      /* */
+    uint64_t                slot5;      /* */
+    uint64_t                slot6;      /* */
+    uint64_t                slot7;      /* +120*/
 } spill_state_t;
 
 /**
@@ -61,10 +70,11 @@ typedef struct _flag_state {
 typedef struct _thread_local {
     /** \brief Local spill space, most frequently used */
     spill_state_t           spill_space;
-    /** \brief Local flag space */
-    volatile flag_state_t   flag_space;
     /** \brief Local identifier of threads */
     uint64_t                id;
+    /** \brief Local flag space */
+    volatile flag_state_t   flag_space;
+
     /** \brief JIT loop code*/
     loop_code_t             *gen_code;
 
@@ -85,10 +95,15 @@ typedef struct _thread_local {
     uint64_t                rbuffer[PRIVATE_ABS_ADDR_SPACE];
     /* Syncronisation channels */
     //gsync_t                 sync;
-    /* Transaction space */
-    //gtx_t                   tx;
     void                    *dr_redirect_target;
     dynamic_code_t          *current_code_cache;
+#endif
+
+#ifdef JANUS_JITSTM
+    /** \brief Janus just-in-time transactional memory */
+    jtx_t                   tx;
+    /** \brief JIT thread code*/
+    jtx_code_t              *tx_gen_code;
 #endif
     /* The current DynamoRIO header */
     void                    *drcontext;
@@ -116,7 +131,9 @@ extern janus_thread_t **oracle;
 #ifdef JANUS_STATS
 #define LOCAL_STATS_OFFSET      (offsetof(janus_thread_t, stats))
 #endif
-
+#ifdef JANUS_JITSTM
+#define LOCAL_TX_OFFSET         (offsetof(janus_thread_t, tx))
+#endif
 /* List of offsets in spill_space structure */
 #define LOCAL_S0_OFFSET         (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, s0))
 #define LOCAL_S1_OFFSET         (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, s1))
@@ -125,13 +142,15 @@ extern janus_thread_t **oracle;
 #define LOCAL_RETURN_OFFSET     (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, ret_addr))
 #define LOCAL_CHECK_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, check))
 #define LOCAL_BLOCK_SIZE_OFFSET (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, block))
+#define LOCAL_SLOT0_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot0))
 #define LOCAL_SLOT1_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot1))
 #define LOCAL_SLOT2_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot2))
 #define LOCAL_SLOT3_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot3))
-#define LOCAL_SLOT4_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot4))
+#define LOCAL_SLOT6_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot6))
+#define LOCAL_SLOT7_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot7))
 
 /* List of offsets in flag_space structure */
-#define TRANS_ON_FLAG_OFFSET   \
+#define SPECULATION_ON_FLAG_OFFSET   \
  (LOCAL_FLAG_OFFSET + (offsetof(flag_state_t, trans_on)))
 #define LOOP_ON_FLAG_OFFSET   \
  (LOCAL_FLAG_OFFSET + (offsetof(flag_state_t, loop_on)))

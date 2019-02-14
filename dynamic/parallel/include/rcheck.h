@@ -8,6 +8,11 @@
 
 //#define SLOW_RUNTIME_CHECK
 
+/** \brief record the runtime array bound in thread local storage */
+void
+loop_array_bound_record_handler(JANUS_CONTEXT);
+
+/** \brief performs runtime checks of array bound */
 void
 loop_array_bound_check_handler(JANUS_CONTEXT);
 

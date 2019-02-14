@@ -3,6 +3,11 @@
 #include "loop.h"
 #include "janus_atomic.h"
 
+#ifdef JANUS_JITSTM
+#include "jitstm.h"
+#include "stm.h"
+#endif
+
 #include <linux/sched.h>/* for CLONE_ flags */
 #include <sys/wait.h>  /* for wait */
 #include <sys/types.h> /* for wait and mmap */
@@ -164,6 +169,11 @@ static void janus_thread_init(janus_thread_t *local, uint64_t tid)
 
     //allocate thread private loop code
     local->gen_code = (loop_code_t *)malloc(sizeof(loop_code_t)*rsched_info.header->numLoops);
+
+#ifdef JANUS_JITSTM
+    //allocate data structures for the just-in-time STM
+    janus_thread_init_jitstm(local);
+#endif
 
 #ifdef JANUS_VERBOSE
     dr_printf("Thread %ld initialised\n", local->id);

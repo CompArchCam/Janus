@@ -62,13 +62,16 @@ const char *print_rule_opcode(RuleOp op)
         case PARA_UPDATE_MEM_DISP: return "PARA_UPDATE_MEM_DISP";
         case PARA_USER_DEF_CODE: return "PARA_USER_DEF_CODE";
         case MEM_BOUNDS_CHECK: return "MEM_BOUNDS_CHECK";
+        case MEM_RECORD_BOUNDS: return "MEM_RECORD_BOUNDS";
         case THREAD_EXIT: return "THREAD_EXIT";
         case PARA_UPDATE_LOOP_BOUND: return "PARA_UPDATE_LOOP_BOUND";
         case STATS_INSERT_COUNTER: return "STATS_INSERT_COUNTER";
         case APP_SPLIT_BLOCK: return "APP_SPLIT_BLOCK";
-
+        case TX_START: return "TX_START";
+        case TX_FINISH: return "TX_FINISH";
+        case THREAD_SCHEDULE: return "THREAD_SCHEDULE";
+        case THREAD_YIELD: return "THREAD_YIELD";
         case TRANS_START: return "TRANS_START";
-        
         case TRANS_COMMIT: return "TRANS_COMMIT";
         case TRANS_COMPARE: return "TRANS_COMPARE";
         case TRANS_PROCEED: return "TRANS_PROCEED";

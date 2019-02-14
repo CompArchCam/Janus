@@ -93,8 +93,14 @@ typedef struct _induct {
 } Induction;
 
 typedef struct _array {
+    /** \brief static storage for this array base */
     JVar                base;
+    /** \brief runtime value for this array base, filled by MEM_RECORD_BOUNDS */
+    uint64_t            runtime_base_value;
+    /** \brief static storage for this array range */
     JVar                max_range;
+    /** \brief runtime value for this array base, filled by MEM_RECORD_RANGE */
+    uint64_t            runtime_range_value;
 } Array;
 
 /** \brief Types of variable profile loaded by GVM */
@@ -121,6 +127,7 @@ typedef struct _jvarprofile {
         Induction   induction;
         Array       array;
     };
+    int                     version;
 } JVarProfile;
 
 /** \brief A set of scratch registers, the registers are ranked based on their frequency, r0 are the least used. */

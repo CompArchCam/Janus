@@ -166,6 +166,7 @@ aliasAnalysis(janus::Loop *loop)
         if (memBase.first.kind == Expr::EXPANDED) continue;
         if (memBase.first.vs == NULL) continue;
         profile.array.base = *(JVar *)memBase.first.vs;
+        profile.version = memBase.first.vs->version;
         long max_range = 0;
         for (auto iter:memBase.second) {
             max_range += iter->stride * iter->loop->staticIterCount;

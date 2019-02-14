@@ -16,8 +16,12 @@ using namespace janus;
 
 static void
 prepareLoopHeader(JanusContext *gc, Loop &loop);
+///Generate rewrite rules for DOALL parallelisation in the given loop
 static void
 generateDOALLRules(JanusContext *gc, Loop &loop);
+///Generate rewrite rules for the sub functions in the given loop
+static void
+generateSubFunctionRules(JanusContext *gc, Loop &loop, Function &func);
 static int
 getEncodedArrayIndex(Loop *loop, Expr var);
 
@@ -260,6 +264,22 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
             rule.reg0 = loop.header.id;
             insertRule(id, rule, bb);
 
+            /* Generate rewrite rules for this function */
+            Function *func = bb->lastInstr()->getTargetFunction();
+            if (func && !func->isExternal)
+                generateSubFunctionRules(gc, loop, *func);
+            else {
+                //external functions, generate TX_START and TX_END
+                rule = RewriteRule(TX_START, bb, POST_INSERT);
+                rule.reg0 = loop.header.id;
+                insertRule(id, rule, bb);
+                if(bb->succ1) {
+                    rule = RewriteRule(TX_FINISH, bb->succ1, PRE_INSERT);
+                    rule.reg0 = loop.header.id;
+                    insertRule(id, rule, bb->succ1);
+                }
+            }
+
             /* PARA_SUBCALL_FINISH is inserted at the block where the subcall is supposed to be returned */
             if(bb->succ1) {
                 rule = RewriteRule(PARA_SUBCALL_FINISH, bb->succ1, PRE_INSERT);
@@ -279,8 +299,35 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
     if (useStack) loop.header.stackFrameSize = stackFrameSize;
     else loop.header.stackFrameSize = 0;
 
-    /* MEM_BOUNDS_CHECK is insert at each array base that has write accesses
-     * with all the other read/write array bases */
+    /* MEM_RECORD_BOUNDS is inserted where the array base runtime is generated
+     * so that Janus can keep a record privately for its later runtime check */
+    for (auto checkBase: loop.arrayToCheck) {
+        if (checkBase.vs && checkBase.vs->lastModified) {
+            Instruction *lastModified = checkBase.vs->lastModified;
+            BasicBlock *bb = lastModified->block;
+            if (lastModified->opcode == Instruction::Call) {
+                //insert at the next basic block after the call
+                bb = bb->succ1;
+                rule = RewriteRule(MEM_RECORD_BOUNDS, bb, PRE_INSERT);
+            } else {
+                //insert at after the instruction
+                Instruction &next = bb->instrs[lastModified->id - bb->startInstID + 1];
+                rule = RewriteRule(MEM_RECORD_BOUNDS, bb->instrs->pc, next.pc, next.id);
+            }
+            rule.reg0 = getEncodedArrayIndex(&loop, checkBase);
+            rule.reg1 = loop.header.id;
+            insertRule(id, rule, bb);
+        } else if (checkBase.vs) {
+            //variable state is a function argument, then record it at function entry
+            BasicBlock *bb = checkBase.vs->block;
+            rule = RewriteRule(MEM_RECORD_BOUNDS, bb, PRE_INSERT);
+            rule.reg0 = getEncodedArrayIndex(&loop, checkBase);
+            rule.reg1 = loop.header.id;
+            insertRule(id, rule, bb);
+        }
+    }
+
+    /* MEM_BOUND_CHECK is inserted before the loop after all the inputs been recorded */
     for (auto checkBase: loop.arrayToCheck) {
         for (auto memBase: loop.arrayAccesses) {
             Expr checkBase2 = memBase.first;
@@ -296,7 +343,6 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
             }
         }
     }
-
 #ifdef JANUS_VECT_SUPPORT
     VECT_RULE *vrule;
 
@@ -384,6 +430,12 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
         } else continue;
     }
 #endif
+}
+
+static void
+generateSubFunctionRules(JanusContext *gc, Loop &loop, Function &func)
+{
+
 }
 
 /* Emit all relevant info in the rule file */
@@ -495,7 +547,7 @@ getEncodedArrayIndex(Loop *loop, Expr var)
             JVarPack vp;
             if (var.vs == NULL) return -1;
             vp.var = *var.vs;
-            if (vp.var == profile.array.base)
+            if (vp.var == profile.array.base && var.vs->version == profile.version)
                 return index;
         }
         index++;

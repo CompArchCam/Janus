@@ -35,10 +35,11 @@ set(PARA_SRCS
 	loop.c
 	stats.c
 	rcheck.c
-	#stm.c
-	#stm_internal.c
+	stm.c
+	jitstm.c
+	jhash.c
 	#sync.c
-	#hashtable.c	
+
 )
 
 if (JANUS_X86_SUPPORT)

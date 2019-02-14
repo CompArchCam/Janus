@@ -14,6 +14,11 @@
 
 ///Global meta information of the rewrite schedule
 extern RSchedInfo rsched_info;
+///Enable Janus just in time transactional memory in x86-64 mode
+#ifdef JANUS_X86
+#define JANUS_JITSTM
+#endif
+
 //#define JANUS_DYNAMIC_CHECK
 //#define JANUS_DEBUG_RUN
 /* \brief Insert a SIGTRAP before and after the loop by the main thread */

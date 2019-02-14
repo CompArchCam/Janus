@@ -9,18 +9,23 @@
 /* JANUS threads control */
 #include "control.h"
 
+#ifdef JANUS_JITSTM
 /* JANUS Software Transactional Memory */
-//#include "stm.h"
+#include "stm.h"
+#endif
+
+/* JANUS runtime check handlers */
+#include "rcheck.h"
 
 /* JANUS Runtime handlers for loops */
-//#include "loop.h"
+#include "loop.h"
 
 /* JANUS Synchronisation Facility */
 //#include "sync.h"
 
 
 #ifdef JANUS_VECT_SUPPORT
-/* Janus Vector handlers */
+/* Janus vector handlers */
 #include "vhandler.h"
 #endif
 
@@ -45,7 +50,10 @@ dr_init(client_id_t id)
     dr_register_bb_event(event_basic_block);    
     dr_register_thread_init_event(janus_thread_spawn_handler);
     dr_register_thread_exit_event(janus_thread_exit_handler);
-    //dr_register_signal_event(stm_signal_handler);
+
+#ifdef JANUS_JITSTM
+    dr_register_signal_event(stm_signal_handler);
+#endif
 
     /* Initialise Janus components and file Janus global info */
     janus_init(id);
@@ -79,6 +87,12 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
 
     //lookup in the hashtable to check if there is any rule attached to the block
     RRule *rule = get_static_rule(bbAddr);
+
+#ifdef JANUS_JITSTM
+    //fully dynamic handlers without rewrite rules, only effective in speculative mode
+    master_dynamic_speculative_handlers(drcontext, bb);
+#endif
+
     //if it is a normal basic block, then omit it.
     if(rule == NULL) return DR_EMIT_DEFAULT;
 
@@ -153,6 +167,15 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
                 break;
             case MEM_BOUNDS_CHECK:
                 loop_array_bound_check_handler(janus_context);
+                break;
+            case MEM_RECORD_BOUNDS:
+                loop_array_bound_record_handler(janus_context);
+                break;
+            case TX_START:
+                transaction_start_handler(janus_context);
+                break;
+            case TX_FINISH:
+                transaction_finish_handler(janus_context);
                 break;
 #ifdef JANUS_VECT_SUPPORT
             case VECT_INDUCTION_STRIDE_UPDATE:

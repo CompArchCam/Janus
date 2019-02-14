@@ -1,9 +1,7 @@
 #include "jitstm.h"
-#include "thread.h"
-#include "loop.h"
-#include "induct.h"
-#include "stm_internal.h"
+#include "jthread.h"
 
+#ifdef FIX
 void
 emit_tx_start_instrlist(EMIT_CONTEXT);
 
@@ -301,3 +299,4 @@ emit_tx_clear_instrlist(EMIT_CONTEXT)
                                 opnd_create_reg(sregs.s1)));
     }
 }
+#endif

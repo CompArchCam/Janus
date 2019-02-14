@@ -34,6 +34,7 @@ typedef struct _loop {
 typedef struct _generated_code {
     void *thread_loop_init;
     void *thread_loop_finish;
+    void *thread_transaction_rollback;
 } loop_code_t;
 
 /** \brief Janus dynamic handler for RRule: PARA_LOOP_INIT */

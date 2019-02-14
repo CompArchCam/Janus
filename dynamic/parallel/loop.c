@@ -97,6 +97,12 @@ void loop_init_handler(JANUS_CONTEXT)
     reg_id_t s1 = loop->header->scratchReg1;
     reg_id_t tls = s1;
 
+#ifdef SAFE_RUNTIME_CHECK
+    /* Switch to single-threaded mode if runtime check fails */
+    if (shared->runtime_check_fail)
+        ginfo.number_of_threads = 1;
+#endif
+
     /* wait for the code to finish generation */
     while (!shared->code_ready);
 

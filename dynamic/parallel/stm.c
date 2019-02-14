@@ -1,45 +1,43 @@
-/* JANUS Dynamic Transactional Memory *
- * Dynamically rewrites code for speculation 
- * This TM must be built on DynamoRIO */
+/* JANUS Transactional Memory
+ *
+ * It contains a C implementation of Janus STM
+ * and also handlers to interact with rewrite rules */
 
 #include "stm.h"
-#include "stm_internal.h"
-#include "thread.h"
-#include "util.h"
-#include "hashtable.h"
-#include "sync.h"
-#include "loop.h"
-#include <string.h>
 
-/* ----------------------------------------- */
-/* ----------- Shared flags --------------
-/* -----------------------------------------*/
-static volatile uint32_t tickets;
+/* JANUS threading library */
+#include "jthread.h"
 
-static volatile uintptr_t   global_stamp;
+/* JANUS just-in-time hashtable library */
+#include "jhash.h"
 
-static pthread_mutex_t lock;
+/* JANUS control library */
+#include "control.h"
 
-void init_stm_client(JANUS_CONTEXT)
-{
-    shared = &shared_region;
-    memset(shared, 0, sizeof(janus_shared_t));
-    shared->number_of_functions = rule->reg0;
-    shared->loops = (Loop_t *)malloc(sizeof(Loop_t) * ginfo.header->numLoops);
-}
 
-void gstm_init(void (*rollback_func_ptr)())
-{
-    int i;
+#define REG_IDX(reg) ((reg)-DR_REG_RAX)
 
-    pthread_mutex_init(&lock, NULL);
-}
+///redirect all memory accesses of the basic block to thread speculative memory set
+static void
+basic_block_speculative_handler(void *drcontext, janus_thread_t *local, instrlist_t *bb);
+///Create a read entry in the transaction buffer
+static void
+janus_spec_create_read_entry(jtx_t *tx, trans_t *entry, uint64_t original_addr);
+///Create a write entry in the transaction buffer
+static void
+janus_spec_create_write_entry(jtx_t *tx, trans_t *entry, uint64_t original_addr, uint64_t data);
+///Create a read&write entry in the transaction buffer
+static void *
+janus_spec_create_read_write_entry(jtx_t *tx, trans_t *entry, uint64_t original_addr);
+///Redirect a read entry to write entry
+static void *
+janus_spec_redirect_read_write_entry(jtx_t *tx, trans_t *entry, uint64_t original_addr);
 
-void gstm_init_thread(void *tls)
+void janus_thread_init_jitstm(void *tls)
 {
     int i;
 
-    gtx_t *tx = &(((janus_thread_t *)tls)->tx);
+    jtx_t *tx = &(((janus_thread_t *)tls)->tx);
     //allocate translation table and flush table
     //we also need to initialise it with zero
     tx->trans_table = (trans_t *)calloc(HASH_TABLE_SIZE, sizeof(trans_t));
@@ -50,53 +48,720 @@ void gstm_init_thread(void *tls)
     tx->rsptr = tx->read_set;
     tx->wsptr = tx->write_set;
 
-#ifdef GSTM_BOUND_CHECK
+#ifdef JITSTM_BOUND_CHECK
     tx->read_set_end = &(tx->read_set[READ_SET_SIZE]);
     tx->write_set_end = &(tx->write_set[WRITE_SET_SIZE]);;
 #endif
+
+    tx->tls = tls;
+    //set threshold
+    ((janus_thread_t *)tls)->spill_space.slot5 = 0x600000;
 }
 
-/* We combine the commit and start of a transaction into one handler */
-void transaction_start_handler(JANUS_CONTEXT)
+/* \brief Janus speculative read 64 bit - c version */
+uint64_t janus_spec_read(janus_thread_t *tls, uint64_t original_addr)
 {
-    instr_t *trigger;
-
-    trigger = get_trigger_instruction(bb,rule);
-
-    /* call generated tx_start code */
-    call_code_cache_handler(drcontext,bb,trigger, shared->current_loop->code.tx_start);
+    int key = HASH_GET_KEY(original_addr);
+#ifdef JANUS_STM_VERBOSE
+    printf("read %lx ",original_addr);
+    printf("key %d ", key);
+#endif
+    jtx_t *tx = &(tls->tx);
+    trans_t *entry = tx->trans_table + key;
+    while (entry->original_addr != original_addr) {
+        if (entry->original_addr == 0) {
+            janus_spec_create_read_entry(tx, entry, original_addr);
+            break;
+        } else {
+            entry++;
+            //wrap around
+            if (entry == tx->trans_table+HASH_TABLE_SIZE)
+                entry = tx->trans_table;
+        }
+    }
+#ifdef JANUS_STM_VERBOSE
+    //now entry points to the indirect table
+    printf("data %lx\n", entry->redirect_addr->data);
+#endif
+    //put the returned data in slot4
+    tls->spill_space.slot4 = (uint64_t)entry->redirect_addr->data;
+    return entry->redirect_addr->data;
 }
 
-#ifdef GSTM_VERBOSE
-
-void printhaha(uint64_t id, uint64_t reg)
+/* \brief Janus speculative read 64 bit - c version */
+void janus_spec_write(janus_thread_t *tls, uint64_t original_addr, uint64_t data)
 {
-    printf("id %ld haha %s\n",id, get_register_name(reg));
-}
-
-void print_commit(uint64_t addr, uint64_t data)
-{
-    printf("Commit addr %lx data %lx\n",addr,data);
-}
-
-void testflag(uint64_t id, uint64_t flag)
-{
-    printf("id %ld hit %lx!\n",id, flag);
-}
-
-void print_migrate()
-{
-    gtx_t *tx = &(local->tx);
-
-    printf("might: trans_size %lx write set %lx, wptr %lx\n",tx->trans_size,(uint64_t)tx->write_set,(uint64_t)tx->wsptr);
-}
-
-void print_commit_success()
-{
-    printf("Commit successful\n");
-}
+    int key = HASH_GET_KEY(original_addr);
+#ifdef JANUS_STM_VERBOSE
+    printf("write %lx ",original_addr);
+    printf("key %d\n", key);
 #endif
 
+    jtx_t *tx = &(tls->tx);
+    trans_t *entry = tx->trans_table + key;
+    while (entry->original_addr != original_addr) {
+        if (entry->original_addr == 0) {
+            janus_spec_create_write_entry(tx, entry, original_addr, data);
+            break;
+        } else {
+            entry++;
+            //wrap around
+            if (entry == tx->trans_table+HASH_TABLE_SIZE)
+                entry = tx->trans_table;
+        }
+    }
+#ifdef JANUS_STM_VERBOSE
+    //now entry points to the indirect table
+    printf("data %lx\n", entry->redirect_addr->data);
+#endif
+    return;
+}
+
+void *janus_spec_get_ptr(janus_thread_t *tls, uint64_t original_addr)
+{
+    int key = HASH_GET_KEY(original_addr);
+#ifdef JANUS_STM_VERBOSE
+    printf("read & write %lx ",original_addr);
+    printf("key %d\n", key);
+#endif
+    jtx_t *tx = &(tls->tx);
+    trans_t *entry = tx->trans_table + key;
+    while (entry->original_addr != original_addr) {
+        if (entry->original_addr == 0) {
+            janus_spec_create_read_write_entry(tx, entry, original_addr);
+            break;
+        } else {
+            entry++;
+            //wrap around
+            if (entry == tx->trans_table+HASH_TABLE_SIZE)
+                entry = tx->trans_table;
+        }
+    }
+#ifdef JANUS_STM_VERBOSE
+    //now entry points to the indirect table
+    printf("addr %lx\n", entry->redirect_addr->data);
+#endif
+    tls->spill_space.slot4 = (uint64_t)entry->redirect_addr;
+    return entry->redirect_addr;
+}
+
+
+static void
+janus_spec_create_read_entry(jtx_t *tx, trans_t *entry, uint64_t original_addr)
+{
+    entry->original_addr = original_addr;
+    //first copy the read value
+    spec_item_t *item = tx->rsptr;
+    item->addr = original_addr;
+    //fault might occur, jump to janus signal handler if fault occurs
+    item->data = *(uint64_t *)original_addr;
+    //assign pointer to read set
+    entry->redirect_addr = item;
+    entry->rw = 0;
+    //increment read pointer
+    tx->rsptr++;
+    //register in flush table
+    tx->flush_table[tx->trans_size] = entry;
+    //increment transaction size
+    tx->trans_size++;
+#ifdef JITSTM_BOUND_CHECK
+    if (tx->rsptr == tx->read_set_end) {
+        printf("Janus STM read set full\n");
+        exit(-1);
+    }
+#endif
+}
+
+static void
+janus_spec_create_write_entry(jtx_t *tx, trans_t *entry, uint64_t original_addr, uint64_t data)
+{
+    entry->original_addr = original_addr;
+    //first copy the read value
+    spec_item_t *item = tx->wsptr;
+    item->addr = original_addr;
+    //fault might occur, jump to janus signal handler if fault occurs
+    item->data = data;
+    //assign pointer to read set
+    entry->redirect_addr = item;
+    entry->rw = 1;
+    //increment write pointer
+    tx->wsptr++;
+    //register in flush table
+    tx->flush_table[tx->trans_size] = entry;
+    //increment transaction size
+    tx->trans_size++;
+#ifdef JITSTM_BOUND_CHECK
+    if (tx->wsptr == tx->write_set_end) {
+        printf("Janus STM write set full\n");
+        exit(-1);
+    }
+#endif
+}
+
+///Create a read&write entry in the transaction buffer
+static void *
+janus_spec_create_read_write_entry(jtx_t *tx, trans_t *entry, uint64_t original_addr)
+{
+    entry->original_addr = original_addr;
+    //copy the read value
+    spec_item_t *ritem = tx->rsptr;
+    ritem->addr = original_addr;
+    ritem->data = *(uint64_t *)original_addr;
+    tx->rsptr++;
+
+    //copy the write value
+    spec_item_t *witem = tx->wsptr;
+    witem->addr = original_addr;
+    witem->data = ritem->data;
+    tx->wsptr++;
+    //assign pointer to write set
+    entry->redirect_addr = witem;
+    entry->rw = 1;
+    //register in flush table
+    tx->flush_table[tx->trans_size] = entry;
+    //increment transaction size
+    tx->trans_size++;
+#ifdef JITSTM_BOUND_CHECK
+    if (tx->rsptr == tx->read_set_end) {
+        printf("Janus STM read set full\n");
+        exit(-1);
+    }
+    if (tx->wsptr == tx->write_set_end) {
+        printf("Janus STM write set full\n");
+        exit(-1);
+    }
+#endif
+}
+
+///Redirect a read entry to write entry
+static void *
+janus_spec_redirect_read_write_entry(jtx_t *tx, trans_t *entry, uint64_t original_addr)
+{
+    spec_item_t *witem = tx->wsptr;
+    witem->addr = original_addr;
+    witem->data = entry->redirect_addr->data;
+    tx->wsptr++;
+    entry->redirect_addr = witem;
+    entry->rw = 1;
+}
+
+/* \brief validate the read set and commit the write set */
+void *janus_transaction_commit(janus_thread_t *tls)
+{
+    /* Step 1: validation on the read set,
+     * if failed, abort the transaction */
+    spec_item_t *entry = tls->tx.read_set;
+    spec_item_t *end = tls->tx.rsptr;
+
+    while (entry != end) {
+        //compare the read set against the shared memory
+        if (entry->data != *(uint64_t *)entry->addr)
+            janus_transaction_abort(tls);
+        entry++;
+    }
+
+    /* Step 2: after all read items validated,
+     * commit all writes to memory */
+    entry = tls->tx.write_set;
+    end = tls->tx.wsptr;
+
+    while (entry != end) {
+        //write the data to shared memory
+        *(uint64_t *)entry->addr = entry->data;
+        entry++;
+    }
+}
+
+/* \brief abort the current transaction and perform rollback */
+void *janus_transaction_abort(janus_thread_t *tls)
+{
+    void (*rollback)(void *);
+    //flush the transaction based on the translation table
+    int i;
+    trans_t **flush_table = tls->tx.flush_table;
+    for (i=0; i<tls->tx.trans_size; i++) {
+        flush_table[i]->original_addr = 0;
+    }
+    //clear the read/write set
+    tls->tx.rsptr = tls->tx.read_set;
+    tls->tx.wsptr = tls->tx.write_set;
+    tls->tx.trans_size = 0;
+
+    //perform call to JIT code for transaction rollback
+    //assign function pointer
+    rollback = (void (*)(void *))tls->gen_code[shared->current_loop->dynamic_id].thread_loop_init;
+    //perform rollback
+    rollback(tls);
+}
+
+void master_dynamic_speculative_handlers(void *drcontext, instrlist_t *bb)
+{
+    janus_thread_t *tls = dr_get_tls_field(drcontext);
+
+    if (tls->flag_space.trans_on) {
+        //redirect all memory accesses to speculative memory set
+        basic_block_speculative_handler(drcontext, tls, bb);
+    }
+
+    //add other pure dynamic handlers here
+}
+
+///start a transaction
+void transaction_start_handler(JANUS_CONTEXT)
+{
+    //retrieve thread local storage
+    janus_thread_t *local = dr_get_tls_field(drcontext);
+    instr_t *trigger = get_trigger_instruction(bb,rule);
+
+    //set local.trans_on
+    PRE_INSERT(bb, trigger,
+        INSTR_CREATE_mov_st(drcontext,
+                            opnd_create_rel_addr((void *)(&local->flag_space.trans_on), OPSZ_4),
+                            OPND_CREATE_INT32(1)));
+
+    //save stack pointer for the transaction
+    PRE_INSERT(bb, trigger,
+        INSTR_CREATE_mov_st(drcontext,
+                            opnd_create_rel_addr((void *)(&local->spill_space.slot4), OPSZ_8),
+                            opnd_create_reg(DR_REG_RSP)));
+}
+
+///finish a transaction but no commits
+void transaction_finish_handler(JANUS_CONTEXT)
+{
+    janus_thread_t *local = dr_get_tls_field(drcontext);
+    instr_t *trigger = get_trigger_instruction(bb,rule);
+
+    //unset local.trans_on
+    PRE_INSERT(bb, trigger,
+        INSTR_CREATE_mov_st(drcontext,
+                            opnd_create_rel_addr((void *)(&local->flag_space.trans_on), OPSZ_4),
+                            OPND_CREATE_INT32(0)));
+}
+
+///validate and commit a transaction
+void transaction_commit_handler(JANUS_CONTEXT)
+{
+    //retrieve thread local storage
+    janus_thread_t *local = dr_get_tls_field(drcontext);
+    instr_t *trigger = get_trigger_instruction(bb,rule);
+#ifdef JANUS_SLOW_STM
+    dr_insert_clean_call(drcontext, bb, trigger,
+                         janus_transaction_commit, false, 1,
+                         OPND_CREATE_INTPTR(local));
+#else
+#ifdef NOT_YET_WORKING_FOR_ALL
+    transaction_inline_commit_handler(janus_context);
+#endif
+#endif
+}
+
+static void
+count_opnd_reg_uses(int *reg_uses, opnd_t opnd)
+{
+    int i;
+    for (i = 0; i < opnd_num_regs_used(opnd); i++) {
+        reg_id_t reg = opnd_get_reg_used(opnd, i);
+        if (reg_is_gpr(reg)) {
+            reg = reg_to_pointer_sized(reg);
+            reg_uses[REG_IDX(reg)]++;
+
+            if (opnd_is_memory_reference(opnd))
+                reg_uses[REG_IDX(reg)]++;
+        }
+    }
+}
+
+static void
+get_least_used_registers(void *drcontext, instrlist_t *bb, int *reg_uses, int *reg_index)
+{
+    int i,j;
+
+    for (i=0; i<NUM_OF_GENERAL_REGS; i++) {
+        reg_uses[i]=0;
+        reg_index[i]=i+DR_REG_RAX;
+    }
+
+    //mark rsp and rbp not usable
+    reg_uses[REG_IDX(DR_REG_RSP)] = 65536;
+    reg_uses[REG_IDX(DR_REG_RBP)] = 65536;
+
+    instr_t *instr;
+
+    for (instr = instrlist_first_app(bb); instr != NULL; instr = instr_get_next_app(instr)) {
+        if (instr_is_app(instr)) {
+            for (i = 0; i < instr_num_dsts(instr); i++)
+                count_opnd_reg_uses(reg_uses, instr_get_dst(instr, i));
+            for (i = 0; i < instr_num_srcs(instr); i++)
+                count_opnd_reg_uses(reg_uses, instr_get_src(instr, i));
+        }
+    }
+
+    //sort the array, here we just use bubble sort for simplicity
+    for (i=0; i<NUM_OF_GENERAL_REGS; i++) {
+        for (j=i+1; j<NUM_OF_GENERAL_REGS; j++) {
+            if (reg_uses[i] > reg_uses[j]) {
+                int temp = reg_uses[j];
+                reg_uses[j] = reg_uses[i];
+                reg_uses[i] = temp;
+                temp = reg_index[j];
+                reg_index[j] = reg_index[i];
+                reg_index[i] = temp;
+            }
+        }
+    }
+}
+
+static bool
+basic_block_need_speculative_transformation(void *drcontext, instrlist_t *bb)
+{
+    instr_t *instr;
+    int count = 0;
+    bool branchHasMem = false;
+    for (instr = instrlist_first_app(bb); instr != NULL; instr = instr_get_next_app(instr)) {
+        int is_read = instr_reads_memory(instr);
+        int is_write = instr_writes_memory(instr);
+        int is_local_stack = instr_reads_from_reg(instr, DR_REG_RSP, DR_QUERY_INCLUDE_ALL);
+        int opcode = instr_get_opcode(instr);
+        //skip compare and bulk loads/stores
+        if (opcode == OP_cmp || opcode == OP_test ||
+            opcode == OP_rep_stos || opcode == OP_rep_lods) continue;
+        if (instr_is_app(instr) && !is_local_stack && (is_read || is_write)) {
+            if (instr_is_cti(instr)) branchHasMem = true;
+            count++;
+        }
+
+    }
+    if (branchHasMem && count == 1) return false;
+    if (count) return true;
+    return false;
+}
+
+static bool
+instr_need_speculative_transformation(instr_t *instr) {
+    int is_read = instr_reads_memory(instr);
+    int is_write = instr_writes_memory(instr);
+    int is_local_stack = instr_reads_from_reg(instr, DR_REG_RSP, DR_QUERY_INCLUDE_ALL);
+    int opcode = instr_get_opcode(instr);
+    //currently 16-byte accesses are not handled
+    //skip compare and bulk loads/stores
+    if (opcode == OP_cmp || opcode == OP_test ||
+        opcode == OP_rep_stos || opcode == OP_rep_lods) return false;
+    if (instr_is_app(instr) && !is_local_stack && (is_read || is_write)) return true;
+    return false;
+}
+
+static void
+basic_block_speculative_handler(void *drcontext, janus_thread_t *local, instrlist_t *bb)
+{
+    instr_t *instr;
+    int reg_uses[NUM_OF_GENERAL_REGS];
+    int reg_index[NUM_OF_GENERAL_REGS];
+    int s0,s1,s2,s3;
+    ptr_uint_t aflags ,aflags_temp;
+    bool aflags_on = false; 
+    bool mem_after_aflag = false;
+
+    instr_t *first = instrlist_first_app(bb);
+    instr_t *last = instrlist_last_app(bb);
+    instr_t *temp;
+    instr_t *aflags_restore = NULL;
+
+    /* Step 0: Check the basic block whether it requires transformation or not */
+    if (!basic_block_need_speculative_transformation(drcontext, bb)) {
+        return;
+    }
+
+    /* Step 1: Perform dynamic register liveness analysis
+     * we can't use drreg because TLS is occupied by the Janus TLS */
+    get_least_used_registers(drcontext,bb,reg_uses,reg_index);
+    /* get four scratch registers */
+    s0 = reg_index[0];
+    s1 = reg_index[1];
+    s2 = reg_index[2];
+    s3 = reg_index[3];
+
+    //dr_printf("%s %s %s %s\n",get_register_name(s0),get_register_name(s1),get_register_name(s2),get_register_name(s3));
+
+    /* Step 2: save scratch registers to TLS */
+    PRE_INSERT(bb, first,
+        INSTR_CREATE_mov_st(drcontext,
+                            opnd_create_rel_addr((void *)(&local->spill_space.slot0), OPSZ_8),
+                            opnd_create_reg(s0)));
+
+    /* move local to s0 */
+    PRE_INSERT(bb, first,
+        INSTR_CREATE_mov_imm(drcontext,
+                             opnd_create_reg(s0),
+                             OPND_CREATE_INTPTR(local)));
+
+    PRE_INSERT(bb, first,
+        INSTR_CREATE_mov_st(drcontext,
+                            OPND_CREATE_MEM64(s0, LOCAL_SLOT1_OFFSET),
+                            opnd_create_reg(s1)));
+
+    PRE_INSERT(bb, first,
+        INSTR_CREATE_mov_st(drcontext,
+                            OPND_CREATE_MEM64(s0, LOCAL_SLOT2_OFFSET),
+                            opnd_create_reg(s2)));
+
+    PRE_INSERT(bb, first,
+        INSTR_CREATE_mov_st(drcontext,
+                            OPND_CREATE_MEM64(s0, LOCAL_SLOT3_OFFSET),
+                            opnd_create_reg(s3)));
+
+    /* Step 3: generate speculative calls */
+    for (instr = first; instr != NULL; instr = instr_get_next_app(instr)) {
+        if (instr_need_speculative_transformation(instr)) {
+#ifdef JANUS_SLOW_STM
+            speculative_memory_handler(drcontext, local, bb, instr, reg_index);
+#else
+            speculative_inline_memory_handler(drcontext, local, bb, instr);
+#endif
+        }
+
+        aflags = instr_get_arith_flags(instr, DR_QUERY_INCLUDE_COND_SRCS);
+
+        if (aflags & EFLAGS_WRITE_ARITH) {
+            aflags_on = true;
+            mem_after_aflag = false;
+            //for this aflag write, check whether there is a speculative memory access before consumption
+            temp = instr_get_next_app(instr);
+            while (temp) {
+                aflags_temp = instr_get_arith_flags(temp, DR_QUERY_INCLUDE_COND_SRCS);
+
+                if (instr_need_speculative_transformation(temp))
+                    mem_after_aflag = true;
+                if (aflags_temp & EFLAGS_READ_ARITH) {
+                    aflags_restore = temp;
+                    break;
+                }
+
+                if (aflags_temp & EFLAGS_WRITE_ARITH)
+                    break;
+
+                temp = instr_get_next_app(temp);
+            }
+
+            if (mem_after_aflag && aflags_restore) {
+                instr_t *next = instr_get_next_app(instr);
+                //PRE_INSERT(bb,instr,INSTR_CREATE_int1(drcontext));
+                if (s0 != DR_REG_RAX) {
+                    PRE_INSERT(bb, next,
+                        INSTR_CREATE_mov_st(drcontext,
+                                            OPND_CREATE_MEM64(s0, LOCAL_SLOT6_OFFSET),
+                                            opnd_create_reg(DR_REG_RAX)));
+                    dr_save_arith_flags_to_xax(drcontext, bb, next);
+                    PRE_INSERT(bb, next,
+                        INSTR_CREATE_mov_st(drcontext,
+                                            OPND_CREATE_MEM64(s0, LOCAL_SLOT7_OFFSET),
+                                            opnd_create_reg(DR_REG_RAX)));
+                    PRE_INSERT(bb, next,
+                        INSTR_CREATE_mov_ld(drcontext,
+                                            opnd_create_reg(DR_REG_RAX),
+                                            OPND_CREATE_MEM64(s0, LOCAL_SLOT6_OFFSET)));
+
+                    //insert restore
+                    PRE_INSERT(bb, aflags_restore,
+                        INSTR_CREATE_mov_st(drcontext,
+                                            OPND_CREATE_MEM64(s0, LOCAL_SLOT6_OFFSET),
+                                            opnd_create_reg(DR_REG_RAX)));
+                    PRE_INSERT(bb, aflags_restore,
+                        INSTR_CREATE_mov_ld(drcontext,
+                                            opnd_create_reg(DR_REG_RAX),
+                                            OPND_CREATE_MEM64(s0, LOCAL_SLOT7_OFFSET)));                    
+                    dr_restore_arith_flags_from_xax(drcontext, bb, aflags_restore);
+                    PRE_INSERT(bb, aflags_restore,
+                        INSTR_CREATE_mov_ld(drcontext,
+                                            opnd_create_reg(DR_REG_RAX),
+                                            OPND_CREATE_MEM64(s0, LOCAL_SLOT6_OFFSET)));
+                } else {
+                    //s0 is the same as RAX
+                    //move s0 to s1
+                    PRE_INSERT(bb, next,
+                        INSTR_CREATE_mov_st(drcontext,
+                                            opnd_create_reg(s1),
+                                            opnd_create_reg(s0)));
+                    dr_save_arith_flags_to_xax(drcontext, bb, next);
+                    PRE_INSERT(bb, next,
+                        INSTR_CREATE_mov_st(drcontext,
+                                            OPND_CREATE_MEM64(s1, LOCAL_SLOT7_OFFSET),
+                                            opnd_create_reg(DR_REG_RAX)));
+                    //move back
+                    PRE_INSERT(bb, next,
+                        INSTR_CREATE_mov_st(drcontext,
+                                            opnd_create_reg(s0),
+                                            opnd_create_reg(s1)));
+
+                    //insert restore
+                    PRE_INSERT(bb, aflags_restore,
+                        INSTR_CREATE_mov_st(drcontext,
+                                            opnd_create_reg(s1),
+                                            opnd_create_reg(s0)));
+                    PRE_INSERT(bb, aflags_restore,
+                        INSTR_CREATE_mov_ld(drcontext,
+                                            opnd_create_reg(DR_REG_RAX),
+                                            OPND_CREATE_MEM64(s1, LOCAL_SLOT7_OFFSET)));                    
+                    dr_restore_arith_flags_from_xax(drcontext, bb, aflags_restore);
+                    //move back
+                    PRE_INSERT(bb, next,
+                        INSTR_CREATE_mov_st(drcontext,
+                                            opnd_create_reg(s0),
+                                            opnd_create_reg(s1)));
+                }
+            }
+        }
+
+        //if (reg_uses[0] || reg_uses[1] || reg_uses[2] || reg_uses[3]) PRE_INSERT(bb,instr,INSTR_CREATE_int1(drcontext));
+        if (reg_uses[0] && instr_uses_reg(instr, s0)) {
+            PRE_INSERT(bb, instr,
+                INSTR_CREATE_mov_ld(drcontext,
+                                    opnd_create_reg(s0),
+                                    opnd_create_rel_addr((void *)(&local->spill_space.slot0), OPSZ_8)));
+            POST_INSERT(bb, instr,
+                INSTR_CREATE_mov_imm(drcontext,
+                                     opnd_create_reg(s0),
+                                     OPND_CREATE_INTPTR(local)));
+            POST_INSERT(bb, instr,
+                INSTR_CREATE_mov_st(drcontext,
+                                    opnd_create_rel_addr((void *)(&local->spill_space.slot0), OPSZ_8),
+                                    opnd_create_reg(s0)));
+        }
+        if (reg_uses[1] && instr_uses_reg(instr, s1)) {
+            PRE_INSERT(bb, instr,
+                INSTR_CREATE_mov_ld(drcontext,
+                                    opnd_create_reg(s1),
+                                    OPND_CREATE_MEM64(s0, LOCAL_SLOT1_OFFSET)));
+            POST_INSERT(bb, instr,
+                INSTR_CREATE_mov_st(drcontext,
+                                    OPND_CREATE_MEM64(s0, LOCAL_SLOT1_OFFSET),
+                                    opnd_create_reg(s1)));
+        }
+        if (reg_uses[2] && instr_uses_reg(instr, s2)) {
+            PRE_INSERT(bb, instr,
+                INSTR_CREATE_mov_ld(drcontext,
+                                    opnd_create_reg(s2),
+                                    OPND_CREATE_MEM64(s0, LOCAL_SLOT2_OFFSET)));
+            POST_INSERT(bb, instr,
+                INSTR_CREATE_mov_st(drcontext,
+                                    OPND_CREATE_MEM64(s0, LOCAL_SLOT2_OFFSET),
+                                    opnd_create_reg(s2)));
+        }
+        if (reg_uses[3] && instr_uses_reg(instr, s3)) {
+            PRE_INSERT(bb, instr,
+                INSTR_CREATE_mov_ld(drcontext,
+                                    opnd_create_reg(s3),
+                                    OPND_CREATE_MEM64(s0, LOCAL_SLOT3_OFFSET)));
+            POST_INSERT(bb, instr,
+                INSTR_CREATE_mov_st(drcontext,
+                                    OPND_CREATE_MEM64(s0, LOCAL_SLOT3_OFFSET),
+                                    opnd_create_reg(s3)));
+        }
+    }
+
+    /* Restore */
+    PRE_INSERT(bb, last,
+        INSTR_CREATE_mov_ld(drcontext,
+                            opnd_create_reg(s1),
+                            OPND_CREATE_MEM64(s0, LOCAL_SLOT1_OFFSET)));
+
+    PRE_INSERT(bb, last,
+        INSTR_CREATE_mov_ld(drcontext,
+                            opnd_create_reg(s2),
+                            OPND_CREATE_MEM64(s0, LOCAL_SLOT2_OFFSET)));
+
+    PRE_INSERT(bb, last,
+        INSTR_CREATE_mov_ld(drcontext,
+                            opnd_create_reg(s3),
+                            OPND_CREATE_MEM64(s0, LOCAL_SLOT3_OFFSET)));
+
+    PRE_INSERT(bb, last,
+        INSTR_CREATE_mov_ld(drcontext,
+                            opnd_create_reg(s0),
+                            opnd_create_rel_addr((void *)(&local->spill_space.slot0), OPSZ_8)));
+}
+
+///redirect the memory instruction to speculative read & write buffer, clean call version
+void speculative_memory_handler(void *drcontext, janus_thread_t *local, instrlist_t *bb, instr_t *instr, int *reg_index)
+{
+    int i, dsti, srci;
+    int s0,s1,s2,s3;
+    opnd_size_t size;
+    instr_t *skipLabel = INSTR_CREATE_label(drcontext);
+
+    s0 = reg_index[0];
+    s1 = reg_index[1];
+    s2 = reg_index[2];
+    s3 = reg_index[3];
+
+#ifdef JANUS_STM_VERBOSE
+    instr_disassemble(drcontext, instr,STDOUT);
+    dr_printf(" %d\n",local->id);
+#endif
+    int is_read = instr_reads_memory(instr);
+    int is_write = instr_writes_memory(instr);
+    int opcode = instr_get_opcode(instr);
+    if (size > OPSZ_8) return;
+    opnd_t mem;
+
+    if (is_read) {
+        for (i = 0; i < instr_num_srcs(instr); i++) {
+            if (opnd_is_memory_reference(instr_get_src(instr, i))) break;
+        }
+        mem = instr_get_src(instr,i);
+        size = opnd_get_size(mem);
+        srci = i;
+    }
+    if (is_write) {
+        for (i = 0; i < instr_num_dsts(instr); i++) {
+            if (opnd_is_memory_reference(instr_get_dst(instr, i))) break;
+        }
+        mem = instr_get_dst(instr,i);
+        size = opnd_get_size(mem);
+        dsti = i;
+    }
+
+    load_effective_address(drcontext,bb,instr,mem,s1,s2);
+
+    //skip accesses beyond dynamic threshold
+    PRE_INSERT(bb, instr,
+       INSTR_CREATE_cmp(drcontext,
+                        opnd_create_reg(s1),
+                        OPND_CREATE_MEM64(s0, LOCAL_TX_THRESHOLD_BASE)));
+    PRE_INSERT(bb, instr,
+       INSTR_CREATE_jcc(drcontext, OP_jg, opnd_create_instr(skipLabel)));
+
+    if (is_read && !is_write) {
+        //read only
+        dr_insert_clean_call(drcontext, bb, instr,
+                             janus_spec_read, false, 2,
+                             opnd_create_reg(s0),
+                             opnd_create_reg(s1));
+    } else if (!is_read && is_write) {
+        //write only
+        dr_insert_clean_call(drcontext, bb, instr,
+                             janus_spec_write, false, 3,
+                             opnd_create_reg(s0),
+                             opnd_create_reg(s1),
+                             opnd_create_reg(s2));
+    } else {
+        //read/write, or partial write
+        dr_insert_clean_call(drcontext, bb, instr,
+                             janus_spec_get_ptr, false, 3,
+                             opnd_create_reg(s0),
+                             opnd_create_reg(s1));
+    }
+
+    PRE_INSERT(bb, instr, skipLabel);
+}
+
+///redirect the memory instruction to speculative read & write buffer, inline version
+void speculative_inline_memory_handler(void *drcontext, janus_thread_t *local, instrlist_t *bb, instr_t *instr)
+{
+
+}
+
+#ifdef NOT_YET_WORKING_FOR_ALL
 /* DynamoRIO handler for modifying memory instruction into speculative instructions */
 void transaction_inline_memory_handler(JANUS_CONTEXT)
 {
@@ -245,14 +910,8 @@ void transaction_inline_memory_handler(JANUS_CONTEXT)
     //change the original memory operand with indirect memory access [srt_reg]
     instr = reassemble_memory_instructions(drcontext, trigger, mode, info.size, srt_reg, srci, dsti);
 
-    /*
-    if (rule->reg1) {
-        instr_t *instr_next = instr_get_next(trigger);
-        insert_spill_scratch_regs(drcontext,bb,trigger,local,rule->id,sregMask,sindexMask, 0);
-    }
-    */
     //replace the original memory instruction
-    //instrlist_replace(drcontext,trigger,instr);
+    instrlist_replace(drcontext,trigger,instr);
 }
 
 /* DynamoRIO handler for mangling direct stack instructions into speculative instructions */
@@ -900,6 +1559,8 @@ transaction_privatise_handler(JANUS_CONTEXT)
     }
 }
 
+#endif
+
 dr_signal_action_t
 stm_signal_handler(void *drcontext, dr_siginfo_t *siginfo)
 {
@@ -908,6 +1569,7 @@ stm_signal_handler(void *drcontext, dr_siginfo_t *siginfo)
 #ifdef JANUS_VERBOSE
     printf("thread %ld segfault\n",local->id);
 #endif
+#ifdef NOT_YET_WORKING_FOR_ALL
     int i;
 
     if (!local->flag_space.loop_on) return DR_SIGNAL_DELIVER;
@@ -1000,15 +1662,8 @@ YIELD_IN_SIGNAL:
     siginfo->mcontext->r15 = local->tx.check_point.state.r15;
     //siginfo->mcontext->pc = (void *)local->tx.check_point.state.pc;
     siginfo->mcontext->pc = (void *)shared->current_loop->loop_start_addr;
+
     return DR_SIGNAL_REDIRECT;
+#endif
 }
 
-static void glock()
-{
-    pthread_mutex_lock(&lock);
-}
-
-static void gunlock()
-{
-    pthread_mutex_unlock(&lock);
-}

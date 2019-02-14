@@ -15,6 +15,7 @@ namespace janus {
 class MachineInstruction;
 class VarState;
 class BasicBlock;
+class Function;
 
 /** \brief An abstract definition of a machine instruction.
  *
@@ -101,6 +102,8 @@ public:
     bool                            isVectorInstruction();
     ///Return the target instruction ID from the current instruction, this must be a branch within the same function, return -1 if not found
     int                             getTargetInstID();
+    ///Return the pointer to the function based on the jump/call target of this instruction
+    Function *                      getTargetFunction();
     ///Print the instruction into dot format
     void                            printDot(void *outputStream);
 };
