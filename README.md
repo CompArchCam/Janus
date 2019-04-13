@@ -33,11 +33,11 @@ A static binary analyser that examines input binaries and identifies opportuniti
 ### JPar ###
 JPar firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and performs automatic parallelisation on the same binary.
 
-### JVec ###
-JVec firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and performs automatic vectorisation on the same binary. Currently it is not fully operational.
+### JVect ###
+JVect firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and performs automatic vectorisation on the same binary. Currently it is only working for small loops and not fully operational.
 
-### JFet ###
-JFet firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and automatic inserts memory prefetch instructions into the same binary. Currently it is not fully operational.
+### JFetch ###
+JFet firstly performs a static analysis on the input binary using *analyze* and generates a rewrite schedule and automatic inserts memory prefetch instructions into the same binary.
 
 ### JITSTM ###
 JITSTM is a software transactional memory library that is generated at runtime. It redirects generic memory accesses to speculative read/write buffers. The design is similar to [JudoSTM](https://ieeexplore.ieee.org/document/4336226). Currently it is not fully operational and its performance is not optimised.
@@ -61,14 +61,16 @@ After building, there are several components generated:
 * **bin/analyze**: the static binary analyser;
 * **bin/schedump**: a utility tool to display the content of generated rewrite schedules;
 * **lib/libjpar.so**: a DynamoRIO client library for automatic parallelisation (JPar);
-* **lib/libjvec.so**: a DynamoRIO client library for automatic vectorisation (JVec);
-* **lib/libjpft.so**: a DynamoRIO client library for automatic software prefetch insertion (JPft).
+* **lib/libjvect.so**: a DynamoRIO client library for automatic vectorisation (JVect);
+* **lib/libjfetch.so**: a DynamoRIO client library for automatic software prefetch insertion (JFetch).
 
 There are a few convenient bash scripts in the **janus** folder.
 
 * **janus/jpar**: run the static analyser and call the automatic paralleliser;
 * **janus/jpar_debug**: run the static analyser and call the automatic paralleliser in debugging mode (using gdb);
 * **janus/jpar_all**: run the profiler, static analyser and dynamic paralleliser in one go (note that this will take lots of time);
+* **janus/jvect**: run the static analyser and call the automatic vectoriser;
+* **janus/jfetch**: run the static analyser and call the automatic prefetcher;
 * **janus/graph**: generate a CFG graph of the binary in terms of loops or procedures as a pdf;
 * **janus/lcov**: generate the profiled coverage information of each static loop;
 * **janus/plan**: run the dynamic dependence profiler;
@@ -97,6 +99,15 @@ For example, to parallelise an executable "2mm" with 4 threads, you can simply t
 ```bash
 jpar 4 2mm
 ```
+To vectorise an executable "2mm":
+```bash
+jvect 2mm
+```
+To prefetch an executable "is":
+```bash
+jfetch 2mm
+```
+Currently the joint script for exploiting three kind of parallelism is still under development.
 
 ## Run on your own executable ##
 Once you add Janus into PATH, you can try Janus on your own binary:
@@ -117,8 +128,8 @@ Option:
   -lc: generate rules for loop coverage profiling
   -fc: generate rules for function coverage profiling (not yet working)
   -pr: generate rules for automatic loop profiling
-  -o: generate rules for single thread optimization (not yet working)
-  -v: generate rules for automatic vectorization (not yet working)
+  -f: generate rules for automatic just in time prefetch
+  -v: generate rules for automatic vectorization
 ```
 
 For example. you can run the static binary analyser:
@@ -152,7 +163,8 @@ Please cite our CGO 2019 paper if you use Janus in your own work.
 Ruoyu Zhou and Timothy M. Jones
 International Symposium on Code Generation and Optimization (CGO), February 2019
 
-The Janus Triad: Exploiting Parallelism Through Dynamic Binary Modification
+[The Janus Triad: Exploiting Parallelism Through Dynamic Binary Modification]
+(https://www.cl.cam.ac.uk/~rkz20/paper/vee19janus.pdf)
 Ruoyu Zhou, George Wort, Márton Erdős and Timothy M. Jones
 International Conference on Virtual Execution Environments (VEE), April 2019
 
