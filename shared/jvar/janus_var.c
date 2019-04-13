@@ -1,6 +1,28 @@
 #include <stdio.h>
 #include "janus_var.h"
 #include "janus_arch.h"
+#include "rule_isa.h"
+
+/** \brief Encode the current JVar to rewrite rule */
+void encode_jvar(JVar var, RRule *rule)
+{
+    if (!rule) return;
+    JVarPack vp;
+    vp.var = var;
+    rule->reg0 = vp.data1;
+    rule->reg1 = vp.data2;
+}
+
+/** \brief Decode the the rewrite rule and get JVar */
+JVar decode_jvar(RRule *rule) {
+    JVar v;
+    JVarPack vp;
+    v.type = JVAR_UNKOWN;
+    if (!rule) return v;
+    vp.data1 = rule->reg0;
+    vp.data2 = rule->reg1;
+    return vp.var;
+}
 
 void print_var(JVar var)
 {

@@ -34,14 +34,13 @@ set(DYN_INC_PATH
 
 include_directories(${DYN_INC_PATH})
 
-#software prefetcher
-#add_subdirectory(prefetcher)
 #automatic paralleliser
 add_subdirectory(parallel)
 #profiler
 add_subdirectory(coverage)
 #timer
 if (JANUS_X86_SUPPORT)
+add_subdirectory(prefetcher)
 #automatic vector
 add_subdirectory(vector)
 add_subdirectory(planner)

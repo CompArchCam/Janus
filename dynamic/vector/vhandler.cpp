@@ -101,6 +101,10 @@ vector_induction_update_handler(JANUS_CONTEXT)
         //register operand
         PRE_INSERT(bb,trigger,INSTR_CREATE_int1(drcontext));
     } else {
+#ifdef JANUS_VERBOSE
+    instr_disassemble(drcontext, trigger,STDOUT);
+    dr_printf("\n");
+#endif
         //immediate value update
         for (int i = 0; i < instr_num_srcs(trigger); i++) {
             opnd_t opnd = instr_get_src(trigger, i);
@@ -110,8 +114,27 @@ vector_induction_update_handler(JANUS_CONTEXT)
                 instr_set_src(trigger, i, OPND_CREATE_INT32(opndimm));
             }
         }
+#ifdef JANUS_VERBOSE
+    instr_disassemble(drcontext, trigger,STDOUT);
+    dr_printf("\n");
+#endif
     }
 }
+
+void
+vector_loop_init(JANUS_CONTEXT)
+{
+    instr_t *trigger = get_trigger_instruction(bb,rule);
+    //PRE_INSERT(bb,trigger,INSTR_CREATE_int1(drcontext));
+}
+
+void
+vector_loop_finish(JANUS_CONTEXT)
+{
+    instr_t *trigger = get_trigger_instruction(bb,rule);
+    //PRE_INSERT(bb,trigger,INSTR_CREATE_int1(drcontext));
+}
+
 
 void
 vector_induction_recover_handler(JANUS_CONTEXT)
@@ -188,10 +211,41 @@ void vector_broadcast_handler(JANUS_CONTEXT)
 {
     opnd_t dst, src;
     instr_t *trigger = get_trigger_instruction(bb,rule);
+    instr_t *instr;
+
     dst = instr_get_dst(trigger, 0);
     src = instr_get_src(trigger, 0);
     int opcode = instr_get_opcode(trigger);
-    if (opcode == OP_vmovss || opcode == OP_movss) {
+#ifdef JANUS_VERBOSE
+    instr_disassemble(drcontext, trigger,STDOUT);
+    dr_printf("\n");
+#endif
+    if (rule->ureg0.up == 1) {
+        if (myCPU == AVX_SUPPORT || myCPU == AVX2_SUPPORT) {
+            opnd_t op = opnd_create_reg(rule->reg1);
+            instr = INSTR_CREATE_vbroadcastss(drcontext, op, op);
+            set_dest_size(instr, opnd_size_from_bytes(32), 0);
+            PRE_INSERT(bb,trigger,instr);
+
+        } else {
+            opnd_t op = opnd_create_reg(rule->reg1);
+            instr = INSTR_CREATE_shufps(drcontext, op, op, OPND_CREATE_INT8(0));
+            set_dest_size(instr, opnd_size_from_bytes(16), 0);
+            PRE_INSERT(bb,trigger,instr);
+        }
+    }
+    else if (opcode == OP_movaps) {
+        if (myCPU == AVX_SUPPORT || myCPU == AVX2_SUPPORT) {
+            instr = INSTR_CREATE_vbroadcastss(drcontext, dst, dst);
+            set_dest_size(instr, opnd_size_from_bytes(32), 0);
+            POST_INSERT(bb,trigger,instr);
+        } else {
+            instr = INSTR_CREATE_shufps(drcontext, dst, dst, OPND_CREATE_INT8(0));
+            set_dest_size(instr, opnd_size_from_bytes(16), 0);
+            POST_INSERT(bb,trigger,instr);
+        }
+    }
+    else if (opcode == OP_vmovss || opcode == OP_movss) {
         vector_broadcast_handler_mov_single(janus_context, trigger, &dst, &src, opcode);
     }
     else if ((opcode == OP_vmovsd || opcode == OP_movsd)) {
@@ -199,6 +253,11 @@ void vector_broadcast_handler(JANUS_CONTEXT)
     }
     else if (opcode == OP_cvtsi2sd || opcode == OP_vcvtsi2sd) {
         vector_broadcast_handler_cvtsi2sd(janus_context, trigger, &dst, &src, opcode);
+    } else {
+        //PRE_INSERT(bb,trigger,INSTR_CREATE_int1(drcontext));
+        dr_printf("broadcast handler: instruction not yet implemented: ");
+        instr_disassemble(drcontext, trigger,STDOUT);
+        dr_printf("\n");
     }
 }
 

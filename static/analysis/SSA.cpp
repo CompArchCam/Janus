@@ -360,8 +360,8 @@ linkDependentNodes(Function &function)
                     vs->type == JVAR_MEMORY) {
                     for (auto vi: vs->pred)
                         vi->dependants.insert(&instr);
-                } else
-                    vs->dependants.insert(&instr);
+                }
+                vs->dependants.insert(&instr);
             }
             //mark all memory output as used
             for (auto vs : instr.outputs) {

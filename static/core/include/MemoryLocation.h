@@ -52,9 +52,11 @@ public:
     MemoryLocation():type(Complex), expr(ExpandedExpr::SUM), vs(NULL), loop(NULL){};
     MemoryLocation(MemoryInstruction *mi, Loop *loop);
     /** \brief Get scalar evolution (symbolic range) of this memory address */
-    void                             getSCEV(std::map<VarState *, SCEV> &ranges);
+    void                             getSCEV();
     /** \brief Returns true if the memory location is a function of an iterator of the specified loop */
     bool                             containIterator(Loop *loop);
+    /** \brief Returns if the memory address is based on an another memory load, otherwise return NULL */
+    VarState                         *getIndirectMemory();
 
     /** \brief Tells whether two memory locations are alias */
     //MemLocationAliasType             alias(MemoryLocation &location);
@@ -73,9 +75,17 @@ std::ostream& operator<<(std::ostream& out, const MemoryLocation& mloc);
 class SCEV
 {
 public:
+    enum SCEVType {
+        ///The scalar evolution expression could not be built
+        Ambiguous,
+        ///Normal
+        Normal
+    };
+
     Expr            start;
     Expr            stride;
     Iterator        *iter;
+    SCEVType        kind;
 
     SCEV():start(0),stride(0),iter(NULL){};
     SCEV(Expr start, Expr stride, Iterator *iter);
@@ -93,6 +103,13 @@ std::ostream& operator<<(std::ostream& out, const SCEV& scev);
 class ExpandedSCEV
 {
 public:
+    enum ESCEVType {
+        ///The scalar evolution expression could not be built
+        Ambiguous,
+        ///Normal
+        Normal
+    };
+    ESCEVType                           kind;
     /** \brief variable components */
     std::map<Iterator*, Expr>           strides;
     /** \brief scalar base of the scev (no iterators) */

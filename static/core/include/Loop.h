@@ -154,6 +154,8 @@ class Loop
     /** \brief Store loop iterators in terms of array bases */
     std::map<Expr, std::set<Iterator *>> arrayIterators;
     std::set<Expr>                  arrayToCheck;
+    /** \brief memory location look up table, key is the variable state */
+    std::map<VarState*, MemoryLocation*> locationTable;
 
     /* --------------------------------------------------------------
      *                    Rewrite Schedule Information
@@ -201,6 +203,8 @@ class Loop
     void                 analyse3(JanusContext *gc);
     /** \brief return true if the loop body contains the basic block */
     bool                 contains(BlockID bid);
+    /** \brief return true if the loop body contains the instruction */
+    bool                 contains(Instruction &instr);
     void                 name(void *outputStream);
     void                 print(void *outputStream);
     void                 printDot(void *outputStream); /* output .dot format */

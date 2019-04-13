@@ -12,6 +12,7 @@ const char *print_janus_mode(JMode mode) {
         case JANALYSIS: return "Static Binary Analysis";
         case JOPT: return "Automatic Binary Optimiser";
         case JGRAPH: return "Control Flow Graph Generator";
+        case JFETCH: return "Automatic software prefetch";
         default: return "Free Mode";
     }
 }
@@ -98,6 +99,10 @@ const char *print_rule_opcode(RuleOp op)
         case PARA_UNLOCK_ADDR: return "PARA_UNLOCK_ADDR";
         case PARA_OUTER_LOOP_INIT: return "PARA_OUTER_LOOP_INIT";
         case PARA_OUTER_LOOP_END: return "PARA_OUTER_LOOP_END";
+        case MEM_PREFETCH: return "MEM_PREFETCH";
+        case INSTR_CLONE: return "INSTR_CLONE";
+        case INSTR_UPDATE: return "INSTR_UPDATE";
+        case INSTR_NOP: return "INSTR_NOP";
         case EM_START: return "EM_START";
         case EM_END: return "EM_END";
         case EM_LOOP_START: return "EM_LOOP_START";

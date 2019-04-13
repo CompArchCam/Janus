@@ -128,29 +128,13 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
             }
 
             //outermost loop finish
-            for (auto bid: outer->init) {
+            for (auto bid: outer->exit) {
                 BasicBlock *bb = entry + bid;
                 rule = RewriteRule(PARA_OUTER_LOOP_END, bb, POST_INSERT);
                 rule.reg0 = outer->header.id;
                 insertRule(id, rule, bb);
             }
         }
-    }
-
-    /* Loop start and finish */
-    for (auto bid: loop.init) {
-        BasicBlock *bb = entry + bid;
-        rule = RewriteRule(PARA_LOOP_INIT, bb, POST_INSERT);
-        rule.reg0 = loop.header.id;
-        insertRule(id, rule, bb);
-    }
-
-    for (auto bid: loop.exit)
-    {
-        rule = RewriteRule(PARA_LOOP_FINISH, entry + bid, PRE_INSERT);
-        rule.reg0 = loop.header.id;
-        rule.reg1 = entry[bid].instrs->pc;
-        insertRule(id, rule, entry + bid);
     }
 
     /* Loop iteration Start */

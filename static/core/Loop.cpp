@@ -288,13 +288,8 @@ Loop::analyse(JanusContext *gc)
     dependenceAnalysis(this);
 
     /* Step 5: iterator variable analysis */
-    bool iteratorFound = iteratorAnalysis(this);
+    iteratorAnalysis(this);
 
-    if (!iteratorFound) {
-        //unsafe = true;
-        LOOPLOG("========================================================="<<endl<<endl);
-        return;
-    }
     LOOPLOG("========================================================="<<endl<<endl);
 }
 
@@ -308,7 +303,9 @@ Loop::analyse2(JanusContext *gc)
     LOOPLOG("Analysing Loop "<<dec<<id<<" Second Pass"<<endl);
 
     /* Step 6: iterator analysis again */
-    if (!postIteratorAnalysis(this)) return;
+    if (!postIteratorAnalysis(this)) {
+        LOOPLOG("\tPost iterator analysis failed"<<endl);
+    }
 
     LOOPLOG("========================================================="<<endl<<endl);
 }
@@ -363,6 +360,12 @@ Loop::contains(BlockID bid)
 }
 
 bool
+Loop::contains(Instruction &instr)
+{
+    return contains(instr.block->bid);
+}
+
+bool
 Loop::isAncestorOf(Loop* l) {
     if (l==this) return true;
     return descendants.find(l) != descendants.end();
@@ -408,6 +411,14 @@ Loop::lowestCommonAncestor(Loop *l)
 
 bool
 Loop::isConstant(VarState *vs) {
+    //Memory variable is constant only if its address is constant
+    if (vs->type == JVAR_MEMORY) {
+        bool cons = true;
+        for (auto pred: vs->pred) {
+            cons &= isConstant(pred);
+        }
+        return cons;
+    }
     //VarState defined outside of the loop is constant (otherwise would go through phi node)
     if (body.find(vs->block->bid) == body.end())
         return true;

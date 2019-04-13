@@ -61,6 +61,8 @@ typedef enum _jmode {
     JPARALLEL,
     ///vectorisation mode
     JVECTOR,
+    ///software prefetch mode
+    JFETCH,
     ///static analysis mode
     JANALYSIS,
     ///graph mode

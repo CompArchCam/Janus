@@ -33,15 +33,54 @@ prepareLoopHeader(JanusContext *gc, Loop &loop)
 void
 generateVectorRulesForLoop(JanusContext *gc, Loop *loop)
 {
-    cout<<"loop id "<<dec<<loop->id<<endl;
-
     BasicBlock *entry = loop->parent->entry;
     /* Get the array of instructions */
     Instruction *instrs = loop->parent->instrs.data();
 
     RewriteRule rule;
     VECT_RULE *vrule;
-    uint32_t id = loop->id;
+
+    int id = loop->id;
+
+    //step 1: retrieve the alignment information
+    bool aligned = alignmentAnalysis(*loop);
+
+    if (loop->peelDistance) return;
+
+    /* Add debug rules at the start end finish of the loop */
+    if (loop->ancestors.size() == 0) {
+        /* Loop start and finish */
+        for (auto bid: loop->init) {
+            rule = RewriteRule(PARA_LOOP_INIT, entry + bid, POST_INSERT);
+            insertRule(id, rule, entry + bid);
+        }
+
+        for (auto bid: loop->exit)
+        {
+            rule = RewriteRule(PARA_LOOP_FINISH, entry + bid, PRE_INSERT);
+            insertRule(id, rule, entry + bid);
+        }
+    }
+
+    /* Insert annotation in the outer loop for debugging purposes */
+    for (auto outer : loop->ancestors) {
+        if (outer->level == 0) {
+            //outermost loop init
+            for (auto bid: outer->init) {
+                BasicBlock *bb = entry + bid;
+                rule = RewriteRule(PARA_OUTER_LOOP_INIT, bb, POST_INSERT);
+                insertRule(id, rule, bb);
+            }
+
+            //outermost loop finish
+            for (auto bid: outer->exit) {
+                BasicBlock *bb = entry + bid;
+                rule = RewriteRule(PARA_OUTER_LOOP_END, bb, POST_INSERT);
+                insertRule(id, rule, bb);
+            }
+        }
+    }
+
 #ifdef JANUS_X86
     //step 1: insert broadcast rules
     set<uint32_t> copySet;
@@ -53,14 +92,24 @@ generateVectorRulesForLoop(JanusContext *gc, Loop *loop)
             VarState *vs = loop->start->alive(v);
             if (vs != NULL && vs->lastModified) {
                 Instruction *instr = vs->lastModified;
-                VECT_RULE *rule = new VECT_RULE(instr->block, instr->pc, instr->id, VECT_BROADCAST);
-                insertRule(0, *rule->encode(), instr->block);
+                VECT_RULE *vr = new VECT_RULE(instr->block, instr->pc, instr->id, VECT_BROADCAST);
+                rule = *vr->encode();
+                rule.ureg0.up = 0;
+                insertRule(id, rule, instr->block);
+            } else {
+                //if variable state not found, it means it is from function argument
+                //then add to the init block of the loop
+                for (auto bid: loop->init) {
+                    rule = RewriteRule(VECT_BROADCAST, entry + bid, POST_INSERT);
+                    rule.ureg0.up = 1;
+                    rule.ureg0.down = v.size;
+                    rule.reg1 = reg;
+                    insertRule(id, rule, entry + bid);
+                }
             }
         }
     }
 
-    //step 1: retrieve the alignment information
-    bool aligned = alignmentAnalysis(*loop);
     //insert VECT_LOOP_PEEL if not aligned
     if (loop->peelDistance > 0) {
         //insert loop peeling after the loop
@@ -70,7 +119,7 @@ generateVectorRulesForLoop(JanusContext *gc, Loop *loop)
             VECT_LOOP_PEEL_rule *rule = new VECT_LOOP_PEEL_rule(bb, instr->pc, instr->id, (uint32_t)(loop->start->instrs->pc-instr->pc),
                 (uint16_t)loop->scratchRegs.regs.reg0, (uint16_t)loop->scratchRegs.regs.reg1, (uint32_t)loop->staticIterCount);
             rule->vectorWordSize = loop->vectorWordSize;
-            insertRule(0, *rule->encode(), bb);
+            insertRule(id, *rule->encode(), bb);
         }
     }
 
@@ -84,7 +133,7 @@ generateVectorRulesForLoop(JanusContext *gc, Loop *loop)
                 bool postIteratorUpdate = checkPostIteratorUpdate(instr);
                 VECT_CONVERT_rule *rule = new VECT_CONVERT_rule(&bb, instr.pc, instr.id, 0, postIteratorUpdate, (uint16_t)loop->mainIterator->stride, 
                 (uint16_t)loop->freeSIMDRegs.getNextLowest(JREG_XMM0), ALIGNED, 0, loop->staticIterCount);
-                insertRule(0, *rule->encode(), &bb);
+                insertRule(id, *rule->encode(), &bb);
             }
         }
     }
@@ -102,7 +151,7 @@ generateVectorRulesForLoop(JanusContext *gc, Loop *loop)
             rule = RewriteRule(VECT_INDUCTION_STRIDE_UPDATE, instr->block->instrs->pc, instr->pc, instr->id);
             rule.reg0 = 0;
             rule.reg1 = loop->vectorWordSize;
-            insertRule(0,rule,instr->block);
+            insertRule(id,rule,instr->block);
         }
         else if (iter.strideKind == Iterator::SINGLE_VAR) {
             VarState *vs = iter.strideVar;
@@ -114,14 +163,14 @@ generateVectorRulesForLoop(JanusContext *gc, Loop *loop)
                     rule = RewriteRule(VECT_INDUCTION_STRIDE_UPDATE, bb, POST_INSERT);
                     rule.reg0 = reg;
                     rule.reg1 = loop->vectorWordSize;
-                    insertRule(0, rule, bb);
+                    insertRule(id, rule, bb);
                 }
                 // Revert required for VECT_INDUCTION_STRIDE_UPDATE's multiplication of the reg value.
                 for (auto bid: loop->exit) {
                     rule = RewriteRule(VECT_INDUCTION_STRIDE_RECOVER, entry + bid, PRE_INSERT);
                     rule.reg0 = reg;
                     rule.reg1 = loop->vectorWordSize;
-                    insertRule(0, rule, entry + bid);
+                    insertRule(id, rule, entry + bid);
                 }
             }
         } else continue;
@@ -141,17 +190,14 @@ generateVectorRules(JanusContext *gc)
     setSupportedVectorOpcodes(supported_opcodes, singles, doubles);
 
     /* Step 1: select loops for vectorisation based on the selected opcode */
-    //selectVectorisableLoop(gc, selected_loops, supported_opcodes, singles, doubles);
-    selected_loops.insert(&gc->loops[50]);
-    selected_loops.insert(&gc->loops[84]);
-    //selected_loops.insert(&gc->loops[73]);
+    selectVectorisableLoop(gc, selected_loops, supported_opcodes, singles, doubles);
 
     /* Step 2: generate rules for each loop */
     for (auto l: selected_loops) {
-        cout <<dec<<l->id<<" ";
+        cout <<l->id<<" ";
         generateVectorRulesForLoop(gc, l);
     }
-    cout <<endl;
+    cout<<endl;
 }
 
 bool alignmentAnalysis(Loop &loop)
@@ -160,19 +206,15 @@ bool alignmentAnalysis(Loop &loop)
     bool aligned = true;
     int64_t strideImm = 0;
 
-    for (auto s: loop.memoryAccesses) {
+    LOOPLOGLINE("loop "<<dec<<loop.id<<" alignment analysis:");
+
+    for (auto s: loop.arrayAccesses) {
         auto set = s. second;
         for (auto m: set) {
             //the scalar evolution analysis shows the alignment references
             //{start,+,stride}
-            cout <<*m->scev<<endl;
-            Expr start = m->scev->start;
-            Expr stride = m->scev->stride;
-
-            if (stride.kind == Expr::INTEGER) {
-                if (strideImm == 0) strideImm = stride.i;
-                else if (strideImm != stride.i) aligned = false;
-            }
+            LOOPLOGLINE("\t"<<*m->escev);
+            Expr start = m->escev->start;
 
             if (start.kind == Expr::INTEGER) {
                 //we have to make sure all the memory accesses are multiple of SIMD lanes
@@ -188,36 +230,22 @@ bool alignmentAnalysis(Loop &loop)
                         aligned = false;
                     }
                 }
-            } else if (start.kind == Expr::EXPANDED) {
-                auto result = start.ee->evaluate(&loop);
-                if (result.first == Expr::INTEGER) {
-                    int64_t base = result.second;
-                    //for avx it must be divisiable by 16
-                    int peel = base % 16;
-                    if (peel != 0) {
-                        if (!loop.peelDistance) {
-                            loop.peelDistance = peel / strideImm;
-                        }
-                        else if (loop.peelDistance != (peel / strideImm)) {
-                            loop.peelDistance = -1;
-                            aligned = false;
-                        }
-                    }
-                } else {
-                    cout <<"ex: "<<start<<endl;
-                    return false;
+            } else return false;
+
+            //analyse the strides
+            for (auto strideP: m->escev->strides) {
+                if (strideP.first->loop->id != loop.id) continue;
+                Expr stride = strideP.second;
+                if (stride.kind == Expr::INTEGER) {
+                    if (strideImm == 0) strideImm = stride.i;
+                    else if (strideImm != stride.i) aligned = false;
                 }
-            } else {
-                cout <<"ex: "<<start<<endl;
-                return false;
             }
-
-
         }
     }
 
     if (aligned && strideImm) loop.vectorWordSize = strideImm;
-    cout <<"peel distance " << loop.peelDistance <<endl;
+    LOOPLOGLINE("\tfixed stride "<<strideImm<<" peel distance "<<loop.peelDistance);
 }
 
 static bool needBroadcast(Loop &loop, Instruction &instr)
@@ -230,6 +258,14 @@ bool checkPostIteratorUpdate(Instruction &instr)
     for (auto vi: instr.inputs) {
         if (vi->type == JVAR_MEMORY) {
             for (auto pred: vi->pred) {
+                //none of them should be PHI nodes
+                if (pred->isPHI) return false;
+            }
+        }
+    }
+    for (auto vo: instr.outputs) {
+        if (vo->type == JVAR_MEMORY) {
+            for (auto pred: vo->pred) {
                 //none of them should be PHI nodes
                 if (pred->isPHI) return false;
             }

@@ -1566,10 +1566,10 @@ stm_signal_handler(void *drcontext, dr_siginfo_t *siginfo)
 {
     //XXX: currently directly deliver signal
     return DR_SIGNAL_DELIVER;
+#ifdef NOT_YET_WORKING_FOR_ALL
 #ifdef JANUS_VERBOSE
     printf("thread %ld segfault\n",local->id);
 #endif
-#ifdef NOT_YET_WORKING_FOR_ALL
     int i;
 
     if (!local->flag_space.loop_on) return DR_SIGNAL_DELIVER;

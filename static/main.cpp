@@ -11,6 +11,7 @@ static void usage()
     cout<<"  -a: static analysis without generating rules"<<endl;
     cout<<"  -cfg: generate CFG from the binary"<<endl;
     cout<<"  -p: generate rules for automatic parallelisation"<<endl;
+    cout<<"  -f: generate rules for automatic prefetch"<<endl;
     cout<<"  -lc: generate rules for loop coverage profiling"<<endl;
     cout<<"  -fc: generate rules for function coverage profiling"<<endl;
     cout<<"  -pr: generate rules for automatic loop profiling"<<endl;
@@ -71,8 +72,8 @@ int main(int argc, char **argv) {
                     IF_VERBOSE(cout<<"Function coverage profiling mode enabled"<<endl);
                 }
                 else {
-                    usage();
-                    return 1;
+                    mode = JFETCH;
+                    IF_VERBOSE(cout<<"Software prefetch mode enabled"<<endl);
                 }
                 break;
             case 'v': mode = JVECTOR; IF_VERBOSE(cout<<"Loop vectorisation enabled"<<endl); break;

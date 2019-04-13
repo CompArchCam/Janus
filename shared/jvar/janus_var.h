@@ -140,4 +140,11 @@ typedef struct _scratch {
 
 void print_var(JVar var);
 void print_profile(JVarProfile *profile);
+
+typedef struct rule_instr RRule;
+
+/** \brief Encode the current JVar to rewrite rule */
+void encode_jvar(JVar var, RRule *rule);
+/** \brief Decode the the rewrite rule and get JVar */
+JVar decode_jvar(RRule *rule);
 #endif

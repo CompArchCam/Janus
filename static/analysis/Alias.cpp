@@ -13,16 +13,14 @@
 #include <cstring>
 #include <iostream>
 #include <queue>
+#include <stack>
 
 using namespace janus;
 using namespace std;
 
-static MemoryLocation*
-getOrInsertMemLocations(Loop *loop, MemoryLocation *loc);
-
 //lamport test for single variables
 static AliasType lamportTest(ExpandedSCEV &diff);
-static AliasType GCDTest(ExpandedSCEV &e1, ExpandedSCEV &e2, ExpandedSCEV &diff);
+static AliasType GCDTest(ExpandedSCEV &e1, ExpandedSCEV &e2, ExpandedSCEV &diff, Loop &loop);
 static AliasType banerjeeTest(ExpandedSCEV &diff);
 
 void
@@ -30,8 +28,6 @@ aliasAnalysis(janus::Loop *loop)
 {
     Function *parent = loop->parent;
     BasicBlock *entry = parent->entry;
-    //a temporary dictionary holding intermediate scevs
-    map<VarState *, SCEV> ranges;
 
     /* Read set */
     auto &readSets = loop->memoryReads;
@@ -60,6 +56,7 @@ aliasAnalysis(janus::Loop *loop)
     }
 
     //step 1: record all memory access into read and write sets
+    //and build scalar evolution
     LOOPLOG2("\n\tStep 1: Analyse each memory access in the loop:"<<endl);
     for (auto bid: loop->body) {
         BasicBlock &bb = entry[bid];
@@ -72,7 +69,7 @@ aliasAnalysis(janus::Loop *loop)
             MemoryLocation *memVar = new MemoryLocation(&mi, loop);
             LOOPLOG2("\t\t\tMemory expression: "<<memVar->expr<<" constructed"<<endl);
             //create a memory variable for each memory instruction
-            memVar->getSCEV(ranges);
+            memVar->getSCEV();
             LOOPLOG2("\t\t\tScalar evolution: "<<*memVar->escev<<endl);
             //insert the memory location into the loop array accesses
             MemoryLocation *location = getOrInsertMemLocations(loop, memVar);
@@ -191,10 +188,22 @@ void checkAliasRelation(MemoryLocation &m1, MemoryLocation &m2, Loop *loop)
 {
     AliasType result = UnknownAlias;
 
-    if (m1.scev && m2.scev) {
+    if (m1.escev && m2.escev) {
         //expand the scalar evolution expressions for both locations
-        ExpandedSCEV e1(*m1.scev);
-        ExpandedSCEV e2(*m2.scev);
+        ExpandedSCEV &e1 = *m1.escev;
+        ExpandedSCEV &e2 = *m2.escev;
+
+        if (e1.kind == ExpandedSCEV::Ambiguous) {
+            LOOPLOG2("\t\t\tscev ambiguous"<<endl);
+            loop->undecidedMemAccesses.insert(&m1);
+            return;
+        }
+
+        if (e2.kind == ExpandedSCEV::Ambiguous) {
+            LOOPLOG2("\t\t\tscev ambiguous"<<endl);
+            loop->undecidedMemAccesses.insert(&m2);
+            return;
+        }
 
         //get the range difference of the two expressions
         ExpandedSCEV rdiff = getRangeDiff(e1, e2, loop);
@@ -202,6 +211,7 @@ void checkAliasRelation(MemoryLocation &m1, MemoryLocation &m2, Loop *loop)
         //if both are single index variable with the same scale, we use lamport test
         if (e1.strides.size()==1 &&
             e2.strides.size()==1 &&
+            rdiff.strides.size() == 1 &&
             (*e1.strides.begin()).second.i == (*e2.strides.begin()).second.i) {
             result = lamportTest(rdiff);
             if (result == MustAlias) {
@@ -211,7 +221,7 @@ void checkAliasRelation(MemoryLocation &m1, MemoryLocation &m2, Loop *loop)
         }
 
         //perform the GCD dependence test
-        result = GCDTest(e1,e2,rdiff);
+        result = GCDTest(e1,e2,rdiff,*loop);
         if (result == MustAlias) {
             loop->memoryDependences[&m1].insert(&m2);
             return;
@@ -278,23 +288,26 @@ static AliasType lamportTest(ExpandedSCEV &diff)
         Expr scale = (*diff.strides.begin()).second;
         if (scale.kind != Expr::INTEGER) return UnknownAlias;
         int64_t strideImm = scale.i;
+        if (iter == NULL) return UnknownAlias;
         /* lamport test:
          * Dependency for [a*i+c1] vs [a*i+c2] occurs when
          * -(c1-c2)/a has integer solution in the iterator range
          */
         if (diffImm % strideImm == 0) {
-            int divisor = -diffImm/strideImm;
             //it must falls in range of the iterator
             if (iter &&
                 iter->initKind == Iterator::INTEGER &&
                 iter->finalKind == Iterator::INTEGER) {
-                if (!((divisor >= iter->initImm) &&
-                      (divisor <= iter->finalImm))) {
-                    LOOPLOG2("\t\t\tFound a fake cross iteration dependence of distance "<<divisor<<" but beyond loop range"<<endl);
+                if (!((diffImm >= iter->initImm) &&
+                      (diffImm <= iter->finalImm))) {
+                    LOOPLOG2("\t\t\tDistance "<<diffImm<<" beyond loop range, therefore no dependence"<<endl);
+                    return MustNotAlias;
+                } else if (diffImm >= abs(iter->initImm - iter->finalImm)) {
+                    LOOPLOG2("\t\t\tDistance "<<diffImm<<" beyond loop range"<<abs(iter->initImm - iter->finalImm)<<", therefore no dependence"<<endl);
                     return MustNotAlias;
                 }
             }
-            LOOPLOG2("\t\t\tFound a cross iteration dependence of distance "<<divisor<<" for this write-read pair"<<endl);
+            LOOPLOG2("\t\t\tFound a cross iteration dependence of distance "<<diffImm<<" within range "<<abs(iter->initImm - iter->finalImm)<<" for this write-read pair"<<endl);
             return MustAlias;
         }
     }
@@ -306,7 +319,7 @@ static int get_gcd(int a, int b) {
     return b == 0 ? a : get_gcd(b, a % b);
 }
 
-static AliasType GCDTest(ExpandedSCEV &e1, ExpandedSCEV &e2, ExpandedSCEV &diff)
+static AliasType GCDTest(ExpandedSCEV &e1, ExpandedSCEV &e2, ExpandedSCEV &diff, Loop &loop)
 {
     //get the strides for all iterators in both e1 and e2
     int gcd = -1;
@@ -329,8 +342,13 @@ static AliasType GCDTest(ExpandedSCEV &e1, ExpandedSCEV &e2, ExpandedSCEV &diff)
         int64_t diffImm = abs(diff.start.i);
 
         if (diffImm % gcd == 0) {
-            LOOPLOG2("\t\t\tFound stride GCD of "<<gcd<<" for distance "<<diffImm<<",therefore a dependency exists"<<endl);
-            return MustAlias;
+            if (loop.staticIterCount > 0 && diffImm/gcd > loop.staticIterCount) {
+                LOOPLOG2("\t\t\tFound stride GCD of "<<gcd<<" for distance "<<diffImm<<", which is beyond loop boundary"<<endl);
+                return MustNotAlias;
+            } else {
+                LOOPLOG2("\t\t\tFound stride GCD of "<<gcd<<" for distance "<<diffImm<<",therefore a dependency exists"<<endl);
+                return MustAlias;
+            }
         } else {
             LOOPLOG2("\t\t\tFound stride GCD of "<<gcd<<" could not divide distance "<<diffImm<<", therefore no dependency"<<endl);
             return MustNotAlias;
@@ -426,6 +444,10 @@ buildSCEV(SCEV *scev, ExpandedExpr &expr, Loop *loop)
     for (auto e: expr.exprs) {
         Expr term = e.first;
         if (term.iteratorTo) {
+            if (term.iteratorTo->kind == Iterator::ITER_GENERIC) {
+                scev->kind = SCEV::Ambiguous;
+                return;
+            }
             //if the term belongs to the current loop
             if (term.iteratorTo->loop == loop) {
                 SCEV cur;
@@ -492,24 +514,100 @@ buildSCEV(SCEV *scev, ExpandedExpr &expr, Loop *loop)
     }
 }
 
-void MemoryLocation::getSCEV(std::map<VarState *, SCEV> &ranges)
+void MemoryLocation::getSCEV()
 {
     if (!vs || vs->type != JVAR_MEMORY) return;
-    if (scev) return;
+    if (escev) return;
 
     LOOPLOG2("\t\t\tExpr:"<<expr<<endl);
 
-    scev = new SCEV();
-    //construct scalar evolution
-    buildSCEV(scev, expr, loop);
-    //traverse upwards along the SSA graph and recursively get the range propagated back
-    LOOPLOG2("\t\t\tSCEV:"<<*scev<<endl);
+    escev = new ExpandedSCEV();
+    
+    //a stack for the expression to be expanded
+    stack<pair<Iterator*, Expr>> checkList;
 
-    //expand the scalar evolution in terms of iterators
-    escev = new ExpandedSCEV(*scev);
+    //step 1: force expanding start expersion, so that it can be easily merged
+    escev->start.kind = Expr::EXPANDED;
+    escev->start.ee = new ExpandedExpr(ExpandedExpr::SUM);
+
+    for (auto e: expr.exprs) {
+        Expr term = e.first;
+        if (term.iteratorTo) {
+            //add to the stack
+            checkList.push(make_pair(term.iteratorTo, e.second));
+        } else {
+            escev->start.ee->addTerm(e.first, e.second);
+        }
+    }
+
+    while (!checkList.empty()) {
+        auto check = checkList.top();
+        checkList.pop();
+
+        Iterator *iter = check.first;
+
+        if (iter->kind == Iterator::ITER_GENERIC) {
+            LOOPLOG2("\t\tScalar evolution contains complex iterators!"<<endl);
+            escev->kind = ExpandedSCEV::Ambiguous;
+            return;
+        }
+
+        Expr scale = check.second;
+
+        Expr init = iter->getInitExpr();
+        //check if the init has other iterators
+        if (init.kind == Expr::INTEGER) {
+            init.multiply(scale);
+            escev->start.ee->addTerm(init);
+        } else {
+            //expand init
+            if (init.kind == Expr::VAR) {
+                ExpandedExpr *ee = expandExpr(init.v->expr, loop);
+                init.ee = ee;
+                init.kind = Expr::EXPANDED;
+            } else if (init.kind != Expr::EXPANDED) {
+                LOOPLOG2("\t\tScalar evolution case not yet handled"<<endl);
+                escev->kind = ExpandedSCEV::Ambiguous;
+                return;
+            }
+            init.ee->extendToFuncScope(loop->parent, loop);
+
+            if (init.ee->kind == ExpandedExpr::SENSI) {
+                LOOPLOG2("\t\tScalar evolution init case not yet handled"<<endl);
+                escev->kind = ExpandedSCEV::Ambiguous;
+                return;
+            }
+
+            //check if the expanded init
+            //whether it has more loop iterators
+            for (auto term: init.ee->exprs) {
+                Expr node = term.first;
+                Expr coeff = term.second;
+                coeff.multiply(scale);
+                if (node.iteratorTo)
+                    checkList.push(make_pair(node.iteratorTo, coeff));
+                else escev->start.ee->addTerm(node, coeff);
+            }
+        }
+
+        //next consider strides
+        Expr stride = iter->getStrideExpr();
+        if (stride.kind == Expr::EXPANDED &&
+            stride.ee->kind == ExpandedExpr::SENSI) {
+            LOOPLOG2("\t\tScalar evolution building failed due to complex stride expression"<<endl);
+            escev->kind = ExpandedSCEV::Ambiguous;
+            return;
+        }
+        stride.multiply(scale);
+        //add to the final
+        escev->strides[iter] = stride;
+        escev->kind = ExpandedSCEV::Normal;
+    }
+    //simplify the base expression
+    escev->start.simplify();
 }
 
-static MemoryLocation*
+MemoryLocation*
 getOrInsertMemLocations(Loop *loop, MemoryLocation *loc)
 {
     if (!loc || !loc->escev) return NULL;

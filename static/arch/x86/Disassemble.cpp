@@ -9,6 +9,7 @@
 using namespace janus;
 using namespace std;
 
+/* Generate output states for a given instruction */
 static void liftInstruction(Instruction &instr, Function *function);
 static void linkRelocation(JanusContext *jc, Function *pltFunc);
 
@@ -187,6 +188,7 @@ liftOpcode(MachineInstruction *minstr)
                 return Instruction::Add;
             //sub
             case X86_INS_SUB:
+            case X86_INS_DEC:
             case X86_INS_PSUBB:
             case X86_INS_PSUBD:
             case X86_INS_PSUBQ:
@@ -330,7 +332,7 @@ int liftInstructions(janus::Function *function)
     return count;
 }
 
-
+/* Generate output states for a given instruction */
 static void liftInstruction(Instruction &instr, Function *function)
 {
     MachineInstruction *minstr = instr.minstr;
@@ -363,7 +365,6 @@ static void liftInstruction(Instruction &instr, Function *function)
         instr.outputs.push_back(vs);
     }
 
-    //special cases
     //imul
     if ((minstr->opcode == X86_INS_IMUL ||
          minstr->opcode == X86_INS_IDIV) && minstr->opndCount == 1) {
@@ -407,6 +408,16 @@ static void liftInstruction(Instruction &instr, Function *function)
     else if (minstr->opcode == X86_INS_CDQ ||
              minstr->opcode == X86_INS_CDQE) {
         Variable var((uint32_t)JREG_RAX);
+        VarState *vs = new VarState(var, block, &instr);
+        function->allStates.insert(vs);
+        instr.outputs.push_back(vs);
+    }
+
+    else if (minstr->opcode == X86_INS_MOVDQU ||
+             minstr->opcode == X86_INS_MOVDQA) {
+        Variable var = minstr->operands[0].lift(instr.pc);
+        minstr->operands[0].access = OPND_WRITE;
+        minstr->operands[1].access = OPND_READ;
         VarState *vs = new VarState(var, block, &instr);
         function->allStates.insert(vs);
         instr.outputs.push_back(vs);
@@ -455,6 +466,19 @@ void getInstructionInputs(janus::MachineInstruction *minstr, vector<Variable> &v
     else if (minstr->opcode == X86_INS_CDQ ||
              minstr->opcode == X86_INS_CDQE) {
         Variable var((uint32_t)JREG_RAX);
+        v.push_back(var);
+    }
+
+    else if (minstr->opcode == X86_INS_INC ||
+             minstr->opcode == X86_INS_DEC) {
+        Variable var;
+        var.type = JVAR_CONSTANT;
+        var.value = 1;
+        v.push_back(var);
+    }
+    else if (minstr->opcode == X86_INS_MOVDQU ||
+             minstr->opcode == X86_INS_MOVDQA) {
+        Variable var = minstr->operands[1].lift(minstr->pc);
         v.push_back(var);
     }
 }

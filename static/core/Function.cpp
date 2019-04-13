@@ -85,7 +85,8 @@ Function::translate()
         context->mode != JPROF &&
         context->mode != JANALYSIS &&
         context->mode != JVECTOR &&
-        context->mode != JOPT)
+        context->mode != JOPT &&
+        context->mode != JFETCH)
         return;
 
     /* Construct the abstract syntax tree of the function */

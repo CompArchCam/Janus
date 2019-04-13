@@ -33,9 +33,11 @@ Iterator::Iterator(VarState *vs, janus::Loop *loop)
         if (ekind == Expr::INTEGER) {
             kind = INDUCTION_IMM;
             stride = value;
+            strideKind = INTEGER;
         } else if (ekind == Expr::VAR) {
             kind = INDUCTION_VAR;
             strideVar = (VarState *)value;
+            strideKind = SINGLE_VAR;
         } else {
             kind = ITER_GENERIC;
             strideExprs = new ExpandedExpr(ExpandedExpr::SUM);
@@ -120,7 +122,17 @@ static bool finalValueAnalysis(Loop *loop)
         auto cmpOP1 = expandExpr(cmpInstr->inputs[0]->expr, loop);
         auto cmpOP2 = expandExpr(cmpInstr->inputs[1]->expr, loop);
         if (!(cmpOP1 && cmpOP2)) {
-            LOOPLOG("\t\tFailed to retrieve expression for comparison. Disable further analysis for this loop"<<endl);
+            LOOPLOG("\t\tFailed to retrieve expression for comparison. \n\tDisable further analysis for this loop"<<endl);
+            loop->unsafe = true;
+            return false;
+        } else if (cmpOP1->kind==ExpandedExpr::SENSI ||
+                   cmpOP2->kind==ExpandedExpr::SENSI) {
+            LOOPLOG("\t\tAmbiguous expression or not yet implemented operations.\n\tDisable further analysis for this loop"<<endl);
+            loop->unsafe = true;
+            return false;
+        } else if (cmpOP1->kind==ExpandedExpr::PHI ||
+                   cmpOP2->kind==ExpandedExpr::PHI) {
+            LOOPLOG("\t\tPHI expressions are currently disabled for further analysis for this loop"<<endl);
             loop->unsafe = true;
             return false;
         }
@@ -311,6 +323,7 @@ bool postIteratorAnalysis(janus::Loop *loop)
                 loop->phiVariables.insert(unPhi);
             } else {
                 loop->unsafe = true;
+                LOOPLOG("\tCould not find cyclic expressions for phi node "<<unPhi<<endl);
                 return false;
             }
             Iterator it(unPhi, loop);
@@ -350,11 +363,13 @@ bool postIteratorAnalysis(janus::Loop *loop)
     if (miter->kind == Iterator::INDUCTION_IMM &&
         miter->initKind == Iterator::INTEGER &&
         miter->finalKind == Iterator::INTEGER) {
+        miter->strideKind = Iterator::INTEGER;
         miter->stepKind = Iterator::CONSTANT_IMM;
         miter->step = (miter->finalImm-miter->initImm) / miter->stride + 1;
         loop->staticIterCount = miter->step;
         LOOPLOG("\t\tTotal iteration count: "<<miter->step<<endl);
     } else if (miter->kind == Iterator::INDUCTION_IMM) {
+        miter->strideKind = Iterator::INTEGER;
         //second simplest case, strides are integers
         //extend init expression to function scope
         ExpandedExpr *initExprs = NULL;
@@ -411,7 +426,9 @@ bool postIteratorAnalysis(janus::Loop *loop)
             miter->finalExprs = finalExprs;
         }
 
-        if (initExprs && finalExprs) {
+        if (initExprs && finalExprs &&
+            initExprs->kind != ExpandedExpr::SENSI &&
+            finalExprs->kind != ExpandedExpr::SENSI) {
             ExpandedExpr spectrum = *finalExprs - *initExprs;
             //spectrum.extendToFuncScope(loop->parent);
             miter->stepKind = Iterator::CONSTANT_EXPR;

@@ -4,6 +4,10 @@
 
 using namespace janus;
 
+static bool checkLoopDependencies(Loop &loop);
+static bool checkContinuousMemoryAccess(Loop &loop);
+static bool checkStrideAlignment(Loop &loop);
+static bool checkCompatibleImplementation(Loop &loop);
 void
 setSupportedVectorOpcodes(set<InstOp> &supported_opcodes, set<InstOp> &singles, set<InstOp> &doubles)
 {
@@ -95,9 +99,20 @@ isVectorRuntimeCompatible(Loop &loop, set<InstOp> &supported_opcode, set<InstOp>
                 }
 
                 //check reduction read
-            } else {
-                //check if it is supported non-vector instruction
-                
+            }
+
+            for (auto vi: instr.inputs) {
+                if (vi->type == JVAR_ABSOLUTE) {
+                    LOOPLOGLINE("loop "<<dec<<loop.id<<" unsupported operand: "<<vi);
+                    return false;
+                }
+            }
+
+            for (auto vo: instr.outputs) {
+                if (vo->type == JVAR_ABSOLUTE) {
+                    LOOPLOGLINE("loop "<<dec<<loop.id<<" unsupported operand: "<<vo);
+                    return false;
+                }
             }
         }
     }
@@ -116,6 +131,8 @@ checkLoopIterator(Iterator &iter)
 
     if (iter.kind != Iterator::INDUCTION_IMM && iter.kind != Iterator::INDUCTION_VAR)
         return false;
+
+    if (iter.kind == Iterator::REDUCTION_PLUS) return false;
 
     //the update instruction can be retrieved
     if (!iter.getUpdateInstr()) return false;
@@ -165,6 +182,12 @@ selectVectorisableLoop(JanusContext *gc, set<Loop *> &selected_loops, set<InstOp
             LOOPLOGLINE("loop "<<dec<<loop.id<<" static iter count:"<<loop.staticIterCount);
             continue;
         }
+        //Condition 6: check dependencies
+        if (loop.memoryDependences.size()>0 &&
+            checkLoopDependencies(loop)) {
+            LOOPLOGLINE("loop "<<dec<<loop.id<<" has cross iteration memory dependencies");
+            continue;
+        }
         //currently we only support one block optimisation
         //For more than one block, not yet implemented
         if (loop.body.size()!=1) {
@@ -175,10 +198,25 @@ selectVectorisableLoop(JanusContext *gc, set<Loop *> &selected_loops, set<InstOp
             LOOPLOGLINE("loop "<<dec<<loop.id<<" not currently handled in Janus runtime.");
             continue;
         }
-
         //check whether induction variable is supported
         if (!checkLoopIterators(loop)) {
             LOOPLOGLINE("loop "<<dec<<loop.id<<" induction variable support not yet implemented.");
+            continue;
+        }
+        //filter out loops with non-continuous memory writes
+        //release this filter if the masked write is implemented
+        if (!checkContinuousMemoryAccess(loop)) {
+            LOOPLOGLINE("loop "<<dec<<loop.id<<" memory writes not continuous, transformation not yet implemented.");
+            continue;
+        }
+        //check stride alignment
+        if (!checkStrideAlignment(loop)) {
+            LOOPLOGLINE("loop "<<dec<<loop.id<<" memory stride not uniform, transformation not yet implemented.");
+            continue;
+        }
+        //check the limit of the current implementation
+        if (!checkCompatibleImplementation(loop)) {
+            LOOPLOGLINE("loop "<<dec<<loop.id<<" not yet supported by the implementation.");
             continue;
         }
         selected_loops.insert(&loop);
@@ -192,4 +230,77 @@ printVectorisableLoops(set<Loop *> &selected_loops) {
         cout << loop->id << " ";
     }
     cout << endl;
+}
+
+static bool checkLoopDependencies(Loop &loop) {
+    LOOPLOGLINE("loop "<<dec<<loop.id);
+    for (auto dep : loop.memoryDependences) {
+        for (auto set: dep.second) {
+            LOOPLOGLINE(*dep.first->escev<<" vs "<<*set->escev);
+        }
+    }
+    return false;
+}
+
+static bool checkContinuousMemoryAccess(Loop &loop) {
+    for (auto memWrite: loop.memoryWrites) {
+        Iterator *iter = memWrite->expr.hasIterator(&loop);
+        if (iter && iter->strideKind == Iterator::INTEGER) {
+            if ((int)iter->stride != (int)memWrite->vs->size)
+                return false;
+        }
+    }
+    return true;
+}
+
+static bool checkStrideAlignment(Loop &loop) {
+
+    bool aligned = true;
+    int64_t strideImm = 0;
+
+    for (auto s: loop.arrayAccesses) {
+        auto set = s. second;
+        for (auto m: set) {
+            Expr start = m->escev->start;
+            if (start.kind == Expr::INTEGER) {
+
+                //we have to make sure all the memory accesses are multiple of SIMD lanes
+                int64_t base = start.i;
+                //for avx it must be divisiable by 16
+                int peel = base % 16;
+                if (peel != 0) {
+                    if (!loop.peelDistance) {
+                        loop.peelDistance = peel;
+                    }
+                    else if (loop.peelDistance != peel) {
+                        loop.peelDistance = -1;
+                        aligned = false;
+                    }
+                }
+            }
+            //analyse the strides
+            for (auto strideP: m->escev->strides) {
+                Iterator *iter = strideP.first;
+                if (iter->loop->id != loop.id) continue;
+                Expr stride = strideP.second;
+                if (stride.kind == Expr::INTEGER) {
+                    if (strideImm == 0) strideImm = stride.i;
+                    else if (strideImm != stride.i) return false;
+                }
+            }
+        }
+    }
+    if (loop.peelDistance) return false;
+    return true;
+}
+
+static bool checkCompatibleImplementation(Loop &loop)
+{
+    for (auto read: loop.memoryReads) {
+        if (read->type == MemoryLocation::AffinemD) return false;
+    }
+    for (auto write: loop.memoryWrites) {
+        if (write->type == MemoryLocation::AffinemD) return false;
+    }
+    return true;
 }

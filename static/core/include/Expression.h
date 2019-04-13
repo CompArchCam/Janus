@@ -52,6 +52,7 @@ public:
         SHL,            // Left shift
         LSR,            // Logical right shift
         ASR,            // Arithmetic right shift
+        BIT             // Bitwise operation
     };
 
     struct UnaryExpr {
@@ -188,7 +189,8 @@ public:
         EMPTY,///<Empty expressions
         SUM,  ///<sum of all the nodes in the expression
         PHI,  ///<phi selection from one of the nodes in the expression, it has higher priority than the SUM
-        MUL   ///<product of all the nodes in the expression
+        MUL,  ///<product of all the nodes in the expression
+        SENSI ///<sensitivity list only, no actual calculation listed
     };
 
     ///specifies the operation of the expanded expression
@@ -259,6 +261,12 @@ public:
      * Merge the given expression in itself
      */
     void                            merge(ExpandedExpr *expr);
+    /** \brief Sensitivity merge
+     *
+     * Merge the sensitivity list from two ambiguous expressions into one
+     */
+    void                            sensiMerge(ExpandedExpr *expr);
+    void                            sensiMerge(ExpandedExpr &expr);
     ///Expand all its terms into the **ExpandedExpr** type
     void                            expand();
     ///negate the value of the current ExpandedExpr
@@ -299,6 +307,8 @@ public:
     bool                            extendToVariableScope(Function *func, Loop *loop, Variable *var);
     ///Remove the all immediate value in the expression
     void                            removeImmediate();
+    ///Convert to sensitivity based expression
+    void                            convertToSensibleExpr(){kind=SENSI;};
 };
 
 ExpandedExpr operator+(ExpandedExpr &expr1, ExpandedExpr &expr2);

@@ -69,9 +69,10 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
     RRule *reg_check = NULL;
 #endif
     do {
+#ifdef JANUS_VERBOSE
+        thread_print_rule(0, rule);
+#endif
         rule_opcode = rule->opcode;
-        // dr_printf(print_rule_opcode(rule_opcode));
-        // dr_printf("\n");
         switch (rule_opcode) {
             case VECT_INDUCTION_STRIDE_UPDATE:
                 vector_induction_update_handler(janus_context);
@@ -87,6 +88,18 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
                 break;
             case VECT_BROADCAST:
                 vector_broadcast_handler(janus_context);
+                break;
+            case PARA_LOOP_INIT:
+                vector_loop_init(janus_context);
+                break;
+            case PARA_LOOP_FINISH:
+                vector_loop_finish(janus_context);
+                break;
+            case PARA_OUTER_LOOP_INIT:
+                vector_loop_init(janus_context);
+                break;
+            case PARA_OUTER_LOOP_END:
+                vector_loop_finish(janus_context);
                 break;
             #ifdef FIX
             case VECT_FORCE_SSE:

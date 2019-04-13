@@ -51,6 +51,12 @@ vector_induction_recover_handler(JANUS_CONTEXT);
 void
 vector_loop_peel_handler(JANUS_CONTEXT);
 
+void
+vector_loop_init(JANUS_CONTEXT);
+
+void
+vector_loop_finish(JANUS_CONTEXT);
+
 extern GHardware myCPU;
 
 #ifdef __cplusplus

@@ -160,7 +160,7 @@ void buildExpr(Expr &expr, set<Expr*> &exprs, Instruction *instr)
         expr.kind = Expr::UNARY;
         expr.u.op = Expr::MOV;
         expr.u.e = instr->inputs[0]->expr;
-    }  else if (instr->opcode == Instruction::Neg) {
+    } else if (instr->opcode == Instruction::Neg) {
         if (instr->inputs.size()<1) {
             cerr<<"Error in parsing instruction "<<*instr;
             return;
@@ -168,6 +168,20 @@ void buildExpr(Expr &expr, set<Expr*> &exprs, Instruction *instr)
         expr.kind = Expr::UNARY;
         expr.u.op = Expr::NEG;
         expr.u.e = instr->inputs[0]->expr;
+    } else if (instr->opcode == Instruction::And ||
+               instr->opcode == Instruction::Or ||
+               instr->opcode == Instruction::Xor) {
+        if (instr->inputs.size()<2) {
+            LOOPLOG("Irregular instruction "<<*instr<<" not yet handled"<<endl);
+            return;
+        }
+        expr.kind = Expr::BINARY;
+        expr.b.op = Expr::BIT;
+        expr.b.e1 = instr->inputs[0]->expr;
+        if (instr->inputs[1])
+            expr.b.e2 = instr->inputs[1]->expr;
+        else //duplicate the operands for "xor x0, x0"
+            expr.b.e2 = instr->inputs[0]->expr;
     } else if (instr->opcode == Instruction::GetPointer) {
         VarState *vs = NULL;
         for (auto vi: instr->inputs) {
@@ -263,11 +277,20 @@ void buildExpr(Expr &expr, set<Expr*> &exprs, Instruction *instr)
         expr.kind = Expr::UNARY;
         expr.u.op = Expr::MOV;
         expr.u.e = instr->inputs[0]->expr;
-    } else if (instr->opcode == Instruction::Shl) {
-
-    } else if (instr->opcode == Instruction::LShr ||
+    } else if (instr->opcode == Instruction::Shl ||
+               instr->opcode == Instruction::LShr ||
                instr->opcode == Instruction::AShr) {
-
+        if (instr->inputs.size()<2) {
+            LOOPLOG("Irregular instruction "<<*instr<<" not yet handled"<<endl);
+            return;
+        }
+        expr.kind = Expr::BINARY;
+        expr.b.op = Expr::SHL;
+        expr.b.e1 = instr->inputs[0]->expr;
+        if (instr->inputs[1])
+            expr.b.e2 = instr->inputs[1]->expr;
+        else //duplicate the operands for "shl x0, x0"
+            expr.b.e2 = instr->inputs[0]->expr;
     } else if (instr->opcode == Instruction::Call ||
                instr->opcode == Instruction::Return) {
 
@@ -443,9 +466,6 @@ ExpandedExpr Expr::shl(Expr &expr) {
         eexpr.addTerm(e1, multiplier);
         eexpr.addTerm(copy);
     }
-    else {
-        cerr << "Can't evaluate shift by a register value";
-    }
     return eexpr;
 }
 
@@ -601,9 +621,9 @@ void ExpandedExpr::addTerm(Expr node, Expr &coeff)
         } else if (hasTerm(node)) {
             exprs[node].multiply(coeff);
         } else exprs[node] = coeff;
-    } else {
-        cout <<"Add term case not implemented"<<endl;
-    }
+    } else if (kind == SENSI) {
+        exprs[node] = coeff;
+    } else cout <<"Add term case not implemented"<<endl;
 }
 
 void ExpandedExpr::merge(ExpandedExpr &expr)
@@ -666,10 +686,35 @@ void ExpandedExpr::merge(ExpandedExpr *expr)
             multiply(e.second);
         }
     } else {
-        cerr<<"ExpandedExpr::merge error merge different types of expanded expression!"<<endl;
+        //change expression to SENSI type for incompatible merge
+        kind = SENSI;
+        for (auto e: expr->exprs) {
+            addTerm(e.first, e.second);
+        }
         return;
     }
 
+}
+
+void ExpandedExpr::sensiMerge(ExpandedExpr *expr)
+{
+    if (kind == SUM && expr->kind == SUM) {
+        for (auto e: expr->exprs) {
+            addTerm(e.first, e.second);
+        }
+    } else {
+        //change expression to SENSI type for incompatible merge
+        kind = SENSI;
+        for (auto e: expr->exprs) {
+            addTerm(e.first, e.second);
+        }
+        return;
+    }
+}
+
+void ExpandedExpr::sensiMerge(ExpandedExpr &expr)
+{
+    sensiMerge(&expr);
 }
 
 void ExpandedExpr::negate()
@@ -725,8 +770,25 @@ void ExpandedExpr::subtract(ExpandedExpr &expr)
             node.ee->negate();
             node.ee->merge(copy);
         }
+    } else if (kind == MUL && expr.kind == MUL) {
+        for (auto e: expr.exprs) {
+            //convert A * 1 to 1 * A
+            if (e.first.kind == Expr::INTEGER && e.second.kind == Expr::INTEGER) {
+                addTerm(Expr(1), -(e.first.i * e.second.i));
+                continue;
+            }
+            if (exprs.find(e.first) == exprs.end()) {
+                Expr negExpr = e.second;
+                negExpr.negate();
+                addTerm(e.first, negExpr);
+            } else {
+                exprs[e.first].subtract(e.second);
+            }
+        }
     } else {
         cerr<<"ExpandedExpr::subtract error subtract different types of expanded expression!"<<endl;
+        cerr<<*this<<" - "<<expr<<endl;
+        asm("int3");
         return;
     }
     //after subtraction, simplify the term
@@ -746,8 +808,8 @@ void ExpandedExpr::multiply(Expr expr)
             e.second.multiply(expr);
         }
     } else {
-        cerr<<"ExpandedExpr::multiply error cases not handled "<<*this<<endl;
-        return;
+        kind = SENSI;
+        addTerm(expr);
     }
 }
 
@@ -803,7 +865,19 @@ ExpandedExpr::simplify()
         else ++e;
     }
 
-    //simplify rule 3: SUM(PHI) to PHI(SUM)
+    //simplify rule 3: expand term to sensiExpr
+    for (auto e=exprs.begin(); e!=exprs.end();) {
+        Expr node = (*e).first;
+        Expr coeff = (*e).second;
+        if (node.kind == Expr::EXPANDED) {
+            //add expanded term
+            kind = SENSI;
+            for (auto e2: node.ee->exprs) {
+                addTerm(e2.first, e2.second);
+            }
+            exprs.erase(e++);
+        } else ++e;
+    }
 }
 
 //Expand all its terms into the **ExpandedExpr** type
@@ -1147,7 +1221,9 @@ bool buildLoopExpr(Expr *expr, ExpandedExpr *expanded, Loop *loop)
                 negExpr.negate();
                 expanded->merge(negExpr);
             } else {
-                //LOOPLOG("\t\t\tUnrecognised unary expressions" <<endl);
+                //convert to sensitivity expression
+                expanded->kind = ExpandedExpr::SENSI;
+                if (!buildLoopExpr(expr->u.e, expanded, loop)) return false;
             }
         break;
         case Expr::BINARY:
@@ -1160,10 +1236,10 @@ bool buildLoopExpr(Expr *expr, ExpandedExpr *expanded, Loop *loop)
                 if (!buildLoopExpr(expr->b.e2, &negExpr, loop)) return false;
                 negExpr.negate();
                 expanded->merge(negExpr);
-            } else if (expr->b.op == Expr::SHL) {
+            } else if (expr->b.op == Expr::SHL && expanded->kind != ExpandedExpr::SENSI) {
                 ExpandedExpr shiftExpr = expr->b.e1->shl(*expr->b.e2);
                 expanded->merge(shiftExpr);
-            } else if (expr->b.op == Expr::MUL) {
+            } /* else if (expr->b.op == Expr::MUL && expanded->kind != ExpandedExpr::SENSI) {
                 if (expr->b.e2->kind == Expr::INTEGER) {
                     ExpandedExpr *ee1 = new ExpandedExpr(ExpandedExpr::SUM);
                     if (!buildLoopExpr(expr->b.e1, ee1, loop)) return false;
@@ -1171,10 +1247,14 @@ bool buildLoopExpr(Expr *expr, ExpandedExpr *expanded, Loop *loop)
                     expanded->merge(ee1);
                     delete ee1;
                 } else {
-                    //LOOPLOG("\t\t\tUnrecognised binary expressions" <<endl);
+                    expanded->kind = ExpandedExpr::SENSI;
+                    if (!buildLoopExpr(expr->b.e1, expanded, loop)) return false;
+                    if (!buildLoopExpr(expr->b.e2, expanded, loop)) return false;
                 }
-            } else {
-                //LOOPLOG("\t\t\tUnrecognised binary expressions" <<endl);
+            } */ else {
+                expanded->kind = ExpandedExpr::SENSI;
+                if (!buildLoopExpr(expr->b.e1, expanded, loop)) return false;
+                if (!buildLoopExpr(expr->b.e2, expanded, loop)) return false;
             }
         break;
         case Expr::PHI:
@@ -1185,9 +1265,9 @@ bool buildLoopExpr(Expr *expr, ExpandedExpr *expanded, Loop *loop)
             } else {
                 ExpandedExpr *ee1 = expandExpr(expr->p.e1, loop);
                 ExpandedExpr *ee2 = expandExpr(expr->p.e2, loop);
-                expr->expandedFuncForm = new ExpandedExpr(ExpandedExpr::PHI);
-                expr->expandedFuncForm->addTerm(Expr(ee1));
-                expr->expandedFuncForm->addTerm(Expr(ee2));
+                expr->expandedLoopForm = new ExpandedExpr(ExpandedExpr::PHI);
+                expr->expandedLoopForm->addTerm(Expr(ee1));
+                expr->expandedLoopForm->addTerm(Expr(ee2));
                 expanded->addTerm(expr);
             }
         break;

@@ -15,7 +15,7 @@ using namespace janus;
 using namespace std;
 
 MemoryLocation::MemoryLocation(MemoryInstruction *mi, Loop *loop)
-:expr(ExpandedExpr::SUM), scev(NULL), loop(loop)
+:expr(ExpandedExpr::SUM), escev(NULL), loop(loop)
 {
     type = Complex;
     if (loop == NULL || mi == NULL) return;
@@ -38,7 +38,7 @@ MemoryLocation::MemoryLocation(MemoryInstruction *mi, Loop *loop)
             type = Unknown;
             return;
         }
-        expr.merge(baseExpr);
+        expr.sensiMerge(baseExpr);
     }
     if (indexState) {
         ExpandedExpr *indexExpr = expandExpr(indexState->expr, loop);
@@ -49,9 +49,9 @@ MemoryLocation::MemoryLocation(MemoryInstruction *mi, Loop *loop)
         if (vs->scale > 1) {
             ExpandedExpr copy = *indexExpr;
             copy.multiply(Expr((int)vs->scale));
-            expr.merge(copy);
+            expr.sensiMerge(copy);
         } else
-            expr.merge(indexExpr);
+            expr.sensiMerge(indexExpr);
     }
     int disp = (int)vs->value;
     if (disp)
@@ -155,8 +155,13 @@ ExpandedSCEV::ExpandedSCEV(SCEV &scev)
 
 Expr ExpandedSCEV::getArrayBase()
 {
-    if (start.kind != Expr::EXPANDED)
-        return start;
+    if (start.kind != Expr::EXPANDED) {
+        if (start.kind == Expr::INTEGER) {
+            Expr copy = start;
+            copy.i = 0;
+            return copy;
+        } else return start;
+    }
     else {
         Expr result;
         for (auto e: start.ee->exprs) {
@@ -245,7 +250,20 @@ bool
 MemoryLocation::containIterator(Loop *loop)
 {
     if (expr.hasIterator(loop)) return true;
-    if (!scev) return false;
-    return (scev->start.hasIterator(loop) || scev->stride.hasIterator(loop));
+    if (!escev) return false;
+    for (auto stride: escev->strides) {
+        if (stride.first->loop == loop)
+            return true;
+    }
+    return false;
 }
 
+VarState *
+MemoryLocation::getIndirectMemory()
+{
+    for (auto term: expr.exprs) {
+        if (term.first.kind == Expr::MEM)
+            return term.first.vs;
+    }
+    return NULL;
+}

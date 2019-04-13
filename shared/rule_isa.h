@@ -74,6 +74,8 @@ typedef enum _rr_type {
      * ----------------------------------------------------*/
     ///Loop peel handler
     VECT_LOOP_PEEL,
+    ///Broadcast a certain variable
+    VECT_BROADCAST,
     ///Update the stride of the induction variable
     VECT_INDUCTION_STRIDE_UPDATE,
     ///Recover the stride of the induction variable (variable stride)
@@ -81,10 +83,21 @@ typedef enum _rr_type {
     VECT_FORCE_SSE,
     VECT_REDUCE_INIT,
     VECT_REG_CHECK,
+    ///Convert a scalar instruction to SIMD version
     VECT_CONVERT,
-    VECT_BROADCAST,
     VECT_REDUCE_AFTER,
     VECT_REVERT,
+    /* ----------------------------------------------------
+     * Automatic Prefetch Rewrite Rules 
+     * ----------------------------------------------------*/
+    ///Copy and update an instruction with specified operand
+    INSTR_UPDATE,
+    ///Duplicate a range of instructions for a given address
+    INSTR_CLONE,
+    ///Insert a prefetch instruction with given memory operand
+    MEM_PREFETCH,
+    ///Insert n number of NOP operations
+    INSTR_NOP,
     /* ----------------------------------------------------
      * Statistics and Debugging Rewrite Rules 
      * ----------------------------------------------------*/

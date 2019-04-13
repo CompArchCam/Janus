@@ -172,6 +172,7 @@ set(CORE_SOURCES
     core/Variable.cpp
     core/Instruction.cpp
     core/Expression.cpp
+    core/Slice.cpp
     core/MemoryLocation.cpp
 )
 
@@ -202,6 +203,8 @@ set(SCHEDGEN_SOURCES
     schedgen/vector/VectLoopSelect.cpp
     schedgen/plan/PlanRule.cpp
     schedgen/coverage/CoverageRule.cpp
+    #prefetch
+    schedgen/prefetch/PrefetchRule.cpp
     #schedgen/vector/FindInduction.cpp
     #schedgen/vector/MemoryCheck.cpp
     #schedgen/vector/FindReduction.cpp
@@ -216,6 +219,7 @@ set(SCHEDGEN_INCLUDE
     schedgen/parallel/
     schedgen/coverage/
     schedgen/vector/
+    schedgen/prefetch/
     schedgen/plan/
 )
 

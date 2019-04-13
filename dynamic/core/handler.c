@@ -45,6 +45,8 @@ instr_t *get_trigger_instruction(instrlist_t *bb, RRule *rule)
         if(trigger==NULL) {
             printf("In block %lx:\n",rule->block_address);
             printf("JANUS couldn't find the specified address %lx at runtime!\n",(PCAddress)pc);
+            instrlist_disassemble(NULL, 0, bb, STDOUT);
+            printf("\n");
             return NULL;
         }
     }

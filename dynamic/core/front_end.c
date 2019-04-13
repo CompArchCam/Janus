@@ -178,10 +178,29 @@ load_static_rules(char *rule_path)
 static void
 fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t size, JMode mode)
 {
-    RRule *query, *curr, *prev, *next;
+    RRule *query, *curr, *next;
+    RRule *prev = NULL;
     PCAddress start_addr;
-    uint32_t i;
     int exist;
+    int i;
+    if (mode == JFETCH || mode == JVECTOR) {
+        start_addr = 0;
+        for(i=0;i<size;i++) {
+            curr = instr+i;
+            if (start_addr != curr->block_address) {
+                start_addr = curr->block_address;
+                //create an entry in the hashtable
+                hashtable_add(table,(void *)(start_addr-KEYBASE),curr);
+                if (prev) prev->next = NULL;
+            } else {
+                //same block rules are added in list
+                prev->next = curr;
+            }
+            prev = curr;
+        }
+        prev->next = NULL;
+        return;
+    }
 
     for(i=0;i<size;i++)
     {

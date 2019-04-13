@@ -22,4 +22,8 @@ void aliasAnalysis(janus::Loop *loop);
 /** \brief Check alias relation for two memory locations
  */
 void checkAliasRelation(janus::MemoryLocation &m1, janus::MemoryLocation &m2, janus::Loop *loop);
+/** \brief Insert the memory location and return the pointer if exist
+ */
+janus::MemoryLocation*
+getOrInsertMemLocations(janus::Loop *loop, janus::MemoryLocation *loc);
 #endif

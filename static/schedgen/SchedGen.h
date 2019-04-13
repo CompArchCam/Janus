@@ -48,4 +48,8 @@ void
 replaceRule(uint32_t channel, janus::RewriteRule rule, janus::BasicBlock *block);
 void
 removeRule(uint32_t channel, janus::RewriteRule rule, janus::BasicBlock *block);
+/** \brief Encode the current JVar to rewrite rule (wrapper) */
+void encodeJVar(JVar var, janus::RewriteRule &rule);
+/** \brief Decode the the rewrite rule and get JVar */
+JVar decodeJVar(janus::RewriteRule &rule);
 #endif

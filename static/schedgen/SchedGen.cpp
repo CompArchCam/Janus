@@ -7,6 +7,7 @@
 #include "CoverageRule.h"
 #ifdef JANUS_X86
 #include "VectRule.h"
+#include "PrefetchRule.h"
 #endif
 #include "PlanRule.h"
 #include <cstdlib>
@@ -66,6 +67,9 @@ generateRules(JanusContext *gc)
         break;
     case JPROF:
         generateLoopPlannerRules(gc);
+        break;
+    case JFETCH:
+        generatePrefetchRules(gc);
         break;
     default:
         break;
@@ -285,6 +289,24 @@ RewriteRule::print(void *outputStream) {
     ostream &os = *((ostream*)outputStream);
 
     os << "HINT - " << opcode << " Block=" << blockAddr << ", Addr=" << ruleAddr << "(ID: " << ((uint16_t)ureg0.down) << "), r0=" << reg0 << ", r1=" << reg1 << endl;
+}
+
+/** \brief Encode the current JVar to rewrite rule (wrapper) */
+void encodeJVar(JVar var, RewriteRule &rule)
+{
+    JVarPack vp;
+    vp.var = var;
+    rule.reg0 = vp.data1;
+    rule.reg1 = vp.data2;
+}
+
+/** \brief Decode the the rewrite rule and get JVar */
+JVar decodeJVar(RewriteRule &rule)
+{
+    JVarPack vp;
+    vp.data1 = rule.reg0;
+    vp.data2 = rule.reg1;
+    return vp.var;
 }
 
 bool janus::operator<(const RewriteRule &lhs, const RewriteRule &rhs)
