@@ -17,6 +17,7 @@ Janus is designed to perform sophisticated modification and optimisation of gene
 ## What will Janus do in the future? ##
 We are working on Janus to make it better and more useful. Our current plans for improvement include:
 
+* A Domain Specific Language to control binary modification and instrumentation
 * A better binary alias analysis, including interprocedural analysis of memory locations pointed-to;
 * Support for different forms of parallelism and thread-scheduling policies;
 * Full support for AArch64 binaries;
@@ -163,8 +164,7 @@ Please cite our CGO 2019 paper if you use Janus in your own work.
 Ruoyu Zhou and Timothy M. Jones
 International Symposium on Code Generation and Optimization (CGO), February 2019
 
-[The Janus Triad: Exploiting Parallelism Through Dynamic Binary Modification]
-(https://www.cl.cam.ac.uk/~rkz20/paper/vee19janus.pdf)
+[The Janus Triad: Exploiting Parallelism Through Dynamic Binary Modification](https://www.cl.cam.ac.uk/~rkz20/paper/vee19janus.pdf)
 Ruoyu Zhou, George Wort, Márton Erdős and Timothy M. Jones
 International Conference on Virtual Execution Environments (VEE), April 2019
 
