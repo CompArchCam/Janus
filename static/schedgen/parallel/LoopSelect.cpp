@@ -267,8 +267,8 @@ filterLoopHeuristicBased(JanusContext *jc, std::set<LoopID> &selected)
         }*/
     }
 
-    for (auto id: toRemove)
-        selected.erase(id);
+    for (auto id_it = toRemove.begin(); id_it != toRemove.end(); )
+        id_it = selected.erase(id_it);
 }
 
 static bool
@@ -344,8 +344,8 @@ rejectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
         }
     }
 
-    for (auto id: toRemove) {
-        selected.erase(id);
+    for (auto id_it = toRemove.begin(); id_it != toRemove.end(); ) {
+        id_it = selected.erase(id_it);
     }
 }
 
@@ -368,9 +368,11 @@ selectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
     LOOPLOG(endl);
 
     //remove unsafe loops
-    for (auto lid: selected) {
-        if (jc->loops[lid-1].unsafe)
-            selected.erase(lid);
+    for (auto lid_it = selected.begin(); lid_it != selected.end(); ) {
+        if (jc->loops[*lid_it-1].unsafe)
+            lid_it = selected.erase(lid_it);
+        else
+            lid_it++;
     }
     return true;
 }
