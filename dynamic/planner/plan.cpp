@@ -286,6 +286,9 @@ void Core::read(addr_t addr, pc_t pc, int size)
     addr = addr - addr % GRANULARITY;
     auto query = memory.find(addr);
     /* Cross iteration dependences */
+    //  memory.end() - Returns an iterator pointing to the past-the-end element in the unordered_map container (1) or in one of its buckets (2).
+    // Checking if the address was already analysed in this iteration. If yes, then no need to check previous iterations.
+    // - If it is a new memory location in this iteration, proceed with the check of the previous iterations.
     if (query == memory.end()) {
         /* Not found in current core, search for previous core */
         Core *check = prev;
