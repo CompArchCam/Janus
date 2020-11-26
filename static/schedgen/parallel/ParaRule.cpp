@@ -137,6 +137,25 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
         }
     }
 
+    // -----------------------------------------------------
+    /* Loop start and finish */
+    // -----------------------------------------------------
+    for (auto bid: loop.init) {
+        BasicBlock *bb = entry + bid;
+        rule = RewriteRule(PARA_LOOP_INIT, bb, POST_INSERT);
+        rule.reg0 = loop.header.id;
+        insertRule(id, rule, bb);
+    }
+
+    for (auto bid: loop.exit)
+    {
+        rule = RewriteRule(PARA_LOOP_FINISH, entry + bid, PRE_INSERT);
+        rule.reg0 = loop.header.id;
+        rule.reg1 = entry[bid].instrs->pc;
+        insertRule(id, rule, entry + bid);
+    }
+    // -----------------------------------------------------
+
     /* Loop iteration Start */
     rule = RewriteRule(PARA_LOOP_ITER, loop.start, PRE_INSERT);
     /* Only the modified register should be check-pointed */
