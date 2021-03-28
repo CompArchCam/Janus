@@ -68,7 +68,9 @@ typedef enum _jmode {
     ///graph mode
     JGRAPH,
     ///single-threaded optimisation mode
-    JOPT
+    JOPT,
+    ///custom tool mode for Cinnamon domain specific language 
+    JCUSTOM
 } JMode;
 
 /* Rule ISA header defines the supported static rules */

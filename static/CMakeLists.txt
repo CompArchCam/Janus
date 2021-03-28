@@ -205,6 +205,9 @@ set(SCHEDGEN_SOURCES
     schedgen/coverage/CoverageRule.cpp
     #prefetch
     schedgen/prefetch/PrefetchRule.cpp
+    #cinnamon dsl extension
+    schedgen/dsl/DSLGen.cpp
+    schedgen/dsl/StaticGenCode.cpp
     #schedgen/vector/FindInduction.cpp
     #schedgen/vector/MemoryCheck.cpp
     #schedgen/vector/FindReduction.cpp
@@ -221,6 +224,7 @@ set(SCHEDGEN_INCLUDE
     schedgen/vector/
     schedgen/prefetch/
     schedgen/plan/
+    schedgen/dsl/
 )
 
 set(SCHEDUMP_SOURCES

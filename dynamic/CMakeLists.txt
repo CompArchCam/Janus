@@ -38,6 +38,8 @@ include_directories(${DYN_INC_PATH})
 add_subdirectory(parallel)
 #profiler
 add_subdirectory(coverage)
+#Cinnamon DSL
+add_subdirectory(dsl)
 #timer
 if (JANUS_X86_SUPPORT)
 add_subdirectory(prefetcher)

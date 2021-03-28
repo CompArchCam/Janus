@@ -5,6 +5,7 @@
 //#include "OptRule.h"
 #include "ParaRule.h"
 #include "CoverageRule.h"
+#include "DSLGen.h"
 #ifdef JANUS_X86
 #include "VectRule.h"
 #include "PrefetchRule.h"
@@ -70,6 +71,9 @@ generateRules(JanusContext *gc)
         break;
     case JFETCH:
         generatePrefetchRules(gc);
+        break;
+    case JCUSTOM:
+        generateCustomRules(gc);
         break;
     default:
         break;

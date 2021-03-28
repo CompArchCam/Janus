@@ -13,6 +13,7 @@ const char *print_janus_mode(JMode mode) {
         case JOPT: return "Automatic Binary Optimiser";
         case JGRAPH: return "Control Flow Graph Generator";
         case JFETCH: return "Automatic software prefetch";
+        case JCUSTOM: return "Custom tool Execution with Cinnamon DSL";
         default: return "Free Mode";
     }
 }

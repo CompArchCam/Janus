@@ -9,6 +9,7 @@ static void usage()
     cout<<"Usage: analyze + <option> + <executable> + [profile_info]"<<endl;
     cout<<"Option:"<<endl;
     cout<<"  -a: static analysis without generating rules"<<endl;
+    cout<<"  -c: generate custom analysis and rules from Cinnamon DSL"<<endl;
     cout<<"  -cfg: generate CFG from the binary"<<endl;
     cout<<"  -p: generate rules for automatic parallelisation"<<endl;
     cout<<"  -f: generate rules for automatic prefetch"<<endl;
@@ -43,8 +44,8 @@ int main(int argc, char **argv) {
                     mode = JGRAPH;
                     IF_VERBOSE(cout<<"Control flow graph mode enabled"<<endl);
                 } else {
-                    usage();
-                    return 1;
+                    mode = JCUSTOM;
+                    IF_VERBOSE(cout<<"Custom Cinnamon DSL mode enabled"<<endl);
                 }
                 break;
             case 'p':
