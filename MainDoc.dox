@@ -1,0 +1,30 @@
+/*!
+    \mainpage Janus: Static Guided Dynamic Binary Modification
+
+    This is the main page for Janus documentation. This documentation helps you to understand Janus Internals. It can also be used for guiding you to implement your custom Janus client for binary modification.
+
+    The Janus framework consists of two phases: static binary analysis and dynamic binary modification. We divide the development of Janus into three components: static binary analysis, dynamic binary modification and rewrite schedule/rules specification. The three components can be developed independently as long as the rewrite schedule specification remain the same.
+
+    Static Binary Analysis:
+    ==========
+
+    Janus static analyzer examines binaries, identifying opportunities for optimization, which it then encodes in a rewrite schedule.The static analyzer's frontend converts the disassembled instructions into its own IR, which is in static single assignment (SSA) form.
+    From here it performs standard control-flow and data-flow analyses, including domination, liveness, reaching and dependence analyses.
+    Loops and function calls are recognized and analyzed, as are induction and reduction variables within the loops.
+    A light-weight memory alias analysis is also performed in loops to determine data dependences in memory accesses, where undecided memory references and pointers can be marked as ``unsafe'' for some optimizations.
+
+    For development notes in static binary analysis, see [Janus Static Binary Analysis](@ref Static) page
+
+    Dynamic Binary Modification:
+    ==========
+
+    The task of the dynamic binary modifier in Janus is to transform and execute an application under directions from the
+    rewrite schedule provided by the static analyzer. The dynamic modifier takes control of an application at startup and immediately loads its associated rewrite schedule. It inserts each rewrite rule into a hash table, indexed by instruction or
+    basic block address from the program binary, for fast lookup.
+    To execute application instructions, the baseline dynamic modifier (i.e., without considering the rewrite schedule) first
+    translates them, modifies them if they could cause it to lose control of the running program, then stores them in a code
+    cache. This process occurs when the modifier encounters instructions it has not seen before, or when it performs trace optimization on frequently-executed code sequences.
+
+    Rewrite Schedule Specification:
+    ==========
+*/

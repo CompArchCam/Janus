@@ -1,0 +1,61 @@
+#!/bin/bash
+
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Janus Binary Paralleliser"
+    echo "Usage: "
+    echo "./jpar [-t] <number_of_threads> <executable> [executable_args ...]"
+    echo "-t : do not run janus under linux time command"
+}
+
+if [ $# -lt 2 ]
+then 
+  usage
+  exit
+fi
+
+
+with_time=1
+if [[ $1 = "-t" ]];
+then
+    with_time=0
+    shift
+fi
+
+numthreads=$1
+shift
+binfile=$1
+shift
+hintfile="$binfile.jrs"
+
+if [ -f $binfile ];
+then
+   echo "Found executable $binfile"
+else
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+#here we need to find the rewrite schedule, if not found, then we need to do the long path
+#profiling - training and parallelise
+
+$JANUSBIN/analyze -p $binfile
+
+if [ $(uname -m) == 'aarch64' ]; then
+  JFLAGS=''
+elif [ $(uname -m) == 'x86_64' ]; then
+  JFLAGS='-ops "-thread_private"'
+fi
+
+echo "Starting Janus Paralleliser"
+echo "$TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads -- $binfile $*"
+
+if [[ $with_time = 1 ]]; then
+    time $TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads @1 -- $binfile $@
+else
+    $TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads @1 -- $binfile $@
+fi
+

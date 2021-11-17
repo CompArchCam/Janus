@@ -1,0 +1,14 @@
+/*!
+    \page Static
+This page describes the standard flow of the Janus static analysis.
+Summary:
+========
+- The source of static binary analyser is completely written in C++ and placed in the \ref static folder. It contains five major components:
+	- core directory: definitions of basic data structures: [Variable](\ref janus::Variable), [MemoryLocation](\ref janus::MemoryLocation),  [Instruction](\ref janus::Instruction), [BasicBlock](\ref janus::BasicBlock), [Loop](\ref janus::Loop), [Function](\ref janus::Function).
+	- loader directory: frontend to parse the input executable and preprocess symbol tables: [Executable](\ref janus::Executable), [Symbol](\ref janus::Symbol), [Section](\ref janus::Section).
+	- arch directory: architecture related definitions, currently only x86/aarch64 is supported, see janus_x86.h or janus_aarch64.h. Architecture specific structures are defined here. [Operand](\ref janus::Operand),  [MachineInstruction](\ref janus::MachineInstruction)
+	- analysis directory: data structure and algorithms for static binary analysis: [Single Static Assignment](\ref SSA.h), [Control Flow Graph](\ref ControlFlow.h), [Data Dependence Analysis](\ref Dependence.h), [Scalar Evolution Analysis](\ref ScalarEvolution.h), [Alias Analysis](\ref aliasAnalysis), [Loop Iterator Analysis](\ref Iterator.h)
+	- schedgen directory: rewrite schedule generation.
+	- tool directory: custom tools from static binary analysis.
+
+*/

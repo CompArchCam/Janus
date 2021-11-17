@@ -1,0 +1,90 @@
+#!/bin/bash
+
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Janus Binary Paralleliser"
+    echo "Usage: "
+    echo "./jpar_all <number_of_threads> <executable> [executable_args ...]"
+}
+
+if [ $# -lt 2 ]
+then 
+  usage
+  exit
+fi
+
+numthreads=$1
+shift
+binfile=$1
+shift
+hintfile="$binfile.jrs"
+
+if [ -f $binfile ];
+then
+   echo "Found executable $binfile"
+else
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+
+if [ $(uname -m) == 'aarch64' ]; then
+  JFLAGS=''
+elif [ $(uname -m) == 'x86_64' ]; then
+  JFLAGS='-ops "-thread_private"'
+fi
+
+#here we need to find the rewrite schedule, if not found, then we need to do the long path
+#profiling - training and parallelise
+if [ -f $hintfile ];
+then
+   schedtype=$(cut -d' ' -f4- <<<"$(schedump $hintfile | head -1)")
+   if [ "$schedtype" == " Automatic Parallelisation" ];
+   then
+      echo -e "\e[1;32mRewrite Schedule for Parallelisation found. Starting Janus Paralleliser....\e[0m"
+      time $TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads @1 -- $binfile $@
+      exit
+   fi
+fi
+
+echo -e "\e[1;31mRewrite Schedule for Parallelisation not found - falling back to slow path\e[0m"
+lcovfile="$binfile.lcov"
+#run lcov if .lcov does not exist already
+if [ ! -f $lcovfile ]; then
+   echo "Running loop coverage profiler........."
+   $JANUSBIN/analyze -lc $binfile
+   $TOOLDIR/bin64/drrun -ops "-opt_cleancall 3" -c $JANUSLIB/libjlcov.so @$hintfile @1 @0 -- $binfile $*
+fi
+echo " "
+echo -e "\e[0;32mLoop coverage profiling complete.\e[0m"
+
+#generate automatic profiling rewrite rules
+planfile="$binfile.plan"
+selectfile="$binfile.loop.select"
+if [ ! -f $selectfile ]; then
+   echo " "
+   echo "Running Janus Plan tool for automatic profiling...."
+   $JANUSBIN/analyze -pr $binfile
+   #a plan file is generated
+   #rm -f $selectfile
+   touch $selectfile
+   cat $planfile | \
+   while read loop_id coverage iter function; do
+      echo ""
+      echo "Calling Janus Planner on loop $loop_id with coverage %$coverage ave iter $iter in function $function"
+      $TOOLDIR/bin64/drrun -ops "-opt_cleancall 3" -c $JANUSLIB/libjplan.so @$hintfile @8 @$loop_id -- $binfile $*
+   done
+fi
+echo " "
+echo -e "\e[0;32mAutomatic profiling complete.\e[0m"
+
+echo " "
+echo "Running Janus static analyser for Paralleliser...."
+$JANUSBIN/analyze -p $binfile
+echo " "
+echo "Starting Janus Paralleliser...."
+#echo "$TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads -- $binfile $*"
+time $TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads @1 -- $binfile $@

@@ -1,0 +1,36 @@
+#!/bin/bash     
+
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Janus Loop Coverage Profiler"
+    echo "Usage: "
+    echo "./lcov <executable> [executable_args ...]"
+}
+
+if [ $# -lt "1" ]
+then 
+    usage
+    exit
+fi
+
+binfile=$1
+shift
+
+hintfile="$binfile.jrs"
+bininstr="$binfile.loop"
+
+
+if [ -f $binfile ];
+then
+   echo "Found executable $binfile"
+else
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+$JANUSBIN/analyze -lc $binfile
+
+$TOOLDIR/bin64/drrun -ops "-opt_cleancall 3" -c $JANUSLIB/libjlcov.so @$hintfile @1 @0 -- $binfile $*

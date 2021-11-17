@@ -1,0 +1,49 @@
+#!/bin/bash     
+
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "GBR Loop Timer"
+    echo "Usage: "
+    echo "./time <executable> [executable_args ...]"
+}
+
+if [ $# -lt "1" ]
+then 
+    usage
+    exit
+fi
+
+binfile=$1
+shift
+
+hintfile="$binfile.jrs"
+bininstr="$binfile.loop"
+
+
+if [ -f $binfile ];
+then
+   echo "Found executable $binfile"
+else
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+$GBRBIN/analyze -lt $binfile
+
+rm timingCommand.txt
+
+cat $bininstr | \
+while read loop_id loop_address; do
+    echo "$TOOLDIR/bin64/drrun -ops \"-opt_cleancall 3\" -c $GBRLIB/libgltimer.so @$hintfile @1 @$loop_id -- $binfile $*" >> timingCommand.txt
+done
+
+#run command with GNU parallel
+parallel < timingCommand.txt
+
+#collect results
+$my_dir/collectTime.py $binfile > $binfile.loopcov.csv
+rm Loop_*_cycles.txt
+rm timingCommand.txt
