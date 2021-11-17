@@ -16,8 +16,6 @@
 
 #include <stddef.h>
 
-#define JANUS_THREAD_STACK_SIZE   (32*1024)
-
 typedef volatile uint32_t flag_t;
 
 /**
@@ -52,15 +50,15 @@ typedef struct _private_state {
  * Do not change the order unless necessary.
  */
 typedef struct _flag_state {
-    flag_t                  loop_on;            /* +0  */
-    flag_t                  trans_on;           /* +4  */
-    flag_t                  call_on;            /* +8 */
-    flag_t                  can_commit;         /* +12 */
-    flag_t                  in_pool;            /* +16 */
-    flag_t                  stack_allocated;    /* +20 */
-    flag_t                  finished;           /* +24 */
-    flag_t                  rolledback;         /* +28 */
-    flag_t                  exited;             /* +32 */
+    flag_t                  loop_on;             /* +0  */
+    flag_t                  trans_on;            /* +4  */
+    flag_t                  call_on;             /* +8 */
+    flag_t                  can_commit;          /* +12 */
+    flag_t                  in_pool;             /* +16 */
+    flag_t                  stack_allocated;     /* +20 */
+    flag_t                  finished;            /* +24 */
+    flag_t                  rolledback;          /* +28 */
+    flag_t                  sequential_execution;/* +32 */
 } flag_state_t;
 
 /**
@@ -84,6 +82,8 @@ typedef struct _thread_local {
     uint64_t                local_stamp;
     /** \brief Private register bank */
     priv_state_t            private_state;
+    /* For conditional merging we record when we write to specific registers */
+    uint64_t                written_regs_mask;
 
 #ifdef JANUS_STATS
     stat_state_t            stats;
@@ -121,13 +121,14 @@ typedef struct _thread_local {
 extern janus_thread_t **oracle;
 
 /* List of offsets in janus_thread_t structure */
-#define LOCAL_SPILL_OFFSET      (offsetof(janus_thread_t, spill_space))
-#define LOCAL_FLAG_OFFSET       (offsetof(janus_thread_t, flag_space))
-#define LOCAL_STACK_OFFSET      (offsetof(janus_thread_t, stack_ptr))
-#define LOCAL_STACKBASE_OFFSET  (offsetof(janus_thread_t, stack))
-#define LOCAL_PSTATE_OFFSET     (offsetof(janus_thread_t, private_state))
-#define LOCAL_ID_OFFSET         (offsetof(janus_thread_t, id))
-#define LOCAL_GEN_CODE_OFFSET   (offsetof(janus_thread_t, gen_code))
+#define LOCAL_SPILL_OFFSET        (offsetof(janus_thread_t, spill_space))
+#define LOCAL_FLAG_OFFSET         (offsetof(janus_thread_t, flag_space))
+#define LOCAL_STACK_OFFSET        (offsetof(janus_thread_t, stack_ptr))
+#define LOCAL_STACKBASE_OFFSET    (offsetof(janus_thread_t, stack))
+#define LOCAL_PSTATE_OFFSET       (offsetof(janus_thread_t, private_state))
+#define LOCAL_ID_OFFSET           (offsetof(janus_thread_t, id))
+#define LOCAL_GEN_CODE_OFFSET     (offsetof(janus_thread_t, gen_code))
+#define LOCAL_WRITTEN_REGS_OFFSET (offsetof(janus_thread_t, written_regs_mask))
 #ifdef JANUS_STATS
 #define LOCAL_STATS_OFFSET      (offsetof(janus_thread_t, stats))
 #endif
@@ -146,6 +147,8 @@ extern janus_thread_t **oracle;
 #define LOCAL_SLOT1_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot1))
 #define LOCAL_SLOT2_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot2))
 #define LOCAL_SLOT3_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot3))
+#define LOCAL_SLOT4_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot4))
+#define LOCAL_SLOT5_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot5))
 #define LOCAL_SLOT6_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot6))
 #define LOCAL_SLOT7_OFFSET      (LOCAL_SPILL_OFFSET + offsetof(spill_state_t, slot7))
 
@@ -171,7 +174,7 @@ extern janus_thread_t **oracle;
 #define LOCAL_FLAG_ROLLEDBACK_OFFSET \
   LOCAL_FLAG_OFFSET + (offsetof(flag_state_t, rolledback))
 #define LOCAL_FLAG_SEQ_OFFSET \
-  LOCAL_FLAG_OFFSET + (offsetof(flag_state_t, exited))
+  LOCAL_FLAG_OFFSET + (offsetof(flag_state_t, sequential_execution))
 
 /** \brief Create janus threads that have their own code cache and rewrite schedule interpretators
  *
@@ -197,4 +200,8 @@ int janus_thread_pool_app(janus_thread_t *tls, int status);
 
 /** \brief Re-enter thread pool in application mode */
 int janus_reenter_thread_pool_app(janus_thread_t *tls);
+
+/** \brief Allocates the thread stack (used in parallelization) for thread 0 */
+void janus_allocate_main_thread_stack();
+
 #endif

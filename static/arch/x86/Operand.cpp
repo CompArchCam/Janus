@@ -167,7 +167,8 @@ std::ostream& janus::operator<<(std::ostream& out, const Operand& v)
     return out;
 }
 
-Variable Operand::lift(PCAddress pc)
+Variable Operand::lift(PCAddress nextInstrPc)
+
 {
     Variable var;
     memset(&var, 0, sizeof(Variable));
@@ -197,7 +198,7 @@ Variable Operand::lift(PCAddress pc)
         }
         else if (dispMem.base == JREG_RIP) {
             var.type = JVAR_ABSOLUTE;
-            var.value = dispMem.disp + pc;
+            var.value = dispMem.disp + nextInstrPc; //in RIP relative addresses, we need the pc of the next instruction
         } else if (structure == OPND_DISPMEM) {
             var.value = dispMem.disp;
             var.base = dispMem.base;

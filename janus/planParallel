@@ -1,0 +1,47 @@
+#!/bin/bash     
+
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Janus Loop Dependence Profiler (Parallel Version)"
+    echo "Usage: "
+    echo "./planParallel <executable> [executable_args ...]"
+}
+
+if [ $# -lt "1" ]
+then 
+    usage
+    exit
+fi
+
+binfile=$1
+shift
+
+hintfile="$binfile.jrs"
+
+
+if [ -f $binfile ];
+then
+   echo "Found executable $binfile"
+else
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+#generate automatic profiling rewrite rules
+$JANUSBIN/analyze -pr $binfile
+
+[ -e planCommand.txt ] && rm planCommand.txt
+
+#a plan file is generated
+planfile="$binfile.plan"
+
+cat $planfile | \
+while read loop_id coverage iter function; do
+    echo "$TOOLDIR/bin64/drrun -ops \"-opt_cleancall 3\" -c $JANUSLIB/libjplan.so @$hintfile @8 @$loop_id -- $binfile $*" >> planCommand.txt
+done
+
+#run command with GNU parallel
+parallel < planCommand.txt

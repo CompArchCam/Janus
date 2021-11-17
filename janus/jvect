@@ -32,5 +32,6 @@ fi
 $JANUSBIN/analyze -v $binfile
 
 echo "$TOOLDIR/bin64/drrun -c $JANUSLIB/libjvect.so @$hintfile @1 @1 -- $binfile $@"
+
 $TOOLDIR/bin64/drrun -c $JANUSLIB/libjvect.so @$hintfile @1 @1 -- $binfile $@
 #gdb --args $TOOLDIR/bin64/drrun -debug -c $JANUSLIB/libjvect.so @$hintfile @1 @1 -- $binfile $@

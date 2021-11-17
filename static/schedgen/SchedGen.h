@@ -41,11 +41,13 @@ public:
 
 void
 generateRules(JanusContext *gc);
+
 /* Generic rule insertion API from outside rule generation module */
 void
 insertRule(uint32_t channel, janus::RewriteRule rule, janus::BasicBlock *block);
 void
 replaceRule(uint32_t channel, janus::RewriteRule rule, janus::BasicBlock *block);
+
 void
 removeRule(uint32_t channel, janus::RewriteRule rule, janus::BasicBlock *block);
 /** \brief Encode the current JVar to rewrite rule (wrapper) */

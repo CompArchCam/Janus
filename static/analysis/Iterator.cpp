@@ -4,6 +4,7 @@
 #include "Variable.h"
 #include "IO.h"
 #include "Dependence.h"
+#include <queue>
 
 using namespace janus;
 using namespace std;
@@ -262,6 +263,7 @@ bool iteratorAnalysis(Loop *loop)
 
     if (loop->check.size()>1) {
         LOOPLOG("\t\tLoop contains multiple exits and checking conditions"<<endl);
+        loop->unsafe = true;
         return false;
     } else if (loop->check.size()==0) {
         LOOPLOG("\t\tLoop contains no checking conditions, hence no iterator is found"<<endl);
@@ -302,6 +304,39 @@ bool iteratorAnalysis(Loop *loop)
     return true;
 }
 
+/* Checks whether a given undecidedPhiVariable is never used within the loop itself*/
+/* And thus is only a WAW dependency (with a possibly irregular modification pattern), which can be resolved */
+bool writeAfterWriteAnalysis(janus::Loop *loop, janus::VarState *phiVar){
+    //We do DFS on the data flow edges (VarState::succ),
+    //starting from phiVar, to find all Varstates that might use phiVar's data
+    std::set<VarState*> markedStates; //All states that ever get visited in the BFS
+    std::queue<VarState*> BFSQueue;
+    BFSQueue.push(phiVar);
+    markedStates.insert(phiVar);
+    while (!BFSQueue.empty()){
+        VarState* vs = BFSQueue.front();
+        BFSQueue.pop();
+        for (VarState* vsSucc : vs->succ){
+            if (markedStates.find(vsSucc) == markedStates.end()){
+                BFSQueue.push(vsSucc);
+                markedStates.insert(vsSucc);
+            }
+        }
+    }
+
+    //Now check whether any instruction within the loop uses any of the marked states
+    //Since that would mean our undecided variable is read before being overwritten, so is unsafe!
+    for (VarState* vs : markedStates){
+        for (Instruction* instr : vs->dependants){
+            if (loop->contains(instr->block->bid)){
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+
 bool postIteratorAnalysis(janus::Loop *loop)
 {
     if (loop->unsafe) return false;
@@ -311,8 +346,9 @@ bool postIteratorAnalysis(janus::Loop *loop)
     //traverse once again since more information is available now
     if (loop->undecidedPhiVariables.size()) {
         LOOPLOG("\tPerforming dependence analysis (Second pass)"<<endl);
-
-        for (auto unPhi: loop->undecidedPhiVariables) {
+        bool foundNewIterator = false; 
+        for (auto iter = loop->undecidedPhiVariables.begin(); iter != loop->undecidedPhiVariables.end();){
+            VarState *unPhi = *iter;
             //firstly try to construct cyclic relations
             if (buildCyclicExpr(unPhi->expr,loop)) {
                 if (unPhi->expr->kind == Expr::NONE) {
@@ -321,6 +357,23 @@ bool postIteratorAnalysis(janus::Loop *loop)
                 }
                 LOOPLOG("\t\t"<<unPhi<<" Cylic "<<*unPhi->expr->expandedCyclicForm<<endl);
                 loop->phiVariables.insert(unPhi);
+            } else if (writeAfterWriteAnalysis(loop, unPhi)){
+                //In this case the phi variable is not an iterator, 
+                //but a private variable with an irregular modification pattern (hence the phi node)
+                //And conditional merging will be used after the loop for it
+                if (unPhi->type == JVAR_REGISTER){
+                    loop->registerToConditionalMerge.insert(unPhi->value);
+                }
+                else if (unPhi->type == JVAR_STACK ||
+                        unPhi->type == JVAR_STACKFRAME){
+                    loop->stackToConditionalMerge.insert(*(Variable*)unPhi);
+                }
+                else{
+                    LOOPLOG("\t\t"<<unPhi<<"is private phi variable with conditional merging, but not stack or register!"<<endl);
+                }
+                LOOPLOG("\t\t"<<unPhi<<" is only a WAW dependence, and will be resolved with conditional merging after the loop finishes!"<<endl);
+                iter = loop->undecidedPhiVariables.erase(iter);
+                continue; //Don't do the rest of iterator checks (because this is not an iterator!)
             } else {
                 loop->unsafe = true;
                 LOOPLOG("\tCould not find cyclic expressions for phi node "<<unPhi<<endl);
@@ -329,21 +382,25 @@ bool postIteratorAnalysis(janus::Loop *loop)
             Iterator it(unPhi, loop);
             if (it.kind != Iterator::ITERATOR_NONE) {
                 loop->iterators[unPhi] = it;
+                foundNewIterator = true;
             }
             else {
                 //iterator could not be found, set this loop unsafe
                 loop->unsafe = true;
                 return false;
             }
+            iter++;
         }
 
-        finalValueAnalysis(loop);
-        LOOPLOG("\t\tIterator identified: "<<*miter<<endl);
+        if (foundNewIterator){
+            //Only redo the iterator analysis if we've found a new iterator in the undecided variables
+            finalValueAnalysis(loop);
 
-        //assign loop iterators again
-        for (auto &iter: loop->iterators) {
-            loop->parent->iterators[iter.first] = &(iter.second);
-            iter.first->expr->iteratorTo = &(iter.second);
+            //assign loop iterators again
+            for (auto &iter: loop->iterators) {
+                loop->parent->iterators[iter.first] = &(iter.second);
+                iter.first->expr->iteratorTo = &(iter.second);
+            }
         }
     }
 
@@ -502,6 +559,9 @@ bool postIteratorAnalysis(janus::Loop *loop)
                 loop->constPhiVars.find(varStride) == loop->constPhiVars.end()) {
                 LOOPLOG("\t\tLoop "<<dec<<loop->id<<" stride "<<iter.second<<" is a reduction variable"<<endl);
                 iter.second.kind = Iterator::REDUCTION_PLUS;
+                LOOPLOG("\t\tReduction variables not supported!" << endl);
+                loop->unsafe = true;
+                return false; //Reduction variables not supported!
             }
         } else if (iter.second.kind == Iterator::ITER_GENERIC) {
             //for strides that are not immediate, check if the stride expression is a constant
@@ -512,6 +572,9 @@ bool postIteratorAnalysis(janus::Loop *loop)
                 LOOPLOG("\t\tLoop "<<dec<<loop->id<<" stride "<<iter.second<<" is a reduction variable"<<endl);
                 iter.second.kind = Iterator::REDUCTION_PLUS;
                 iter.second.strideKind = Iterator::EXPANDED_EXPR;
+                LOOPLOG("\t\tReduction variables not supported!" << endl);
+                loop->unsafe = true;
+                return false; //Reduction variables not supported!
             }
         } else iter.second.strideKind = Iterator::INTEGER;
     }
@@ -581,7 +644,9 @@ Expr Iterator::getStrideExpr()
 {
     if (kind == INDUCTION_IMM) return Expr(stride);
     else if (kind == INDUCTION_VAR) return Expr(strideVar);
-    else return Expr(stepExprs);
+    else {
+        return Expr(strideExprs);
+    }
 }
 
 std::ostream& janus::operator<<(std::ostream& out, const Iterator& iter)

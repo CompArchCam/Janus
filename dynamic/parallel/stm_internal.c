@@ -368,7 +368,7 @@ build_transaction_rollback_instrlist(void *drcontext, SReg sregs, Loop_t *loop)
             int i = reg - DR_REG_XMM0;
             if ((1<<i) & simd_mask) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_reg(reg),
                                         opnd_create_base_disp(tls_reg, DR_REG_NULL, 0,
                                             LOCAL_CHECK_POINT_OFFSET + PSTATE_SIMD_OFFSET + i * 16,
@@ -948,12 +948,12 @@ emit_predict_value(void *drcontext, instrlist_t *bb, instr_t *trigger, SReg sreg
         if ((1<<i) & mask) {
             //load from the shared register
             INSERT(bb, trigger,
-                INSTR_CREATE_movdqa(drcontext,
+                INSTR_CREATE_movdqu(drcontext,
                                     opnd_create_reg(reg),
                                     opnd_create_rel_addr((void *)(shared_addr + (i+16)*CACHE_LINE_WIDTH), OPSZ_16)));
             //store to private buffer
             INSERT(bb, trigger,
-                INSTR_CREATE_movdqa(drcontext,
+                INSTR_CREATE_movdqu(drcontext,
                                     opnd_create_base_disp(sregs.s3, DR_REG_NULL, 0, LOCAL_STATE_OFFSET + PSTATE_SIMD_OFFSET + 16 * i, OPSZ_16),
                                     opnd_create_reg(reg)));
         }
@@ -1026,12 +1026,12 @@ emit_predict_variable_value(void *drcontext, instrlist_t *bb,
         } else if (var.value >= DR_REG_XMM0 && var.value <= DR_REG_XMM15) {
             //load from the shared register
             INSERT(bb, trigger,
-                INSTR_CREATE_movdqa(drcontext,
+                INSTR_CREATE_movdqu(drcontext,
                                     opnd_create_reg(var.value),
                                     opnd_create_rel_addr((void *)(shared_addr + (var.value-DR_REG_XMM0)*CACHE_LINE_WIDTH), OPSZ_16)));
             //store to private buffer
             INSERT(bb, trigger,
-                INSTR_CREATE_movdqa(drcontext,
+                INSTR_CREATE_movdqu(drcontext,
                                     opnd_create_base_disp(sregs.s3, DR_REG_NULL, 0,
                                                           LOCAL_STATE_OFFSET + PSTATE_SIMD_OFFSET + 16 * (var.value-DR_REG_XMM0), OPSZ_16),
                                     opnd_create_reg(var.value)));
@@ -1383,7 +1383,7 @@ build_stm_commit_instrlist(void *drcontext, instrlist_t *bb, instr_t *trigger, S
         if ((1 << i) & mask) {
             opnd_t shared_opnd = opnd_create_rel_addr((void *)(shared_addr + (i+16) * CACHE_LINE_WIDTH), OPSZ_16);
             INSERT(bb, trigger,
-                INSTR_CREATE_movdqa(drcontext,
+                INSTR_CREATE_movdqu(drcontext,
                                     shared_opnd,
                                     opnd_create_reg(reg)));
         }

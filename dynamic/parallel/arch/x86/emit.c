@@ -141,7 +141,7 @@ emit_spill_to_shared_register_bank(EMIT_CONTEXT, uint64_t regMask)
             cacheline = i + 16;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_base_disp(s0, DR_REG_NULL, 0,
                                                               cacheline*CACHE_LINE_WIDTH, OPSZ_16),
                                         opnd_create_reg(reg)));
@@ -243,7 +243,7 @@ emit_restore_from_shared_register_bank(EMIT_CONTEXT, uint64_t regMask)
             cacheline = i + 16;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_reg(reg),
                                         opnd_create_base_disp(s0, DR_REG_NULL, 0,
                                                               cacheline*CACHE_LINE_WIDTH, OPSZ_16)));
@@ -331,14 +331,124 @@ emit_spill_to_private_register_bank(EMIT_CONTEXT, uint64_t regMask, int tid)
             int i = reg - DR_REG_XMM0;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_base_disp(TLS, 0, 8, LOCAL_PSTATE_OFFSET + PSTATE_SIMD_OFFSET + 16*i, OPSZ_16),
                                         opnd_create_reg(reg)));
             }
         }
     }
 }
+void restore_scratch_reg_with_s0_conditional(EMIT_CONTEXT, void* source, int scratchOffset){
+    //This function is used only in emit_conditional_merge_loop_variables
+    //to make its code shorter
+    instr_t *jump_over = INSTR_CREATE_label(drcontext);
+    INSERT(bb, trigger, 
+        INSTR_CREATE_jcc(drcontext, OP_jz,
+                            opnd_create_instr(jump_over)));
+    //S0 is restored at the end of the loop finish code, so we can use it here
+    INSERT(bb, trigger,
+        INSTR_CREATE_mov_ld(drcontext,
+                            opnd_create_reg(s0),
+                            opnd_create_rel_addr(source, OPSZ_8)));
+    INSERT(bb, trigger,
+        INSTR_CREATE_mov_st(drcontext,
+                            OPND_CREATE_MEM64(TLS, scratchOffset),
+                            opnd_create_reg(s0)));
+    INSERT(bb, trigger, jump_over);
 
+}
+/** \brief Insert instructions to dynamically find for each register in registerToConditionalMerge, 
+ * which is the last thread that has written to the register, and merge the register from that thread */
+void 
+emit_conditional_merge_loop_variables(EMIT_CONTEXT, int mytid){
+
+    reg_id_t reg;
+    uint32_t reg_mask = loop->header->registerToConditionalMerge;
+    instr_t *exit = INSTR_CREATE_label(drcontext);
+    //Now s3 contains the register mask that still needs to be merged
+    INSERT(bb, trigger,
+        INSTR_CREATE_mov_imm(drcontext,
+                            opnd_create_reg(s3),
+                            opnd_create_immed_int(reg_mask, OPSZ_8)));
+    for (int readtid = rsched_info.number_of_threads-1; readtid > 0; readtid--){
+        INSERT(bb, trigger, 
+            INSTR_CREATE_mov_ld(drcontext, 
+                                opnd_create_reg(s2), 
+                                opnd_create_rel_addr(&(oracle[readtid]->written_regs_mask), OPSZ_8)));
+        //Now we check the intersection of the registers that this thread has written to, and the registers that we still need to merge
+        //And store that it s2
+        //Then s2 contains the registers that we will merge from this thread
+        INSERT(bb, trigger,
+            INSTR_CREATE_and(drcontext, opnd_create_reg(s2), opnd_create_reg(s3)));
+        
+        for (reg=DR_REG_RAX; reg<=DR_REG_R15; reg++) {
+            int i = reg - DR_REG_RAX;
+            if (reg_mask & (1<<i)) {
+                //This means register reg is one of the ones to merge
+                //Insert code to check if this thread has written to that register
+                //And if so, merge from that thread
+
+                //This instruction should be 64 bit if more registers are merged
+                INSERT(bb, trigger,
+                    INSTR_CREATE_test(drcontext, opnd_create_reg(reg_resize_to_opsz(s2, OPSZ_4)), opnd_create_immed_int(1<<i, OPSZ_4)));
+                if (reg == s0){
+                    //S0 is restored at the end of the loop finish code, so we can use it here
+                    restore_scratch_reg_with_s0_conditional(emit_context, 
+                        (void*)oracle[readtid]+LOCAL_PSTATE_OFFSET+8*i, LOCAL_S0_OFFSET);
+                }
+                else if (reg == s1){
+                    restore_scratch_reg_with_s0_conditional(emit_context, 
+                        (void*)oracle[readtid]+LOCAL_PSTATE_OFFSET+8*i, LOCAL_S1_OFFSET);
+                }
+                else if (reg == s2){
+                    restore_scratch_reg_with_s0_conditional(emit_context, 
+                        (void*)oracle[readtid]+LOCAL_PSTATE_OFFSET+8*i, LOCAL_S2_OFFSET);
+                }
+                else if (reg == s3){
+                    restore_scratch_reg_with_s0_conditional(emit_context, 
+                        (void*)oracle[readtid]+LOCAL_PSTATE_OFFSET+8*i, LOCAL_S3_OFFSET);
+                }
+                else {
+                    INSERT(bb, trigger,
+                        INSTR_CREATE_cmovcc(drcontext, OP_cmovnz,
+                                            opnd_create_reg(reg),
+                                            opnd_create_rel_addr((void*)oracle[readtid]+LOCAL_PSTATE_OFFSET+8*i, OPSZ_8)));
+                }
+            }
+        }
+
+        for (reg=DR_REG_XMM0; reg<=DR_REG_XMM15; reg++) {
+            int i = reg - DR_REG_XMM0;
+            //The simd_mask is the upper 16 bits of the 32 bit reg mask
+            if (reg_mask & (1<<(i+16))) {
+                INSERT(bb, trigger,
+                    INSTR_CREATE_test(drcontext, opnd_create_reg(reg_resize_to_opsz(s2, OPSZ_4)), opnd_create_immed_int(1<<(i+16), OPSZ_4)));
+                instr_t *jump_over = INSTR_CREATE_label(drcontext);
+                INSERT(bb, trigger, 
+                    INSTR_CREATE_jcc(drcontext, OP_jz,
+                                        opnd_create_instr(jump_over)));
+                INSERT(bb, trigger,
+                    INSTR_CREATE_movdqu(drcontext,
+                                        opnd_create_reg(reg),
+                                        opnd_create_base_disp(TLS, 0, 8, LOCAL_PSTATE_OFFSET + PSTATE_SIMD_OFFSET + 16*i, OPSZ_16)));
+                INSERT(bb, trigger, jump_over);
+            }
+        }
+        //Now since we've merged the registers in s2, we subtract that from s3 (the regs we still need to merge)
+        INSERT(bb, trigger, 
+            INSTR_CREATE_sub(drcontext, 
+                            opnd_create_reg(s3), 
+                            opnd_create_reg(s2)));
+        //If s3 is zero, that means we have no regs left to merge, so don't need to look at the other threads
+        INSERT(bb, trigger, 
+            INSTR_CREATE_test(drcontext, opnd_create_reg(s3), opnd_create_reg(s3)));
+        INSERT(bb, trigger,
+            INSTR_CREATE_jcc(drcontext, OP_jz, opnd_create_instr(exit)));
+
+    }
+    INSERT(bb, trigger, exit);
+
+}
 /** \brief Insert instructions at the trigger to selectively save registers to private register bank based on the register mask
  * it can load from different thread's bank */
 void
@@ -432,7 +542,7 @@ emit_restore_from_private_register_bank(EMIT_CONTEXT, uint64_t regMask, int myti
             int i = reg - DR_REG_XMM0;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_reg(reg),
                                         opnd_create_base_disp(TLS, 0, 8, LOCAL_PSTATE_OFFSET + PSTATE_SIMD_OFFSET + 16*i, OPSZ_16)));
             }
@@ -702,7 +812,7 @@ emit_save_shared_context_instrlist(EMIT_CONTEXT, bool save_all, bool save_flag)
             int cacheline = i + 16;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_base_disp(sregs.s0, DR_REG_NULL, 0,
                                                               cacheline*CACHE_LINE_WIDTH, OPSZ_16),
                                         opnd_create_reg(reg)));
@@ -757,7 +867,7 @@ emit_save_private_context_instrlist(EMIT_CONTEXT)
             int i = reg - DR_REG_XMM0;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_base_disp(tls_reg, 0, 8, LOCAL_STATE_OFFSET + PSTATE_SIMD_OFFSET + 16*i, OPSZ_16),
                                         opnd_create_reg(reg)));
             }
@@ -811,7 +921,7 @@ emit_save_checkpoint_context_instrlist(EMIT_CONTEXT)
             int i = reg - DR_REG_XMM0;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_base_disp(tls_reg, 0, 8, LOCAL_CHECK_POINT_OFFSET + PSTATE_SIMD_OFFSET + 16*i, OPSZ_16),
                                         opnd_create_reg(reg)));
             }
@@ -865,7 +975,7 @@ emit_restore_checkpoint_context_instrlist(EMIT_CONTEXT)
             int i = reg - DR_REG_XMM0;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_reg(reg),
                                         opnd_create_base_disp(tls_reg, 0, 8, LOCAL_CHECK_POINT_OFFSET + PSTATE_SIMD_OFFSET + 16*i, OPSZ_16)));
             }
@@ -930,7 +1040,7 @@ emit_restore_shared_context_instrlist(EMIT_CONTEXT)
             int cacheline = i + 16;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_reg(reg),
                                         opnd_create_base_disp(thread_reg, DR_REG_NULL, 0,
                                                               cacheline*CACHE_LINE_WIDTH, OPSZ_16)));
@@ -990,7 +1100,7 @@ emit_restore_private_context_instrlist(EMIT_CONTEXT)
             int i = reg - DR_REG_XMM0;
             if (simd_mask & (1<<i)) {
                 INSERT(bb, trigger,
-                    INSTR_CREATE_movdqa(drcontext,
+                    INSTR_CREATE_movdqu(drcontext,
                                         opnd_create_reg(reg),
                                         opnd_create_base_disp(tls_reg, 0, 8, LOCAL_STATE_OFFSET + PSTATE_SIMD_OFFSET + 16*i, OPSZ_16)));
             }

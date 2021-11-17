@@ -40,7 +40,7 @@ loop_array_bound_record_handler(JANUS_CONTEXT)
                                 opnd_create_rel_addr(&(loop->variables[varIndex].array.runtime_base_value), OPSZ_8),
                                 opnd_create_reg(bound.value)));
     } else {
-        dr_printf("Runtime check case not yet handled\n");
+        dr_printf("Runtime array bound check case not yet handled\n");
     }
 }
 

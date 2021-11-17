@@ -49,7 +49,7 @@ typedef enum _jvar_type
  */
 typedef struct _jvar
 {
-    uint64_t        value;
+    int64_t         value;
     uint8_t         base;
     uint8_t         index;
     uint8_t         scale;
@@ -81,8 +81,7 @@ typedef struct _jvar_compact
 typedef enum _var_update_type
 {
     UPDATE_UNKNOWN = 0,
-    UPDATE_ADD = 1,
-    UPDATE_SUB
+    UPDATE_ADD = 1
 } JVarUpdate;
 
 typedef struct _induct {

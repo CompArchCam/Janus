@@ -1104,17 +1104,20 @@ ExpandedExpr::extendToVariableScope(Function *func, Loop *loop, Variable *var)
 {
     map<Expr, Expr> refs = exprs;
     exprs.clear();
-
+    bool found = false;
     for (auto e: refs) {
         Expr term = e.first;
         //we only expand non-leaf terms
         if (!term.isLeaf()) {
             ExpandedExpr terms(ExpandedExpr::SUM);
-            buildFuncExpr(&term, &terms, func, loop, true, var);
+            if (buildFuncExpr(&term, &terms, func, loop, true, var)){
+                found = true;
+            }
             terms.multiply(e.second);
             merge(terms);
         } else exprs[e.first] = e.second;
     }
+    return found;
 }
 
 

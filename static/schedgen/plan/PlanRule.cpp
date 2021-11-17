@@ -30,7 +30,7 @@ generateRulesForEachLoop(JanusContext *gc, Loop &loop)
     {
         rule = RewriteRule(PROF_LOOP_START, entry + bb, POST_INSERT);
         rule.reg0 = loop.id;
-	rule.reg1 = loop.level;		//added by MA
+        rule.reg1 = loop.level;		//added by MA
         insertRule(loop.id, rule, entry + bb);
     }
 
@@ -45,7 +45,7 @@ generateRulesForEachLoop(JanusContext *gc, Loop &loop)
     {
         rule = RewriteRule(PROF_LOOP_FINISH, entry + bb, POST_INSERT);
         rule.reg0 = loop.id;
-	rule.reg1 = loop.level;		//added by MA
+        rule.reg1 = loop.level;		//added by MA
         insertRule(loop.id, rule, entry + bb);
     }
 
@@ -53,12 +53,24 @@ generateRulesForEachLoop(JanusContext *gc, Loop &loop)
         BasicBlock *bb = entry + bid;
         /* PROF_MEM_ACCESS is inserted before every memory access
          * TODO: reduce the number of checks using alias analysis */
-        for (auto &mem: bb->minstrs) {
-            rule = RewriteRule(PROF_MEM_ACCESS, bb->instrs->pc, mem.instr->pc, mem.instr->id);
-            rule.reg0 = mem.instr->id;
-	    //rule.reg1 = loop.level;		//added by MA
-	    rule.reg1 = loop.id;		//added by MA
-            insertRule(loop.id, rule, bb);
+        for (auto &memInstr: bb->minstrs) {
+            bool instrUsesPrivateVar = false;
+            for (auto &opnd: memInstr.instr->inputs){
+                Variable stackVar = *(Variable *)memInstr.mem;
+                if (loop.privateVars.find(stackVar) != loop.privateVars.end() ||
+                    loop.phiVars.find(stackVar) != loop.phiVars.end() ||
+                    loop.checkVars.find(stackVar) != loop.checkVars.end()) {
+                    //If the instruction uses a private stack variable, we will use privatization to avoid the dependency
+                    instrUsesPrivateVar = true;
+                }
+            }
+            if (!instrUsesPrivateVar){
+                rule = RewriteRule(PROF_MEM_ACCESS, bb->instrs->pc, memInstr.instr->pc, memInstr.instr->id);
+                rule.reg0 = memInstr.instr->id;
+                //rule.reg1 = loop.level;		//added by MA
+                rule.reg1 = loop.id;		    //added by MA
+                insertRule(loop.id, rule, bb);
+            }
         }
     }
 
@@ -66,15 +78,15 @@ generateRulesForEachLoop(JanusContext *gc, Loop &loop)
     for (auto fid: loop.subCalls) {
         Function &func = gc->functions[fid];
         for (auto &bb: func.blocks) {
-	    /* PROF_MEM_ACCESS is inserted before every memory access
-	     * TODO: reduce the number of checks using alias analysis */
-	    for (auto &mem: bb.minstrs) {
-		rule = RewriteRule(PROF_MEM_ACCESS, bb.instrs->pc, mem.instr->pc, mem.instr->id);
-		rule.reg0 = mem.instr->id;
-		rule.reg1 = loop.id;		//added by MA
-		insertRule(loop.id, rule, &bb);
-	    }
-	}
+            /* PROF_MEM_ACCESS is inserted before every memory access
+            * TODO: reduce the number of checks using alias analysis */
+            for (auto &mem: bb.minstrs) {
+                rule = RewriteRule(PROF_MEM_ACCESS, bb.instrs->pc, mem.instr->pc, mem.instr->id); 
+                rule.reg0 = mem.instr->id;
+                rule.reg1 = loop.id;		//added by MA
+                insertRule(loop.id, rule, &bb);
+            }
+        }
     }
     if(gc->sharedOn){
 	/* PROF_CALL_{START,END} is inserted {before,after} each shared library call */

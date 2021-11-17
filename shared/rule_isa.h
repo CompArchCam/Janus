@@ -50,6 +50,8 @@ typedef enum _rr_type {
 
     ///Combined handler: recover and spill the scratch registers
     MEM_SCRATCH_REG,
+    ///Combined handler: recover and spill the check register for a loop
+    MEM_RESTORE_CHECK_REG,
     ///Recover the value of four scratch registers from TLS
     MEM_RECOVER_REG,
     ///Redirect the stack access to shared stack
@@ -60,6 +62,8 @@ typedef enum _rr_type {
     MEM_BOUNDS_CHECK,
     ///Save runtime bounds in thread local storage
     MEM_RECORD_BOUNDS,
+    ///Set a flag that the current thread has written to the register, used in conditional merging
+    MEM_RECORD_REG_WRITE,
     ///Start a software transaction
     TX_START,
     ///Validate and commit a software transaction
@@ -103,7 +107,22 @@ typedef enum _rr_type {
      * ----------------------------------------------------*/
     ///Insert a thread private counter at given address, supply a counter id
     STATS_INSERT_COUNTER,
-
+    /* ----------------------------------------------------
+     * Bounds Checking for Security Rewrite Rules 
+     * ----------------------------------------------------*/
+    /* record the base and bound of pointer at malloc*/
+    BND_RECORD_SIZE,
+    BND_RECORD_BASE,
+    /* check the bounds of memory access at pointer derefence*/
+    BND_CHECK,
+    BND_LEA_LOAD,
+    BND_ARITHMETIC,
+    /*table maintenance rules for bound checking and traking*/
+    TABLE_REG_REG_COPY,
+    TABLE_REG_MEM_STORE,
+    TABLE_MEM_REG_LOAD,
+    TABLE_VALUE_REG,
+    TABLE_VALUE_MEM,
     /* ----------------------------------------------------
      * The following rewrite rules are out-dated
      * ----------------------------------------------------*/

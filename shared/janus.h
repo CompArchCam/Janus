@@ -68,7 +68,13 @@ typedef enum _jmode {
     ///graph mode
     JGRAPH,
     ///single-threaded optimisation mode
-    JOPT
+    JOPT,
+    //secure execution
+    JSECURE,
+    ///custom tool mode for Cinnamon domain specific language 
+    JCUSTOM,
+    //testing mode for DLL instrumentation
+    JDLL
 } JMode;
 
 /* Rule ISA header defines the supported static rules */

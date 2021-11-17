@@ -166,10 +166,14 @@ class Loop
     RegSet                          registerToCopy;
     ///The set of registers needed to merge after threads finish
     RegSet                          registerToMerge;
+    ///The set of registers needed to merge after threads finish, but need to track which thread last modified the register
+    RegSet                          registerToConditionalMerge;
     ///The set of free SIMD registers
     RegSet                          freeSIMDRegs;
     ///The set of stack elements needed to merge after threads finish
     std::set<Variable>              stackToMerge;
+    ///The set of stack elements needed to merge after threads finish
+    std::set<Variable>              stackToConditionalMerge;
     ///Four least used registers used in this loop
     ScratchSet                      scratchRegs;
     ///Registers that need to be spilled when using scratch registers

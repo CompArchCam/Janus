@@ -351,6 +351,7 @@ MachineInstruction::isXORself() {
         return true;
     return (opcode == X86_INS_XOR   ||
             opcode == X86_INS_PXOR  ||
+            opcode == X86_INS_XORPS || 
             opcode == X86_INS_XORPD) && opndCount == 2 && operands[0].reg == operands[1].reg;
 }
 
@@ -436,4 +437,75 @@ bool
 MachineInstruction::hasImplicitOperands() {
     if ((opcode == X86_INS_LEA) || (opcode == X86_INS_MOV) || (opcode == X86_INS_MOVSXD)) return false;
     return true;
+}
+
+
+bool
+MachineInstruction::isFPU(){
+    return
+        (opcode == X86_INS_FABS ||
+        opcode == X86_INS_FADD ||
+        opcode == X86_INS_FADDP ||
+        opcode == X86_INS_FBLD ||
+        opcode == X86_INS_FBSTP ||
+        opcode == X86_INS_FCHS ||
+        opcode == X86_INS_FCOM ||
+        opcode == X86_INS_FCOMP ||
+        opcode == X86_INS_FCOMPP ||
+        opcode == X86_INS_FDECSTP ||
+        opcode == X86_INS_FDIV ||
+        opcode == X86_INS_FDIVP ||
+        opcode == X86_INS_FDIVR ||
+        opcode == X86_INS_FDIVRP ||
+        opcode == X86_INS_FFREE ||
+        opcode == X86_INS_FIADD ||
+        opcode == X86_INS_FICOM ||
+        opcode == X86_INS_FICOMP ||
+        opcode == X86_INS_FIDIV ||
+        opcode == X86_INS_FIDIVR ||
+        opcode == X86_INS_FILD ||
+        opcode == X86_INS_FIMUL ||
+        opcode == X86_INS_FINCSTP ||
+        opcode == X86_INS_FIST ||
+        opcode == X86_INS_FISTP ||
+        opcode == X86_INS_FISUB ||
+        opcode == X86_INS_FISUBR ||
+        opcode == X86_INS_FLD ||
+        opcode == X86_INS_FLD1 ||
+        opcode == X86_INS_FLDCW ||
+        opcode == X86_INS_FLDENV ||
+        opcode == X86_INS_FLDL2E ||
+        opcode == X86_INS_FLDL2T ||
+        opcode == X86_INS_FLDLG2 ||
+        opcode == X86_INS_FLDLN2 ||
+        opcode == X86_INS_FLDPI ||
+        opcode == X86_INS_FLDZ ||
+        opcode == X86_INS_FMUL ||
+        opcode == X86_INS_FMULP ||
+        opcode == X86_INS_FNCLEX ||
+        opcode == X86_INS_FNINIT ||
+        opcode == X86_INS_FNOP ||
+        opcode == X86_INS_FNSAVE ||
+        opcode == X86_INS_FNSTCW ||
+        opcode == X86_INS_FNSTENV ||
+        opcode == X86_INS_FNSTSW ||
+        opcode == X86_INS_FPATAN ||
+        opcode == X86_INS_FPREM ||
+        opcode == X86_INS_FPTAN ||
+        opcode == X86_INS_FRNDINT ||
+        opcode == X86_INS_FRSTOR ||
+        opcode == X86_INS_FSCALE ||
+        opcode == X86_INS_FSQRT ||
+        opcode == X86_INS_FST ||
+        opcode == X86_INS_FSTP ||
+        opcode == X86_INS_FSUB ||
+        opcode == X86_INS_FSUBP ||
+        opcode == X86_INS_FSUBR ||
+        opcode == X86_INS_FSUBRP ||
+        opcode == X86_INS_FTST ||
+        opcode == X86_INS_FXAM ||
+        opcode == X86_INS_FXCH ||
+        opcode == X86_INS_FXTRACT ||
+        opcode == X86_INS_FYL2X);
+      
 }

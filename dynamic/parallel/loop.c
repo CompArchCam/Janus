@@ -110,6 +110,65 @@ void loop_init_handler(JANUS_CONTEXT)
     //retrieve thread local storage
     janus_thread_t *local = dr_get_tls_field(drcontext);
 
+    //If we have a conditional jump that jumps or falls through to the loop,
+    //Static Janus will attach the rewrite rule to the jcc instruction
+    //We then add some more jumps to ensure loop init code is executed only
+    //when the jcc would actually go to the loop
+    //Don't do this for regular jumps, since then we want the loop init code before the jmp
+    int trig_opcode = instr_get_opcode(trigger);
+    bool mustRestoreEflags = false;
+    if (instr_is_cbr(trigger))
+    {
+        //This is the case where we jump into the loop via a conditional jump (or pass through into it)
+        //We assemble something like:
+        //A: *save EFLAGS*
+        //B: jcc C
+        //C: *loop init code*
+        //D: *restore EFLAGS*
+        //E: jcc loop (original trigger)
+        //The opcode of B will be inverted from that of E if jumping goes to loop (reg1 == 1)
+        DR_ASSERT_MSG(rule->reg1 == 1 || rule->reg1 == 2, 
+            "PARA_LOOP_INIT is attached to conditional jump, but no information on if jumping or not jumping goes to loop!\n");
+        bool jumpGoesToLoop = (rule->reg1 == 1);
+
+        //We first remove and replace the original trigger jcc instruction
+        //Because then it's located in the DynamoRIO instruction locations with a high address
+        //And is accessible by a 32-bit jump distance from our new jcc instruction
+        instr_t *triggerClone = INSTR_CREATE_jcc(drcontext, instr_get_opcode(trigger), instr_get_target(trigger));
+        instr_set_translation(triggerClone, instr_get_app_pc(trigger));
+        instrlist_replace(bb, trigger, triggerClone);
+        trigger = triggerClone;
+
+        //Now we insert the B jcc
+        instr_t *jumpOver = instr_clone(drcontext, trigger);
+        instr_set_target(jumpOver, opnd_create_instr(trigger));
+        instr_set_translation(jumpOver, 0x0);
+        if (jumpGoesToLoop){
+            instr_invert_cbr(jumpOver);
+        }
+        instrlist_meta_preinsert(bb, trigger, jumpOver);
+        if (instr_is_cti_short(jumpOver))  //We convert any 8-bit jumps to 32-bit jumps
+            instr_convert_short_meta_jmp_to_long(drcontext, bb, jumpOver);
+
+
+        //Now we need to save EFLAGS, which might get modified during the loop init code
+        //So that when we return, the original conditional jump (jcc) swings the same original way
+        PRE_INSERT(bb, trigger,
+            INSTR_CREATE_mov_st(drcontext,
+                                opnd_create_rel_addr(&(local->spill_space.slot6), OPSZ_8),
+                                opnd_create_reg(DR_REG_RAX)));
+        dr_save_arith_flags_to_xax(drcontext, bb, trigger);
+        PRE_INSERT(bb, trigger,
+            INSTR_CREATE_mov_st(drcontext,
+                                opnd_create_rel_addr(&(local->spill_space.slot7), OPSZ_8),
+                                opnd_create_reg(DR_REG_RAX)));
+        PRE_INSERT(bb, trigger,
+            INSTR_CREATE_mov_ld(drcontext,
+                                opnd_create_reg(DR_REG_RAX),
+                                opnd_create_rel_addr(&(local->spill_space.slot6), OPSZ_8)));
+
+        mustRestoreEflags = true;
+    }
 #ifdef JANUS_LOOP_TIMER
     /* Start measuring the loop including loop init */
     dr_save_reg(drcontext, bb, trigger, DR_REG_RAX, SPILL_SLOT_1);
@@ -174,6 +233,23 @@ void loop_init_handler(JANUS_CONTEXT)
     /* Execution will be resumed here after loop execution */
     PRE_INSERT(bb, trigger, returnLabel);
 
+    if (mustRestoreEflags){
+        //Now we restore EFLAGS so that the trigger jcc swings the same way
+        //This is for the case where we jump into the loop via a JCC
+        PRE_INSERT(bb, trigger,
+            INSTR_CREATE_mov_st(drcontext,
+                                opnd_create_rel_addr(&(local->spill_space.slot6), OPSZ_8),
+                                opnd_create_reg(DR_REG_RAX)));
+        PRE_INSERT(bb, trigger,
+            INSTR_CREATE_mov_ld(drcontext,
+                                opnd_create_reg(DR_REG_RAX),
+                                opnd_create_rel_addr(&(local->spill_space.slot7), OPSZ_8)));
+        dr_restore_arith_flags_from_xax(drcontext, bb, trigger);
+        PRE_INSERT(bb, trigger,
+            INSTR_CREATE_mov_ld(drcontext,
+                                opnd_create_reg(DR_REG_RAX),
+                                opnd_create_rel_addr(&(local->spill_space.slot6), OPSZ_8)));
+    }
 #ifdef JANUS_LOOP_TIMER
     /* Start measuring the loop body without loop init */
     dr_save_reg(drcontext, bb, trigger, DR_REG_RAX, SPILL_SLOT_1);
@@ -520,56 +596,155 @@ void loop_iteration_handler(JANUS_CONTEXT)
 #endif
 }
 
+int instr_get_jcc_swapped_opcode(int jccOpcode){
+    //If we swap the operands of a cmp instruction
+    //This is how we need to alter the jcc opcode
+    switch(jccOpcode){
+        case OP_jge:
+            return OP_jle;
+        case OP_jle:
+            return OP_jge;
+        case OP_jae:
+            return OP_jbe;
+        case OP_jbe:
+            return OP_jae;
+        case OP_jl:
+            return OP_jg;
+        case OP_jg:
+            return OP_jl;
+        case OP_ja:
+            return OP_jb;
+        case OP_jb:
+            return OP_ja;
+        default:
+            return jccOpcode; //For jne, je, ...
+    }
+}
+
 void
 loop_update_boundary_handler(JANUS_CONTEXT)
 {
-    int i;
     opnd_t op;
     instr_t *trigger = get_trigger_instruction(bb,rule);
 
 #ifdef JANUS_X86
     loop_t *loop = &(shared->loops[rule->reg1]);
-    JVarProfile profile = loop->variables[rule->reg0];
+    JVarProfile profile = loop->variables[rule->ureg0.down];
+
+    //This signals which operand in the cmp is the induction variable
+    //Need to be careful with cases like
+    // mov rax, inductionreg
+    // cmp rax, checkreg
+    // (tests/correctness/v0/cholesky_d)
+    // Since now only static Janus knows which operand should we modify and which not
+    int inductionVarOpndIndex = rule->ureg0.up; 
 
     reg_id_t s1 = loop->header->scratchReg1;
     reg_id_t s2 = loop->header->scratchReg2;
 
+    if (instr_get_opcode(trigger) == OP_sub){
+        //If we have a sub instruction used for the jcc,
+        //we insert a cmp right after, and set that as the trigger
+        opnd_t checkOpnd;
+        //Here we create the check operand
+        if (profile.induction.check.type == JVAR_CONSTANT){
+            //JAN-41, currently the static analysis outputs a check value one stride less than what we need
+            //TODO: with different jump types, different check values might be needed
+            checkOpnd = opnd_create_immed_int(profile.induction.check.value + profile.induction.stride.value, OPSZ_4);
+        }
+        else{
+            checkOpnd = create_opnd(profile.induction.check);
+        }
+        instr_t *cmp_trigger = INSTR_CREATE_cmp(drcontext, create_opnd(profile.var), checkOpnd);
+        POST_INSERT(bb, trigger, cmp_trigger);
+        inductionVarOpndIndex = 0;
+        trigger = cmp_trigger;
+    }
 #ifdef JANUS_VERBOSE
-    print_profile(&profile);
+    dr_printf("Initial PARA_LOOP_UDPATE_BOUNDS instruction:\n");
+    instr_disassemble(drcontext, trigger, STDOUT);
+    dr_printf("\n");
 #endif
 
     janus_thread_t *local = dr_get_tls_field(drcontext);
     int thread_id = local->id;
+    if (loop->schedule == PARA_DOALL_BLOCK)
+    {
+        if (thread_id == rsched_info.number_of_threads - 1)
+            return; //For the last thread, keep the original loop boundary
+        int num_srcs = instr_num_srcs(trigger);
+        DR_ASSERT_MSG(num_srcs == 2, "PARA_LOOP_UPDATE_BOUNDS on irregular cmp without exactly 2 operands!\n");
+        int checkVarOpndIndex = 1 - inductionVarOpndIndex;
+        op = instr_get_src(trigger, checkVarOpndIndex);
+        if (profile.induction.check.type == JVAR_CONSTANT) {
+            //we need to check the init value
+            
+            if (profile.induction.init.type != JVAR_CONSTANT) {
+                //non-constant induction initiation value means we won't modify the constant in the instruction
+                //change to [TLS, local_check]
 
-    if (loop->schedule == PARA_DOALL_BLOCK) {
-        if (thread_id == rsched_info.number_of_threads-1) return;
-
-        for (i = 0; i < instr_num_srcs(trigger); i++) {
-            op = instr_get_src(trigger, i);
-            if (opnd_is_immed_int(op)) {
-                //we need to check the init value
-                if (profile.induction.init.type != JVAR_CONSTANT) {
-                    //non-constant induction initiation value means we could not modify the immediate
-                    //change to [TLS, local_check]
-                    instr_set_src(trigger, i, opnd_create_base_disp(loop->header->scratchReg1, 0, 0,
-                                                                    LOCAL_CHECK_OFFSET,
-                                                                    opnd_get_size(op)));
-                } else {
-                    int offset = opnd_get_immed_int(op);
-                    //TODO: add cases for variable stride
-                    if (profile.induction.stride.type = JVAR_CONSTANT) {
-                        offset = offset / profile.induction.stride.value;
-                        offset = offset / rsched_info.number_of_threads;
-                        offset = offset * profile.induction.stride.value;
-                        offset = (thread_id + 1) * offset;
-                        instr_set_src(trigger, i, OPND_CREATE_INT32(offset));
-                    }
-                }
-            } else if (opnd_is_memory_reference(op)) {
-                instr_set_src(trigger, i, opnd_create_base_disp(loop->header->scratchReg1, 0, 0,
-                                                                LOCAL_CHECK_OFFSET,
-                                                                opnd_get_size(op)));
+                //JAN-26
+                //To change to the correct memory location operand size, we can't use opnd_get_size(op) if op is constant
+                //Compilers might compare 64bit registers against 32bit values (symm, adi in polybench)
+                //In which case we need to find the operand size of the register (usually the other operand)
+                //Otherwise, DynamoRIO segfaults when encoding the instruction due to different sizes of operands
+                opnd_size_t memory_loc_size;
+                memory_loc_size = opnd_get_size(instr_get_src(trigger, inductionVarOpndIndex)); 
+                instr_set_src(trigger, checkVarOpndIndex, opnd_create_base_disp(loop->header->scratchReg1, 0, 0, LOCAL_CHECK_OFFSET, memory_loc_size));
             }
+            else
+            {
+                //JAN-41, currently the static analysis outputs a check value one stride less than what we need
+                int64_t offset = profile.induction.check.value + profile.induction.stride.value;
+                //TODO: add cases for variable stride
+                if (profile.induction.stride.type = JVAR_CONSTANT)
+                {
+                    if (opnd_is_reg(op) && checkVarOpndIndex == 0){
+                        //This branch (check val constant, but register opnd) can happen as per JAN-59
+                        //In this branch we have a cmp like
+                        //cmp checkreg, inductionreg
+                        //But according to x86 documentation we can't have a cmp like  
+                        //cmp immed, inductionreg
+                        //So we will need to swap the operands of the cmp
+                        //And also invert (jle -> jge, ...) the jcc at the end of the block
+                        instr_t *trigger2 = instr_clone(drcontext, trigger);
+                        instr_set_src(trigger2, 1, instr_get_src(trigger, 0));
+                        instr_set_src(trigger2, 0, instr_get_src(trigger, 1));
+                        checkVarOpndIndex = 1; //Now we need to modify the other operand
+
+                        instr_t *jcc = instrlist_last(bb);
+                        DR_ASSERT_MSG(instr_is_cbr(jcc), "The last instruction in the BB after PARA_LOOP_UPDATE_BOUNDS should be a conditional jump!\n");
+                        instr_set_opcode(jcc, instr_get_jcc_swapped_opcode(instr_get_opcode(jcc)));
+
+                        instrlist_replace(bb, trigger, trigger2);
+                        instr_destroy(drcontext, trigger);
+                        trigger = trigger2;
+                    }
+
+                    //Note: this branch doesn't currently account for different calculations with JL or JG exit instructions
+                    offset -= profile.induction.init.value; //Init is constant, so we calculate the new thread iteration limits right here
+                    offset = offset / profile.induction.stride.value;
+                    offset = offset / rsched_info.number_of_threads;
+                    offset = offset * profile.induction.stride.value;
+                    offset = (thread_id + 1) * offset;
+                    offset += profile.induction.init.value;
+                    instr_set_src(trigger, checkVarOpndIndex, OPND_CREATE_INT32(offset));
+                }
+                else
+                {
+                    DR_ASSERT_MSG(false, "Variable stride not supported in loop_update_boundary_handler!\n");
+                }
+            }
+        } else if (profile.induction.check.type == JVAR_MEMORY || profile.induction.check.type == JVAR_ABSOLUTE) {
+            //For stack check variables, we will modify the value in the thread private stacks, so don't go into this branch
+            //For absolute memory addresses, however, change the operand to [TLS, LOCAL_CHECK_OFFSET]
+            instr_set_src(trigger, checkVarOpndIndex, opnd_create_base_disp(loop->header->scratchReg1, 0, 0,
+                                                            LOCAL_CHECK_OFFSET,
+                                                            opnd_get_size(op)));
+
+        } else {
+            dr_fprintf(STDERR, "Error: PARA_LOOP_UPDATE_BOUNDS rule attached when loop check variable isn't a constant or memory location! Check var:\n");
+            print_var(profile.induction.check);
         }
     } else if (loop->schedule == PARA_DOALL_CYCLIC_CHUNK) {
         if (rule->reg0 == 1)
@@ -578,8 +753,9 @@ loop_update_boundary_handler(JANUS_CONTEXT)
             instr_set_opcode(trigger, OP_jl);
     }
 
-#  ifdef JANUS_LOOP_VERBOSE
-    instr_disassemble(drcontext, trigger,STDOUT);
+#ifdef JANUS_LOOP_VERBOSE
+    dr_printf("Modified PARA_LOOP_UPDATE_BOUNDS instruction:\n");
+    instr_disassemble(drcontext, trigger, STDOUT);
     dr_printf("\n");
 #  endif
 #elif JANUS_AARCH64
@@ -631,6 +807,7 @@ loop_update_boundary_handler(JANUS_CONTEXT)
 }
 
 /** \brief Constructs a dynamic instruction list for loop initialisation */
+//This code is only executed by thread 0
 instrlist_t *
 build_loop_init_instrlist(void *drcontext, loop_t *loop)
 {
@@ -704,6 +881,16 @@ build_loop_init_instrlist(void *drcontext, loop_t *loop)
     /* Step 5: initialise induction variables (only for the main thread tid=0)
      * specified in induct.c */
     emit_init_loop_variables(emit_context, 0);
+
+    /* Step 6: If we have registers for conditional merging, 
+     * clear the written register mask for the thread */
+    //This should be a 64-bit move (if we want to use more than 32 registers)
+    if (loop->header->registerToConditionalMerge){
+        INSERT(bb, trigger, 
+            INSTR_CREATE_mov_imm(drcontext, 
+                                OPND_CREATE_MEM32(TLS, LOCAL_WRITTEN_REGS_OFFSET),
+                                OPND_CREATE_INT32(0)));
+    }
 
     if (loop->schedule == PARA_DOALL_BLOCK) {
 #ifdef JANUS_X86
@@ -881,9 +1068,19 @@ build_thread_loop_init_instrlist(void *drcontext, loop_t *loop, int tid)
      * specified in iterator.c */
     emit_init_loop_variables(emit_context, tid);
 
+    /* Step 3: If we have registers for conditional merging, 
+     * clear the written register mask for the thread */
+    //This should be a 64-bit move (if we want to use more than 32 registers)
+    if (loop->header->registerToConditionalMerge){
+        INSERT(bb, trigger, 
+            INSTR_CREATE_mov_imm(drcontext, 
+                                OPND_CREATE_MEM32(TLS, LOCAL_WRITTEN_REGS_OFFSET),
+                                OPND_CREATE_INT32(0)));
+    }
 #ifdef JANUS_X86
     if (loop->schedule == PARA_DOALL_BLOCK) {
         /* restore s2, s3. We don't use them for block parallelisation */
+        // We need to do this because on MEM_SCRATCH_REG we don't restore s2 or s3!
         INSERT(bb, trigger,
             INSTR_CREATE_mov_ld(drcontext,
                                 opnd_create_reg(s2),
@@ -942,6 +1139,16 @@ build_thread_loop_finish_instrlist(void *drcontext, loop_t *loop, int tid)
     instr_t *trigger = INSTR_CREATE_int1(drcontext);
     APPEND(bb, trigger);
 
+    /* step 0: save s2, s3 during loop finish code */
+    INSERT(bb, trigger,
+        INSTR_CREATE_mov_st(drcontext,
+                            OPND_CREATE_MEM64(TLS, LOCAL_S2_OFFSET),
+                            opnd_create_reg(s2)));
+    INSERT(bb, trigger,
+        INSTR_CREATE_mov_st(drcontext,
+                            OPND_CREATE_MEM64(TLS, LOCAL_S3_OFFSET),
+                            opnd_create_reg(s3)));
+
     /* Step 1: unset loop_on flag */
     INSERT(bb, trigger,
         INSTR_CREATE_mov_st(drcontext,
@@ -949,7 +1156,7 @@ build_thread_loop_finish_instrlist(void *drcontext, loop_t *loop, int tid)
                             OPND_CREATE_INT32(0)));
 
     /* Step 2: save registers to thread private buffer for later merge by the main thread */
-    emit_spill_to_private_register_bank(emit_context, loop->header->registerToMerge, tid);
+    emit_spill_to_private_register_bank(emit_context, loop->header->registerToMerge | loop->header->registerToConditionalMerge, tid);
 
     /* For Janus parallelising threads */
     if (tid != 0) {
@@ -1004,7 +1211,9 @@ build_thread_loop_finish_instrlist(void *drcontext, loop_t *loop, int tid)
         /* Perform an indirect jump to thread pool */
         INSERT(bb, trigger,
             INSTR_CREATE_jmp(drcontext, opnd_create_pc(dr_redirect_native_target(oracle[tid]->drcontext))));
-    } else {
+    }
+    else
+    {
         /* For the main thread */
         /* Step 3.1: wait for other thread to finish */
         emit_wait_threads_finish(emit_context);
@@ -1012,23 +1221,29 @@ build_thread_loop_finish_instrlist(void *drcontext, loop_t *loop, int tid)
         /* Step 3.2: merge variables */
         emit_merge_loop_variables(emit_context);
 
-        /* Step 3.3 Unset start run flag */
+        /* Step 3.3 Unset sequential execution flag 
+        (necessary if just finished executing a loop with fewer iterations than num. of threads) */
+        INSERT(bb, trigger,
+               INSTR_CREATE_mov_imm(drcontext,
+                                    OPND_CREATE_MEM32(TLS, LOCAL_FLAG_SEQ_OFFSET),
+                                    OPND_CREATE_INT32(0)));
+        /* Step 3.4 Unset start run flag */
         INSERT(bb, trigger,
             INSTR_CREATE_mov_st(drcontext,
                                 opnd_create_rel_addr((void *)&(shared->start_run), OPSZ_4),
                                 OPND_CREATE_INT32(0)));
 
-        /* Step 3.4 thread_yield flag */
+        /* Step 3.5 thread_yield flag */
         INSERT(bb, trigger,
             INSTR_CREATE_mov_st(drcontext,
                                 opnd_create_rel_addr((void *)&(shared->need_yield), OPSZ_4),
                                 OPND_CREATE_INT32(1)));
 
-        /* Step 3.5 Restore current stack pointer */
+        /* Step 3.6 Restore current stack pointer */
         if (loop->header->useStack)
             emit_restore_stack_ptr_aligned(emit_context);
 
-        /* Step 3.6 Restore scratch registers */
+        /* Step 3.7 Restore scratch registers */
         INSERT(bb, trigger,
             INSTR_CREATE_mov_ld(drcontext,
                                 opnd_create_reg(s0),
@@ -1041,6 +1256,7 @@ build_thread_loop_finish_instrlist(void *drcontext, loop_t *loop, int tid)
             INSTR_CREATE_mov_ld(drcontext,
                                 opnd_create_reg(s3),
                                 OPND_CREATE_MEM64(TLS, LOCAL_S3_OFFSET)));
+        //NB: TLS (s1) register is restored after returning from here!
         /* Resume normal execution */
         INSERT(bb, trigger,
             INSTR_CREATE_jmp_ind(drcontext, OPND_CREATE_MEM64(TLS, LOCAL_RETURN_OFFSET)));
@@ -1401,6 +1617,75 @@ loop_scratch_register_handler(JANUS_CONTEXT)
 #endif
 }
 
+void
+loop_restore_check_register_handler(JANUS_CONTEXT)
+{
+    int loop_id = rule->reg1;
+    reg_id_t check_reg_id = rule->reg0; //If the RR is used for a check register, this will hold its id
+    loop_t *loop = &(shared->loops[loop_id]);
+
+    reg_id_t s0 = loop->header->scratchReg0;
+    reg_id_t s1 = loop->header->scratchReg1;
+    reg_id_t s2 = loop->header->scratchReg2;
+    reg_id_t s3 = loop->header->scratchReg3;
+
+    reg_id_t reg;
+    int i;
+
+    instr_t *trigger = get_trigger_instruction(bb, rule);
+    instr_t *trigger_next = instr_get_next_app(trigger);
+
+#ifdef JANUS_X86
+    //retrieve thread local storage
+    janus_thread_t *local = dr_get_tls_field(drcontext);
+
+    int read_check = instr_reads_from_reg(trigger, check_reg_id, DR_QUERY_INCLUDE_ALL);
+    //A parallelized loop shouldn't write to its check register
+
+    if (read_check)
+    { //If the loop check register is used in an instruction, we need to restore its original value
+        //Before the instruction
+        //JAN-80, if s1 is check reg, the scratch register handler should do the restoration
+        if (check_reg_id != s1){
+            PRE_INSERT(bb, trigger,
+                    INSTR_CREATE_mov_st(drcontext,
+                                        OPND_CREATE_MEM64(s1, LOCAL_SLOT4_OFFSET),
+                                        opnd_create_reg(check_reg_id)));
+            
+            void *regSpill = (void *)&(shared->registers); //The value we need should have been spilled to the shared register bank
+            PRE_INSERT(bb, trigger,
+                    INSTR_CREATE_mov_ld(drcontext,
+                                        opnd_create_reg(check_reg_id),
+                                        opnd_create_rel_addr(regSpill + (check_reg_id - JREG_RAX) * CACHE_LINE_WIDTH, OPSZ_8)));
+            
+            // After the instruction
+            PRE_INSERT(bb, trigger_next,
+                    INSTR_CREATE_mov_ld(drcontext,
+                                        opnd_create_reg(check_reg_id),
+                                        OPND_CREATE_MEM64(s1, LOCAL_SLOT4_OFFSET)));
+        }
+
+    }
+#elif JANUS_AARCH64
+    DR_ASSERT_MSG(false, "Restore check reg AARCH64 not implemented!\n");
+#endif
+}
+
+void 
+loop_record_reg_write_handler(JANUS_CONTEXT){
+    uint64_t regMask = rule->reg0; //regMask has the registers that will be written to in this BB
+    int loop_id = rule->reg1;
+    loop_t *loop = &(shared->loops[loop_id]);
+
+    reg_id_t s1 = loop->header->scratchReg1;
+    //This should be a 64-bit move (if we want to use more than 32 registers),
+    //but I couldn't get Dynamorio to like it
+    PRE_INSERT(bb, get_trigger_instruction(bb, rule),
+        INSTR_CREATE_or(drcontext, 
+                        OPND_CREATE_MEM32(s1, LOCAL_WRITTEN_REGS_OFFSET),
+                        opnd_create_immed_int(regMask, OPSZ_4)));
+}
+
 //the handler is invoked when an instruction performs a write to scratch registers,
 //we need to spill the scratch registers to scratch slot.
 void
@@ -1607,7 +1892,7 @@ scratch_register_restore_handler(JANUS_CONTEXT)
         if (regMask & get_reg_bit_array(s0)) {
             if (instr_reads_from_reg(trigger, s0, DR_QUERY_INCLUDE_ALL)) {
                 //if the instruction reads s0, we could not use s0 to buffer shared stack pointer
-                DR_ASSERT("s0 is pre-occupied");
+                DR_ASSERT_MSG(false, "s0 is pre-occupied");
             } else {
                 //load s0 using pc-relative load
                 PRE_INSERT(bb, trigger,
@@ -1924,7 +2209,7 @@ loop_subcall_start_handler(JANUS_CONTEXT)
                                 OPND_CREATE_MEM64(s1, LOCAL_S1_OFFSET)));
     } else {
         //not yet implemented
-        DR_ASSERT("Subcall handler not yet implemented");
+        DR_ASSERT_MSG(false, "Subcall handler not yet implemented");
     }
 #elif JANUS_AARCH64
     if (loop->schedule == PARA_DOALL_BLOCK) {
@@ -2018,7 +2303,7 @@ loop_subcall_finish_handler(JANUS_CONTEXT)
                                 opnd_create_rel_addr(&(shared->stack_ptr), OPSZ_8)));
     } else {
         //not yet implemented
-        DR_ASSERT("Subcall handler not yet implemented");
+        DR_ASSERT_MSG(false, "Subcall handler not yet implemented");
     }
 #elif JANUS_AARCH64
     if (loop->schedule == PARA_DOALL_BLOCK) {

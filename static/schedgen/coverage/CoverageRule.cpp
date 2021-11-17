@@ -37,8 +37,22 @@ generateLoopCoverageProfilingRules(JanusContext *gc) {
 	/* PROF_LOOP_START is inserted at all init blocks */
         for(auto bb: loop.init)
         {
-            rule = RewriteRule(PROF_LOOP_START, entry + bb, POST_INSERT);
+            BasicBlock *initBlock = entry+bb;
+            rule = RewriteRule(PROF_LOOP_START, initBlock, POST_INSERT);
             rule.reg0 = loop.id;
+            if (!initBlock->fake && initBlock->lastInstr()->isConditionalJump()){
+                //Check whether the rule will be attached to a conditional jump instruction
+                Instruction *trigger = initBlock->lastInstr();
+                if (trigger->minstr->getTargetAddress() == loop.start->instrs->pc){
+                    //Check whether jumping goes to the loop
+                    rule.reg1 = 1;
+                }
+                else{
+                    //or if not jumping goes to loop
+                    rule.reg1 = 2;
+                }
+
+            }
             insertRule(loop.id, rule, entry + bb);
         }
 

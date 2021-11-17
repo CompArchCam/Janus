@@ -275,12 +275,6 @@ Loop::analyse(JanusContext *gc)
         functions[call].translate();
     }
 
-    /* For profiling, stop here for the current implementation */
-    if (gc->mode == JPROF) {
-        LOOPLOG("========================================================="<<endl<<endl);
-        return;
-    }
-
     /* Step 3: variable analysis (find constant variables) */
     variableAnalysis(this);
 
@@ -462,17 +456,35 @@ Loop::getAbsoluteStorage(VarState *vs)
     if (vs->type == JVAR_CONSTANT) return NULL;
     if (!isConstant(vs)) return NULL;
     if (body.find(vs->block->bid) == body.end())
-        return vs;
+        //If the varstate was defined outside the loop body, then the storage will be constant
+        return vs; 
     if (vs->expr->u.op == Expr::MOV) {
+        //If the varstate was defined by a MOV expression, we examine the source operand
         VarState *vs2 = vs->expr->u.e->vs;
 
         if (vs2) {
-            if (vs2->type == JVAR_CONSTANT)
+            if (vs2->type == JVAR_CONSTANT){
+                //If the source is a constant, this works so we return it
                 return vs2;
-            return getAbsoluteStorage(vs->expr->u.e->vs);
+            }
+            else {
+                //Otherwise, we recursively examine the source operand, 
+                //in hopes of finding the origin operand with constant storage
+                return getAbsoluteStorage(vs->expr->u.e->vs);
+            }
         }
         else return NULL;
     }
+    if (vs->expr->kind == Expr::INTEGER){ 
+        //JAN-59
+        //This covers the case of when vs->expr comes from a lea with an rip relative address
+        //(The RIP relative address gets changed to a constant in the IR)
+        //Since then expr->kind isn't Expr::Unary (with u.op == Expr::MOV)
+        //But instead an Expr::INTEGER, bundled with a scalar value
+        //So now we need to wrap that scalar value in a VarState
+        return new VarState(Variable((uint64_t)vs->expr->i));
+    }
+
     return vs;
 }
 

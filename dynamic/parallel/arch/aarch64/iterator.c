@@ -458,8 +458,6 @@ emit_add_offset_to_all_induction(EMIT_CONTEXT, JVar slice, int tid)
             if (profile->induction.op == UPDATE_ADD) {
                 //add to the current variable
                 emit_add_janus_var(emit_context, profile->var, offset_var, s2, s3);
-            } else if (profile->induction.op == UPDATE_SUB) {
-                DR_ASSERT("induction sub not implemented");
             }
         }
     }

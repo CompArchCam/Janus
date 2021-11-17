@@ -1,0 +1,33 @@
+#!/bin/bash     
+
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Janus Secure Execution"
+    echo "Usage: "
+    echo "./jguard <executable> [executable_args ...]"
+}
+
+if [ $# -lt "1" ]
+then 
+    usage
+    exit
+fi
+
+binfile=$1
+shift
+
+hintfile="$binfile.jrs"
+
+if [ ! -f $binfile ];
+then
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+$JANUSBIN/analyze -s $binfile
+#echo "$TOOLDIR/bin64/drrun -c $JANUSLIB/libjguard.so @$hintfile @1 @0 -- $binfile $*"
+#gdb --args $TOOLDIR/bin64/drrun -c $JANUSLIB/libjguard.so @$hintfile @1 @0 -- $binfile $@
+$TOOLDIR/bin64/drrun -c $JANUSLIB/libjguard.so @$hintfile @1 @0 -- $binfile $@
