@@ -17,6 +17,7 @@ Janus is designed to perform sophisticated modification and optimisation of gene
 ## What will Janus do in the future? ##
 We are working on Janus to make it better and more useful. Our current plans for improvement include:
 
+=======
 * A Domain Specific Language to control binary modification and instrumentation
 * A better binary alias analysis, including interprocedural analysis of memory locations pointed-to;
 * Support for different forms of parallelism and thread-scheduling policies;
@@ -62,8 +63,11 @@ After building, there are several components generated:
 * **bin/analyze**: the static binary analyser;
 * **bin/schedump**: a utility tool to display the content of generated rewrite schedules;
 * **lib/libjpar.so**: a DynamoRIO client library for automatic parallelisation (JPar);
+* **lib/libjvec.so**: a DynamoRIO client library for automatic vectorisation (JVec);
+* **lib/libjpft.so**: a DynamoRIO client library for automatic software prefetch insertion (JPft).
 * **lib/libjvect.so**: a DynamoRIO client library for automatic vectorisation (JVect);
 * **lib/libjfetch.so**: a DynamoRIO client library for automatic software prefetch insertion (JFetch).
+* **lib/libjdll.so**: a DynamoRIO client library for demonstrating instrumentation of .so and dll libraries.
 
 There are a few convenient bash scripts in the **janus** folder.
 
@@ -77,6 +81,7 @@ There are a few convenient bash scripts in the **janus** folder.
 * **janus/plan**: run the dynamic dependence profiler;
 * **janus/plan_train**: run the loop coverage profiler and dynamic dependence profiler together;
 * **janus/run_many.sh**: measure the timing of the input command 10 times.
+* **janus/jdll**: test run for .so and dll instrumentation.
 
 For convenience, you can add these scripts into PATH:
 ```bash
@@ -129,8 +134,11 @@ Option:
   -lc: generate rules for loop coverage profiling
   -fc: generate rules for function coverage profiling (not yet working)
   -pr: generate rules for automatic loop profiling
+  -o: generate rules for single thread optimization (not yet working)
+  -v: generate rules for automatic vectorization (not yet working)
   -f: generate rules for automatic just in time prefetch
   -v: generate rules for automatic vectorization
+  -d: generate rules for testing dll (.so and dynamic loaded library) instrumentation
 ```
 
 For example. you can run the static binary analyser:
@@ -239,3 +247,12 @@ graph exe.proc.ssa
 #print the output pdf
 evince exe.loop.cfg.pdf &
 ```
+### Instrumenting Shared Object (compiled as PIC) Dynamically-Loaded libraries ###
+
+You will have to generate rewrite schedules individually for the main binary and each of the shared-object library modules that you wish to instrument. 
+
+```bash
+analyze -d <binary.so>
+```
+Once separate rewrite schedules ( .jrs files) have been generated for each of the module you want to instrument with janus, you can then run the dynamic client. See dynamic/dll/dll.cpp for an example on how to loadthe rules from rewrite schedules for all the modules.
+**NB: this functionality is currently under test. 

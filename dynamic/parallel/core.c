@@ -74,7 +74,11 @@ dr_init(client_id_t id)
     /* Generate code cache for creating threads as application */
     create_call_func_code_cache();
 
-    IF_VERBOSE(dr_fprintf(STDOUT,"DynamoRIO client initialised\n"));
+    // Allocate the second stack used in parallelization for the main thread
+    // NB: The thread stacks for other threads are allocated when they are created 
+    // For tid 0, we can't do it in the thread handler, because tid 0 needs to first read the .jrs file 
+    janus_allocate_main_thread_stack();
+    IF_VERBOSE(dr_fprintf(STDOUT, "DynamoRIO client initialised\n"));
 }
 
 /* Main execution loop: this will be executed at every initial encounter of new basic block */
@@ -91,12 +95,14 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
 #ifdef JANUS_JITSTM
     //fully dynamic handlers without rewrite rules, only effective in speculative mode
     master_dynamic_speculative_handlers(drcontext, bb);
-#endif
-
+#endif    
+    janus_thread_t *tls = (janus_thread_t *)dr_get_tls_field(drcontext);
     //if it is a normal basic block, then omit it.
     if(rule == NULL) return DR_EMIT_DEFAULT;
 
-    do {
+    bool mustEndTrace = false;
+    do
+    {
 #ifdef JANUS_VERBOSE
         if (rsched_info.mode == JPARALLEL) {
             janus_thread_t *tls = (janus_thread_t *)dr_get_tls_field(drcontext);
@@ -128,6 +134,10 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
                 loop_init_handler(janus_context);
                 break;
             case PARA_LOOP_FINISH:
+                //Any non-0 thread will jump out of this BB midway through 
+                //(at the end of the thread loop finish code the thread jumps to the thread pool)
+                //So following instructions at the comment on dr_redirect_native_target, we must tell DynamoRIO to end the trace here
+                if (tls->id != 0) mustEndTrace = true;
                 loop_finish_handler(janus_context);
                 break;
             case PARA_LOOP_ITER:
@@ -160,6 +170,12 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
             case MEM_SCRATCH_REG:
                 loop_scratch_register_handler(janus_context);
                 break;
+            case MEM_RESTORE_CHECK_REG:
+                loop_restore_check_register_handler(janus_context);
+                break;
+            case MEM_RECORD_REG_WRITE:
+                loop_record_reg_write_handler(janus_context);
+                break;
             case STATS_INSERT_COUNTER:
                 #ifdef JANUS_STATS
                 stats_insert_counter_handler(janus_context);
@@ -172,10 +188,11 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
                 loop_array_bound_record_handler(janus_context);
                 break;
             case TX_START:
-                transaction_start_handler(janus_context);
+                //TODO: JAN-79 Fix STM everything
+                //transaction_start_handler(janus_context);
                 break;
             case TX_FINISH:
-                transaction_finish_handler(janus_context);
+                //transaction_finish_handler(janus_context);
                 break;
 #ifdef JANUS_VECT_SUPPORT
             case VECT_INDUCTION_STRIDE_UPDATE:
@@ -301,7 +318,8 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, b
         }
         //This basic block may be annotated with more rules
         rule = rule->next;
-    }while(rule);
+    } while (rule);
 
-    return DR_EMIT_DEFAULT;
+    if (mustEndTrace) return DR_EMIT_MUST_END_TRACE;
+    else return DR_EMIT_DEFAULT;
 }

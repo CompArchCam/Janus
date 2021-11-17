@@ -37,6 +37,7 @@ loop_info *infos;
 //set<uint32_t> living_loops;
 
 const char *app_name;
+const char *app_full_name;
 
 /*debug symbol information*/
 PCAddress *addrMap;
@@ -62,12 +63,12 @@ void addtoLivingLoops(int data) {  /* add at at the end of list*/
     temp->next= NULL;
     temp->data= data;
     if(head_livingloops==NULL){
-	tail_livingloops=temp;
-	head_livingloops=temp;
+        tail_livingloops=temp;
+        head_livingloops=temp;
     }
     else{
-	tail_livingloops->next = temp;
-	tail_livingloops=temp;
+        tail_livingloops->next = temp;
+        tail_livingloops=temp;
     }
     livingloopsCount++;
 }
@@ -79,11 +80,11 @@ void removeFromLivingLoops(int data) {
     // If head node itself holds the key to be deleted
     if (temp != NULL && temp->data == data)
     {
-	head_livingloops = temp->next;   // Changed head
-	if(head_livingloops= NULL) // was only one node
-	   tail_livingloops = NULL;
-	free(temp);               // free old head
-	return;
+        head_livingloops = temp->next;   // Changed head
+        if(head_livingloops == NULL) // was only one node
+            tail_livingloops = NULL;
+        free(temp);               // free old head
+        return;
     }
      
     // Search for the key to be deleted, keep track of the
@@ -175,7 +176,7 @@ print_debug_info(app_pc addr)
 static void
 coverage_thread_exit(void *drcontext) {
     /* read LoopID to function name mapping information from map.out file*/
-    ifstream in(string(string(app_name)+"_map.out").c_str());
+    ifstream in(string(string(app_full_name)+"_map.out").c_str());
     if(!in){
          std::cerr << "Cannot open the File" << endl;
     }
@@ -199,7 +200,7 @@ coverage_thread_exit(void *drcontext) {
     }
     //FILE output
     stringstream ss;
-    ss << app_name<<".lcov";
+    ss << app_full_name<<".lcov";
     FILE *output = fopen(ss.str().c_str(), "w");
     printf("--------------------------------------------------\n");
     fprintf(output, "--------------------------------------------------\n");
@@ -235,8 +236,50 @@ static void loop_end(int id)
 {
     if(isLivingLoop(id)){
         removeFromLivingLoops(id);
-	infos[id].invocations++;
+        infos[id].invocations++;
     } else infos[id].suspicious = 1;
+}
+static void
+prof_loop_start_handler(JANUS_CONTEXT, PCAddress bbAddr){
+    instr_t *trigger = get_trigger_instruction(bb, rule);
+    if (instr_is_cbr(trigger)){
+        //Here we have the case where we have a conditional jump that either jumps to the loop (rule->reg1 == 1 then)
+        //or execution falls through to the loop (rule->reg1 == 2)
+        //We assemble something like:
+        //A: jcc C
+        //B: *loop_start*
+        //C: jcc loop
+        //The opcode of A will be inverted if jumping goes to loop (reg1 == 1)
+        DR_ASSERT_MSG(rule->reg1 == 1 || rule->reg1 == 2, 
+            "PROF_LOOP_START attached to conditional jump, but rule->reg1 doesn't have right information!\n");
+        
+        if (instr_get_note(trigger) != (void*)1){
+            //We first remove and replace the original trigger jump instruction
+            //Because then it's located in the DynamoRIO instruction locations with a high address
+            //And is accessible by a 32-bit jump distance from our new jcc instruction (A)
+            //(we also check to make sure we replace the trigger only once)
+            instr_t *triggerClone = INSTR_CREATE_jcc(drcontext, instr_get_opcode(trigger), instr_get_target(trigger));
+            instr_set_translation(triggerClone, instr_get_app_pc(trigger));
+            instrlist_replace(bb, trigger, triggerClone);
+            trigger = triggerClone;
+            instr_set_note(trigger, (void*)1);
+        }
+
+        instr_t *jumpOver = instr_clone(drcontext, trigger);
+        instr_set_target(jumpOver, opnd_create_instr(trigger));
+        instr_set_translation(jumpOver, 0x0);
+        if (rule->reg1 == 1){
+            instr_invert_cbr(jumpOver);
+        }
+        instrlist_meta_preinsert(bb, trigger, jumpOver);
+        if (instr_is_cti_short(jumpOver))  //We convert any 8-bit jumps to 32-bit jumps
+            instr_convert_short_meta_jmp_to_long(drcontext, bb, jumpOver);
+
+        dr_insert_clean_call(drcontext, bb, trigger, (void*)loop_start, false, 2, OPND_CREATE_INT32(rule->reg0),OPND_CREATE_INT32(bbAddr));
+    }
+    else {
+        insert_call(loop_start, 2, OPND_CREATE_INT32(rule->reg0),OPND_CREATE_INT32(bbAddr));
+    }
 }
 
 DR_EXPORT void 
@@ -258,12 +301,14 @@ dr_init(client_id_t id)
             printf("WARNING: unable to initialize symbol translation\n");
     }
    /* Initialise timer and register interrupt handling routine*/
-   dr_set_itimer(ITIMER_REAL, 1, timer_handler);
+    dr_set_itimer(ITIMER_REAL, 1, timer_handler);
    
    /* Initialise janus components */
     janus_init(id);
 
     app_name = dr_get_application_name();
+    module_data_t *data = dr_lookup_module_by_name(app_name);
+    app_full_name = data->full_path;
     numLoops = rsched_info.header->numLoops;
     printf("%s contains %d loops for coverage analysis\n",app_name, numLoops);
     //allocate loop info array
@@ -316,7 +361,7 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb,
             split_block_handler(janus_context);
             return DR_EMIT_DEFAULT;
 		case PROF_LOOP_START:
-		    insert_call(loop_start, 2, OPND_CREATE_INT32(rule->reg0),OPND_CREATE_INT32(bbAddr));
+            prof_loop_start_handler(janus_context, bbAddr);
 		    //insert_call(loop_start, 1, OPND_CREATE_INT32(rule->reg0));
 		    break;
 		case PROF_LOOP_ITER:
@@ -346,8 +391,8 @@ timer_handler(void *drcontext, dr_mcontext_t *mcontext){
     if(livingloopsCount) {
         Node* current = head_livingloops;
         while(current != NULL){
-	    infos[current->data].interrupt_count++;
-	    current= current->next;
-	}
+            infos[current->data].interrupt_count++;
+            current= current->next;
+        }
     }
 }

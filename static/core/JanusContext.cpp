@@ -109,8 +109,6 @@ void JanusContext::analyseLoop()
         loop.analyse(this);
     }
 
-    if (mode == JPROF) return;
-
     /* When analysis done for all loops, perform post analysis
      * So we can construct inter-loop relations for further analysis */
     /* Step 6: analyse each loop more in depth (Pass 2) */

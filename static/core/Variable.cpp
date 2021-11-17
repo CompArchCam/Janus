@@ -124,15 +124,27 @@ Variable::Variable(uint32_t reg)
     size = 8;
 }
 
+Variable::Variable(uint64_t val)
+{
+    type = JVAR_CONSTANT;
+    value = val;
+    base = 0;
+    index = 0;
+    scale = 0;
+    shift_value = 0;
+    shift_type = 0;
+    size = 8;
+}
+
 bool
 janus::operator<(const Variable &a, const Variable &b)
 {
     JVarPack v1, v2;
     v1.var = a;
     v2.var = b;
-    //ignore size
-    v1.var.size = 0;
-    v2.var.size = 0;
+    //ignore size for non-stack variables (JAN-72)
+    if (v1.var.type != JVAR_STACK) v1.var.size = 0;
+    if (v2.var.type != JVAR_STACK) v2.var.size = 0;
     if (v1.data1 < v2.data1) return true;
     else if (v1.data1 == v2.data1) {
         if (v1.data2 < v2.data2) return true;
@@ -146,9 +158,9 @@ janus::operator==(const Variable &a, const Variable &b)
     JVarPack v1, v2;
     v1.var = a;
     v2.var = b;
-    //ignore size
-    v1.var.size = 0;
-    v2.var.size = 0;
+    //ignore size for non-stack variables (JAN-72)
+    if (v1.var.type != JVAR_STACK) v1.var.size = 0;
+    if (v2.var.type != JVAR_STACK) v2.var.size = 0;
     return (v1.data1 == v2.data1 && v1.data2 == v2.data2);
 }
 

@@ -265,7 +265,7 @@ insert_function_call_as_application(JANUS_CONTEXT, void *func)
  * within the client.  The address of the function to call will be stored in
  * register r15 and all arguments will already have been put in the correct
  * registers or on the stack.  To get back to DR's code cache, the address to
- * jump back to will be in register rbx.
+ * jump back to will be in register r14.
  */
 void create_call_func_code_cache(void)
 {
@@ -368,25 +368,35 @@ void prepare_for_call(void *drcontext, instrlist_t *bb, instr_t *probe)
     instr_t *instr;
 #ifdef JANUS_X86
     instr = INSTR_CREATE_pushf(drcontext);
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_R11));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_R10));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_R9));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_R8));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_RDI));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_RSI));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_RDX));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_RCX));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_push(drcontext,opnd_create_reg(DR_REG_RAX));
-    PRE_INSERT(bb,probe,instr);
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_R14));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_R13));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_R12));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_R11));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_R10));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_R9));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_R8));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_RBP));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_RDI));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_RSI));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_RDX));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_RCX));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_RBX));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_push(drcontext, opnd_create_reg(DR_REG_RAX));
+    PRE_INSERT(bb, probe, instr);
 #elif JANUS_AARCH64
 
     //instr = instr_create_0dst_1src(drcontext, OP_brk, OPND_CREATE_INT16(0));
@@ -422,26 +432,35 @@ void prepare_for_call(void *drcontext, instrlist_t *bb, instr_t *probe)
 void cleanup_after_call(void *drcontext, instrlist_t *bb, instr_t *probe)
 {
     instr_t *instr;
-#ifdef JANUS_X86
-    
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_RAX));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_RCX));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_RDX));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_RSI));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_RDI));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_R8));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_R9));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_R10));
-    PRE_INSERT(bb,probe,instr);
-    instr = INSTR_CREATE_pop(drcontext,opnd_create_reg(DR_REG_R11));
-    PRE_INSERT(bb,probe,instr);
+#ifdef JANUS_X86 
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_RAX));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_RBX));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_RCX));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_RDX));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_RSI));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_RDI));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_RBP));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_R8));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_R9));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_R10));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_R11));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_R12));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_R13));
+    PRE_INSERT(bb, probe, instr);
+    instr = INSTR_CREATE_pop(drcontext, opnd_create_reg(DR_REG_R14));
+    PRE_INSERT(bb, probe, instr);
     instr = INSTR_CREATE_popf(drcontext);
     PRE_INSERT(bb,probe,instr);
 #elif JANUS_AARCH64

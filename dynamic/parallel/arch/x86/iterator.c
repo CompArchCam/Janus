@@ -3,6 +3,10 @@
 #include "control.h"
 #include "code_gen.h"
 
+#ifdef JANUS_X86
+    #include "janus_x86.h"
+#endif
+
 /** \brief root handlers for initialise a variable */
 static void
 emit_init_variable(EMIT_CONTEXT, int tid, JVarProfile *profile);
@@ -21,7 +25,7 @@ emit_add_offset_to_all_induction(EMIT_CONTEXT, JVar slice, int tid);
 
 /* Move loop upper bound expressions/variables into rax to be divided */
 static void inline
-emit_prepare_loop_upper_bound_in_rax(EMIT_CONTEXT, JVar bound);
+emit_prepare_loop_upper_bound_in_rax(EMIT_CONTEXT, JVar bound, JVar stride);
 
 /* Move loop loer bound expressions/variables into rax to be divided */
 static void inline
@@ -73,6 +77,8 @@ emit_merge_loop_variables(EMIT_CONTEXT)
     if (loop->schedule == PARA_DOALL_BLOCK) {
         //currently simply restore the value from the last thread to the first thread
         emit_restore_from_private_register_bank(emit_context, loop->header->registerToMerge, 0, rsched_info.number_of_threads-1);
+        if (loop->header->registerToConditionalMerge)
+            emit_conditional_merge_loop_variables(emit_context, 0);
     }
 
     PRE_INSERT(bb, trigger, skip);
@@ -95,6 +101,9 @@ emit_init_induction_variable(EMIT_CONTEXT, int tid, JVarProfile *profile)
         emit_init_induction_variable_block(emit_context, tid, profile);
     else if (loop->schedule == PARA_DOALL_CYCLIC_CHUNK)
         emit_init_induction_variable_cyclic(emit_context, tid, profile);
+    else{
+            DR_ASSERT_MSG(false, "Unknown loop schedule type in emit_init_induction_variable!\n");
+    }
 }
 
 static void inline
@@ -109,15 +118,17 @@ emit_init_induction_variable_block(EMIT_CONTEXT, int tid, JVarProfile *profile)
 
     instr_t *skip_label = INSTR_CREATE_label(drcontext);
 
-    /* If the stride, init and check are all immediate constants
-     * simply encode the immediate value to the induction storage for each thread */
+    /* If the stride, init and check are all immediate constants,
+    the constant loop upper bounds per thread have been already updated by modifying the cmp instruction in loop_update_boundary_handler
+    So no need to do anything with [TLS, LOCAL_CHECK_OFFSET] */
+
     if (init.type == JVAR_CONSTANT &&
         stride.type == JVAR_CONSTANT &&
         check.type == JVAR_CONSTANT) {
         //for the main thread, you don't have to do anything
         if (tid == 0) return;
         //then we can simply JIT the value
-        int slice = (check.value - init.value) / stride.value;
+        int64_t slice = (check.value - init.value) / stride.value;
         /* get slice per thread */
         slice = (slice+1) / rsched_info.number_of_threads;
 
@@ -132,8 +143,10 @@ emit_init_induction_variable_block(EMIT_CONTEXT, int tid, JVarProfile *profile)
     /* For the rest of the cases, move upper and lower bound to RAX and RDX
      * We have to use divide operation to get the actual dynamic iteration count
      * the divide instruction requires RAX and RDX to be free */
-    if (TLS == DR_REG_RAX || TLS == DR_REG_RDX) {
-        dr_printf("Janus Error: Conflict uses of TLS, not yet implemented\n");
+
+    if (TLS == DR_REG_RAX || TLS == DR_REG_RDX)
+    {
+        DR_ASSERT_MSG(false, "Janus Error: Conflict uses of TLS, not yet implemented\n");
         exit(-1);
     }
 
@@ -151,7 +164,7 @@ emit_init_induction_variable_block(EMIT_CONTEXT, int tid, JVarProfile *profile)
     emit_privatise_stack_induction_variables(emit_context);
 
     /* For the rest of cases, prepare loop bounds for division */
-    emit_prepare_loop_upper_bound_in_rax(emit_context, check);
+    emit_prepare_loop_upper_bound_in_rax(emit_context, check, stride);
     emit_prepare_loop_lower_bound_in_rdx(emit_context, var);
 
     /* emit code for block division and multiplication of thread id.
@@ -170,8 +183,8 @@ emit_init_induction_variable_block(EMIT_CONTEXT, int tid, JVarProfile *profile)
 
     /* Update the boundary of the current thread */
     //for the last thread, keep the original loop boundary
-    if (tid != rsched_info.number_of_threads-1)
-        emit_update_thread_loop_boundary(emit_context, var, init, stride, check, tid);
+    if (tid != rsched_info.number_of_threads - 1)
+        emit_update_thread_loop_boundary(emit_context, var, var, stride, check, tid);
 
     INSERT(bb, trigger, skip_label);
 }
@@ -370,15 +383,12 @@ emit_add_offset_to_all_induction(EMIT_CONTEXT, JVar slice, int tid)
             if (profile->induction.op == UPDATE_ADD) {
                 //add to the current variable
                 emit_add_janus_var(emit_context, profile->var, offset_var, s3, DR_REG_NULL);
-            } else if (profile->induction.op == UPDATE_SUB) {
-                DR_ASSERT("induction sub not implemented");
             }
         }
     }
 }
 
-static void inline
-emit_prepare_loop_upper_bound_in_rax(EMIT_CONTEXT, JVar bound)
+static void inline emit_prepare_loop_upper_bound_in_rax(EMIT_CONTEXT, JVar bound, JVar stride)
 {
     opnd_t shared_loop_bound;
     opnd_t private_loop_bound;
@@ -387,16 +397,28 @@ emit_prepare_loop_upper_bound_in_rax(EMIT_CONTEXT, JVar bound)
     if (bound.type == JVAR_STACK) {
         shared_loop_bound = create_shared_stack_opnd(bound, s0);
         private_loop_bound = create_opnd(bound);
+
         /* Load the upper bound into RAX */
-        INSERT(bb, trigger,
-            INSTR_CREATE_mov_ld(drcontext,
-                                opnd_create_reg(reg_with_same_width(DR_REG_RAX, shared_loop_bound)),
-                                shared_loop_bound));
+        if (opnd_get_size(shared_loop_bound) == OPSZ_8){
+            INSERT(bb, trigger,
+                INSTR_CREATE_mov_ld(drcontext,
+                                    opnd_create_reg(DR_REG_RAX),
+                                    shared_loop_bound));
+        }
+        else {
+            //If the stack loc is not 64 byte size, move with sign extension to accomodat negative numbers
+            INSERT(bb, trigger,
+                INSTR_CREATE_movsxd(drcontext,
+                                    opnd_create_reg(DR_REG_RAX),
+                                    shared_loop_bound));
+        }
+
         /* Move to private loop bound */
         INSERT(bb, trigger,
             INSTR_CREATE_mov_st(drcontext,
                                 private_loop_bound,
                                 opnd_create_reg(reg_with_same_width(DR_REG_RAX, private_loop_bound))));
+
     } else if (bound.type == JVAR_REGISTER) {
         reg_id_t bound_reg = bound.value;
         /* Load loop bound into rax */
@@ -435,9 +457,48 @@ emit_prepare_loop_upper_bound_in_rax(EMIT_CONTEXT, JVar bound)
         INSERT(bb, trigger,
             INSTR_CREATE_mov_imm(drcontext,
                                 opnd_create_reg(DR_REG_RAX),
-                                OPND_CREATE_INT64(bound.value)));
-    } else {
-        DR_ASSERT("Induction variable loop upper bound not implemented");
+                                    OPND_CREATE_INT64(bound.value+stride.value)));  
+                                    //We need bound+stride, because the static analyzer emitted "check" value (for constants) is 
+                                    //actually one stride lower than the upper bound we require here
+
+        uint32_t jccOpcode = loop->header->jumpInstructionOpcode;
+        if  ((loop->header->jumpingGoesBack && 
+            (jccOpcode == X86_INS_JLE || jccOpcode == X86_INS_JBE || jccOpcode == X86_INS_JGE || jccOpcode == X86_INS_JBE)) || 
+            (!loop->header->jumpingGoesBack && 
+            (jccOpcode == X86_INS_JL || jccOpcode == X86_INS_JB || jccOpcode == X86_INS_JG || jccOpcode == X86_INS_JB))){
+            //If the loop has a JLE instruction (and we jump back to loop start),
+            //the upper bound needs to be further incremented, because we assume it to be 
+            //one stride past the last executed induction variable value
+            //(If we have a JG, but we jump to exit the loop, the same logic applies)
+            dr_printf("Loop has JLE!\n");
+            INSERT(bb, trigger, 
+                INSTR_CREATE_add(drcontext,
+                                    opnd_create_reg(DR_REG_EAX),
+                                    OPND_CREATE_INT32(stride.value)));
+        }
+    }
+    else if (bound.type == JVAR_MEMORY || bound.type == JVAR_ABSOLUTE){
+        dr_printf("Memory bound type -- may be bugs!\n");
+        shared_loop_bound = create_opnd(bound); //Read the memory location value
+
+        /* Load the upper bound into RAX */
+        if (opnd_get_size(shared_loop_bound) == OPSZ_8){
+            INSERT(bb, trigger,
+                INSTR_CREATE_mov_ld(drcontext,
+                                    opnd_create_reg(DR_REG_RAX),
+                                    shared_loop_bound));
+        }
+        else {
+            //If the stack loc is not 64 byte size, move with sign extension to accomodate negative numbers
+            INSERT(bb, trigger,
+                INSTR_CREATE_movsxd(drcontext,
+                                    opnd_create_reg(DR_REG_RAX),
+                                    shared_loop_bound));
+        }
+    }
+    else
+    {
+        DR_ASSERT_MSG(false, "Induction variable loop upper bound not implemented");
         exit(-1);
     }
 }
@@ -449,10 +510,19 @@ emit_prepare_loop_lower_bound_in_rdx(EMIT_CONTEXT, JVar bound)
 
     if (bound.type == JVAR_STACK) {
         /* Load the lower bound into RDX */
-        INSERT(bb, trigger,
-            INSTR_CREATE_mov_ld(drcontext,
-                                opnd_create_reg(reg_with_same_width(DR_REG_RDX, lower_bound)),
-                                lower_bound));
+        if (opnd_get_size(lower_bound) == OPSZ_8){
+            INSERT(bb, trigger,
+                INSTR_CREATE_mov_ld(drcontext,
+                                    opnd_create_reg(DR_REG_RDX),
+                                    lower_bound));
+        }
+        else {
+            //If the stack loc is not 64 byte size, move with sign extension to accomodate negative numbers
+            INSERT(bb, trigger,
+                INSTR_CREATE_movsxd(drcontext,
+                                    opnd_create_reg(DR_REG_RDX),
+                                    lower_bound));
+        }
     } else if (bound.type == JVAR_REGISTER) {
         reg_id_t bound_reg = bound.value;
         /* bound value is spill in private storage */
@@ -494,8 +564,10 @@ emit_prepare_loop_lower_bound_in_rdx(EMIT_CONTEXT, JVar bound)
             INSTR_CREATE_mov_imm(drcontext,
                                 opnd_create_reg(DR_REG_RDX),
                                 OPND_CREATE_INT64(bound.value)));
-    } else {
-        DR_ASSERT("Induction variable loop lower bound not implemented");
+    }
+    else
+    {
+        DR_ASSERT_MSG(false, "Induction variable loop lower bound not implemented");
         exit(-1);
     }
 }
@@ -554,10 +626,14 @@ emit_divide_block_iteration(EMIT_CONTEXT, JVar var, JVar stride, int tid, instr_
      * where not enough threads could be scheduled
      * all parallelising threads need to jump back to thread pool
      * only the main thread proceeds */
+
+    if (stride.type != JVAR_CONSTANT){
+        DR_ASSERT_MSG(false, "Error: non constant stride not supported in emit_divide_block_iteration");
+    }
     INSERT(bb, trigger,
         INSTR_CREATE_cmp(drcontext,
                          opnd_create_reg(DR_REG_RAX),
-                         OPND_CREATE_INT32(rsched_info.number_of_threads)));
+                            OPND_CREATE_INT32(rsched_info.number_of_threads*stride.value)));
     INSERT(bb, trigger,
         INSTR_CREATE_jcc(drcontext, OP_jge,
                          opnd_create_instr(skip_label)));
@@ -587,21 +663,34 @@ emit_divide_block_iteration(EMIT_CONTEXT, JVar var, JVar stride, int tid, instr_
          * However we need to mark flag that we are in the special mode */
         //PRE_INSERT(bb,trigger,INSTR_CREATE_int1(drcontext));
         //we still need to update boundary in case LOOP_UPDATE_BOUND rule
-        /* rax = rax + rdx + 1; recover upper bound */
+        /* rax = rax + rdx; recover upper bound */
         INSERT(bb, trigger,
             INSTR_CREATE_add(drcontext,
                              opnd_create_reg(DR_REG_RAX),
                              opnd_create_reg(DR_REG_RDX)));
-        INSERT(bb, trigger,
-            INSTR_CREATE_inc(drcontext,
-                             opnd_create_reg(DR_REG_RAX)));
+
+        uint32_t jccOpcode = loop->header->jumpInstructionOpcode;
+        if  ((loop->header->jumpingGoesBack && 
+            (jccOpcode == X86_INS_JLE || jccOpcode == X86_INS_JBE || jccOpcode == X86_INS_JGE || jccOpcode == X86_INS_JBE)) || 
+            (!loop->header->jumpingGoesBack && 
+            (jccOpcode == X86_INS_JL || jccOpcode == X86_INS_JB || jccOpcode == X86_INS_JG || jccOpcode == X86_INS_JB))){
+            //If our loop has a JLE instruction, RAX currently stores the value of one stride past what actually gets executed
+            //(This is because we use that to compute number of iterations)
+            //However, for JLE the check value must be exactly the last value with which the loop gets run
+            //So we subtract one stride
+            //(If we have a JG, a jump means we exit the loop, so same logic applies)
+            INSERT(bb, trigger, 
+                INSTR_CREATE_sub(drcontext,
+                                    opnd_create_reg(DR_REG_RAX),
+                                    OPND_CREATE_INT32(stride.value)));
+        }
         /* save [TLS, LOCAL_CHECK] */
         INSERT(bb, trigger,
             INSTR_CREATE_mov_st(drcontext,
                                 OPND_CREATE_MEM64(TLS, LOCAL_CHECK_OFFSET),
                                 opnd_create_reg(DR_REG_RAX)));
 
-        //set local->exited = 1;
+        //set local->sequential_execution = 1;
         INSERT(bb, trigger,
             INSTR_CREATE_xor(drcontext,
                              opnd_create_reg(DR_REG_RAX),
@@ -717,6 +806,7 @@ emit_divide_block_iteration(EMIT_CONTEXT, JVar var, JVar stride, int tid, instr_
 static void inline
 emit_update_thread_loop_boundary(EMIT_CONTEXT, JVar var, JVar init, JVar stride, JVar check, int tid)
 {
+    //Loop slice should be stored in s2 before calling this
     //move the value of induction variable "var" to the check register
     if (check.type == JVAR_REGISTER) {
         //we need to avoid the case where check register is a scratch register
@@ -726,7 +816,12 @@ emit_update_thread_loop_boundary(EMIT_CONTEXT, JVar var, JVar init, JVar stride,
         replace.index = DR_REG_NULL;
         replace.scale = 1;
         replace.size = check.size;
-        if (check.value == s1) {
+        if (check.value == s0){
+            replace.value = LOCAL_S0_OFFSET;
+            emit_move_janus_var(emit_context, replace, var, s3);
+        }
+        else if (check.value == s1)
+        {
             replace.value = LOCAL_S1_OFFSET;
             emit_move_janus_var(emit_context, replace, var, s3);
         } else if (check.type == JVAR_REGISTER && check.value == s2) {
@@ -737,8 +832,11 @@ emit_update_thread_loop_boundary(EMIT_CONTEXT, JVar var, JVar init, JVar stride,
             emit_move_janus_var(emit_context, replace, var, s3);
         } else
             emit_move_janus_var(emit_context, check, var, s3);
-    } else if (check.type == JVAR_CONSTANT && init.type != JVAR_CONSTANT) {
-        //if check is a fixed constant, we can move the induction value to the [TLS, LOCAL_CHECK_OFFSET]
+    }
+    else if (check.type == JVAR_CONSTANT || check.type == JVAR_MEMORY || check.type == JVAR_ABSOLUTE)
+    {
+        //if check is a fixed constant or a memory location, we can move the induction value to the [TLS, LOCAL_CHECK_OFFSET]
+        //Because the PARA_LOOP_UPDATE_BOUNDS rule has changed the cmp instruction to use [TLS, LOCAL_CHECK_OFFSET] instead
         JVar replace;
         replace.type = JVAR_MEMORY;
         replace.base = s1;
@@ -747,9 +845,14 @@ emit_update_thread_loop_boundary(EMIT_CONTEXT, JVar var, JVar init, JVar stride,
         replace.size = var.size;
         replace.value = LOCAL_CHECK_OFFSET;
         emit_move_janus_var(emit_context, replace, var, s3);
-    } else {
+    }
+    else if (check.type == JVAR_STACK)
+    {
         //for stacks, simply move
         emit_move_janus_var(emit_context, check, var, s3);
+    }
+    else{
+        DR_ASSERT_MSG(false, "Unrecognized check variable type in emit_update_thread_loop_boundary\n");
     }
 
     //calculate the stride * slice(s2)
@@ -759,13 +862,31 @@ emit_update_thread_loop_boundary(EMIT_CONTEXT, JVar var, JVar init, JVar stride,
                                      opnd_create_reg(s2),
                                      opnd_create_reg(s2),
                                      OPND_CREATE_INT32(stride.value)));
-    } else if (stride.type == JVAR_REGISTER) {
+        uint32_t jccOpcode = loop->header->jumpInstructionOpcode;
+        if  ((loop->header->jumpingGoesBack && 
+            (jccOpcode == X86_INS_JLE || jccOpcode == X86_INS_JBE || jccOpcode == X86_INS_JGE || jccOpcode == X86_INS_JBE)) || 
+            (!loop->header->jumpingGoesBack && 
+            (jccOpcode == X86_INS_JL || jccOpcode == X86_INS_JB || jccOpcode == X86_INS_JG || jccOpcode == X86_INS_JB))){
+            //If our loop has a JLE (as opposed to a JNE) instruction, we must increase the check value 
+            //by one stride less for each thread
+            //Same logic applies for a JG
+            INSERT(bb, trigger, 
+                INSTR_CREATE_sub(drcontext,
+                                        opnd_create_reg(s2),
+                                        OPND_CREATE_INT32(stride.value)));
+        }
+                                     
+    }
+    else if (stride.type == JVAR_REGISTER)
+    {
         INSERT(bb, trigger,
                INSTR_CREATE_imul(drcontext,
                                  opnd_create_reg(s2),
                                  OPND_CREATE_INT32(stride.value)));
-    } else {
-        DR_ASSERT("Stack stride not implemented\n");
+    }
+    else
+    {
+        DR_ASSERT_MSG(false, "Stack stride not implemented\n");
     }
 
     JVar slice;
@@ -780,7 +901,12 @@ emit_update_thread_loop_boundary(EMIT_CONTEXT, JVar var, JVar init, JVar stride,
         replace.index = DR_REG_NULL;
         replace.scale = 1;
         replace.size = check.size;
-        if (check.value == s1) {
+        if (check.value == s0){
+            replace.value = LOCAL_S0_OFFSET;
+            emit_add_janus_var(emit_context, replace, slice, s3, DR_REG_NULL);
+        }
+        else if (check.value == s1)
+        {
             replace.value = LOCAL_S1_OFFSET;
             emit_add_janus_var(emit_context, replace, slice, s3, DR_REG_NULL);
         } else if (check.type == JVAR_REGISTER && check.value == s2) {
@@ -791,8 +917,10 @@ emit_update_thread_loop_boundary(EMIT_CONTEXT, JVar var, JVar init, JVar stride,
             emit_add_janus_var(emit_context, replace, slice, s3, DR_REG_NULL);
         } else
             emit_add_janus_var(emit_context, check, slice, s3, DR_REG_NULL);
-    } else if (check.type == JVAR_CONSTANT && init.type != JVAR_CONSTANT) {
-        //if check is a fixed constant, we can move the induction value to the [TLS, LOCAL_CHECK_OFFSET]
+    }
+    else if (check.type == JVAR_CONSTANT || check.type == JVAR_MEMORY || check.type == JVAR_ABSOLUTE)
+    {
+        //if check is a fixed constant or memory location, we can now add one slice to the induction variable value in [TLS, LOCAL_CHECK_OFFSET]
         JVar replace;
         replace.type = JVAR_MEMORY;
         replace.base = s1;
@@ -801,8 +929,13 @@ emit_update_thread_loop_boundary(EMIT_CONTEXT, JVar var, JVar init, JVar stride,
         replace.size = var.size;
         replace.value = LOCAL_CHECK_OFFSET;
         emit_add_janus_var(emit_context, replace, slice, s3, DR_REG_NULL);
-    } else {
+    }
+    else if (check.type == JVAR_STACK)
+    {
         //for stacks, simply move
         emit_add_janus_var(emit_context, check, slice, s3, DR_REG_NULL);
+    }
+    else{
+        DR_ASSERT_MSG(false, "Unrecognized check variable type in emit_update_thread_loop_boundary\n");
     }
 }

@@ -45,6 +45,11 @@ emit_spill_to_private_register_bank(EMIT_CONTEXT, uint64_t regMask, int tid);
 void
 emit_restore_from_private_register_bank(EMIT_CONTEXT, uint64_t regMask, int mytid, int readtid);
 
+/** \brief Insert instructions to dynamically find for each register in registerToConditionalMerge, 
+ * which is the last thread that has written to the register, and merge the register from that thread */
+void
+emit_conditional_merge_loop_variables(EMIT_CONTEXT, int mytid);
+
 /** \brief Insert instructions at the trigger to make sure all janus threads are staying in pool */
 void
 emit_wait_threads_in_pool(EMIT_CONTEXT);

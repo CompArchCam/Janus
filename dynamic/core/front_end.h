@@ -13,6 +13,7 @@ extern "C" {
 //Pass in the pointer to number of threads to be updated by the front end
 void janus_init(client_id_t id);
 
+void         load_static_rules(char *rule_path, uint64_t base);
 //Find the corresponding static rule from specified address
 RRule *get_static_rule(PCAddress addr);
 

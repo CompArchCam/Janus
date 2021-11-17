@@ -1,0 +1,8 @@
+title Main Regression Test
+args ARCH
+jpar [2-4] ../units/ARCH/doall_const_bound
+jpar [2-4] ../units/ARCH/doall_var_bound 100000000
+jpar [2-4] ../units/ARCH/doall_stack_bound
+
+#also polytests
+

@@ -40,6 +40,8 @@ typedef struct loop_header {
     uint64_t        registerToCopy;
     /** \brief The set of registers that need to merge from all threads to the main thread after parallelisation */
     uint64_t        registerToMerge;
+    /** \brief The set of registers that need to merge from the last thread that wrote to the register to the main thread */
+    uint64_t        registerToConditionalMerge;
     /** \brief Scratch register 0 (dr_reg_id_t) 
      *
      * s0 is stolen to hold the shared stack pointer value. If the loop does not use stack, it is free. */
@@ -76,6 +78,9 @@ typedef struct loop_header {
     uint32_t        loop_finish_code;
     uint32_t        pre_allocate;
     uint32_t        hasLockArray;
+    uint32_t        jumpInstructionOpcode;
+    /* True if the loop jcc jumps to start a new iteration (false if jumping ends the loop) */
+    uint8_t         jumpingGoesBack; 
 } RSLoopHeader;
 
 #endif

@@ -51,6 +51,9 @@ static void guessCallArgument(Instruction &instr,
                               map<Variable, VarState*> &latestDefs,
                               Function &function);
 
+static void 
+createSuccFromPred(Function &function);
+
 void buildSSAGraph(Function &function) {
 
     /* Step 1: collect variable inputs and outputs for each basic block */
@@ -70,6 +73,9 @@ void buildSSAGraph(Function &function) {
 
     /* Step 3: Link all instruction's input to Phi and outputs */
     linkSSANodes(function);
+
+    /* Step 3.1: From the pred computed in the previous step, create the succ for each varstate */
+    createSuccFromPred(function);
 
     /* Step 4: Assign an id/version for each variable state
      * Used for human readable SSA */
@@ -216,6 +222,14 @@ getOrInitVarState(Variable var,
         function.inputStates[var] = vs;
     }
     return vs;
+}
+
+static void createSuccFromPred(Function &function){
+    for (VarState* vs : function.allStates){
+        for (VarState* vsPred : vs->pred){
+            vsPred->succ.insert(vs);
+        }
+    }
 }
 
 static void

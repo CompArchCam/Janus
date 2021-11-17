@@ -13,6 +13,8 @@ const char *print_janus_mode(JMode mode) {
         case JOPT: return "Automatic Binary Optimiser";
         case JGRAPH: return "Control Flow Graph Generator";
         case JFETCH: return "Automatic software prefetch";
+        case JCUSTOM: return "Custom DSL Execution";
+        case JDLL: return "DLL Instrumentation Testing";
         default: return "Free Mode";
     }
 }
@@ -91,6 +93,8 @@ const char *print_rule_opcode(RuleOp op)
         case MEM_SPILL_REG: return "MEM_SPILL_REG";
         case MEM_RECOVER_REG: return "MEM_RECOVER_REG";
         case MEM_SCRATCH_REG: return "MEM_SCRATCH_REG";
+        case MEM_RESTORE_CHECK_REG: return "MEM_RESTORE_CHECK_REG";
+        case MEM_RECORD_REG_WRITE: return "MEM_RECORD_REG_WRITE";
         case PARA_RECOVER_FLAG: return "PARA_RECOVER_FLAG";
         case PARA_SPILL_FLAG: return "PARA_SPILL_FLAG";
         case PARA_DELETE_INSTR: return "PARA_DELETE_INSTR";

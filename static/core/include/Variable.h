@@ -24,7 +24,7 @@ struct Variable : JVar
     Variable();
     Variable(const JVar &var);
     Variable(uint32_t reg);
-    Variable(uint64_t value);
+    Variable(uint64_t val);
 };
 
 bool operator<(const Variable &a, const Variable &b);
@@ -54,6 +54,10 @@ struct VarState : Variable {
      * For any other type of variable, phi is empty.
      */
     std::set<VarState*>     pred;
+    /** \brief Opposite of pred, contains the varstates that immediately use this varstate 
+     * in their definitions
+     */
+    std::set<VarState*>     succ;
     /** \brief Contains a list of instructions that process this variablestate as one of their 
      *         inputs */
     std::set<Instruction*>  dependants;

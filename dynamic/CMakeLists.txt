@@ -18,7 +18,8 @@ if (NOT DynamoRIO_FOUND)
 endif(NOT DynamoRIO_FOUND)
 
 set(JANUS_API_SRCS
-	${DYN_SRC_DIR}/core/front_end.c
+	${DYN_SRC_DIR}/core/front_end.cpp
+	#${DYN_SRC_DIR}/core/front_end.c
 	${DYN_SRC_DIR}/core/handler.c
     ${DYN_SRC_DIR}/core/code_gen.c
     ${REWRITE_RULE_SOURCES}
@@ -38,11 +39,15 @@ include_directories(${DYN_INC_PATH})
 add_subdirectory(parallel)
 #profiler
 add_subdirectory(coverage)
+#Cinnamon DSL
+add_subdirectory(dsl)
 #timer
 if (JANUS_X86_SUPPORT)
 add_subdirectory(prefetcher)
 #automatic vector
 add_subdirectory(vector)
 add_subdirectory(planner)
+#DLL
+add_subdirectory(dll)
 endif()
 

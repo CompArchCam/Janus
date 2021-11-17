@@ -79,9 +79,12 @@ extern int emulate_pc;
 extern int instrumentation_switch;
 extern uint64_t total_program_cycles;
 extern const char *app_name;
+extern const char *app_full_name;
 extern plan_profmode_t profmode;
 extern int iThreshold;
 extern int nThreshold;
+extern bool stopDependencyChecks;
+
 #ifdef __cplusplus
 }
 #endif

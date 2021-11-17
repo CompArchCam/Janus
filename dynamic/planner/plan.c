@@ -4,25 +4,32 @@
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <sys/time.h>
 /* Planner header */
 #include "plan.h"
 #define REG_S1 DR_REG_RSI
 #define REG_S2 DR_REG_RDI
 
 #define N_THRESHOLD 10
-#define I_THRESHOLD 100
+#define I_THRESHOLD 10000
+#define TIME_THRESHOLD_MS 10000
 
 plan_t command_buffer[MAX_ALLOWED_COMMAND];
 plan_t *commands;
 const char *app_name;
+const char *app_full_name;
 int emulate_pc;
 int instrumentation_switch;
 uint64_t total_program_cycles = 0;
 uint64_t total_loop_cycles = 0;
 plan_profmode_t profmode;
-bool external_call_on = false; /*flag to check if shared lib profiling is enabled*/
-int iThreshold;		       /* Cut threshold for number of iterations for DOALL_LIGHT mode*/
-int nThreshold;		       /* Cut threshold for number of invocations for LIGHT mode*/
+
+bool external_call_on = false;     /*flag to check if shared lib profiling is enabled*/
+int iThreshold;                    /* Cut threshold for number of iterations  in DOALL_LIGHT mode*/
+int nThreshold;                    /* Cut threshold for number of invocations in DOALL_LIGHT mode*/
+int timeThreshold;                 /* Cut threshold for total execution time  in DOALL_LIGHT mode in miliseconds*/
+bool stopDependencyChecks = false; /* Flag which is checked every iteration, for when to stop dependency checks */
+                                   /* Set on after timeThreshold miliseconds by timer_handler */
 
 static dr_emit_flags_t
 event_basic_block(void *drcontext, void *tag, instrlist_t *bb,
@@ -34,6 +41,9 @@ static void generate_planner_events(JANUS_CONTEXT, app_pc addr);
 static void generate_events_by_rule(JANUS_CONTEXT, instr_t *instr);
 static void generate_memory_events(JANUS_CONTEXT, instr_t *instr);
 static void generate_shared_lib_events(JANUS_CONTEXT, app_pc addr);
+
+static void
+timer_handler(void *drcontext, dr_mcontext_t *mcontext); //timer interrupt handling routine
 
 DR_EXPORT void 
 dr_init(client_id_t id)
@@ -50,39 +60,61 @@ dr_init(client_id_t id)
     /* Initialise GABP components */
     janus_init(id);
     app_name = dr_get_application_name();
+    module_data_t *data = dr_lookup_module_by_name(app_name);
+    app_full_name = data->full_path;
 
     /*Get the profiling from PROF_MODE environment variable (otherwise set to default mode)*/
-    char * pMode = getenv("PROF_MODE");
-    if (pMode!=NULL){
-	if(strcmp(pMode,"DOALL") ==0)
-	    profmode=DOALL;
-	else if(strcmp(pMode,"DOALL_LIGHT") == 0)
+    char *pMode = getenv("PROF_MODE");
+    if (pMode != NULL)
+    {
+        if (strcmp(pMode, "DOALL") == 0)
+            profmode = DOALL;
+        else if (strcmp(pMode, "DOALL_LIGHT") == 0)
 	    profmode = DOALL_LIGHT;
-	else if(strcmp(pMode,"FULL") == 0)
+        else if (strcmp(pMode, "FULL") == 0)
 	    profmode = FULL;
-	else if(strcmp(pMode,"LIGHT")==0)
-	    profmode= LIGHT;
-	else{ 
+        else if (strcmp(pMode, "LIGHT") == 0)
+            profmode = LIGHT;
+        else
+        {
 	    printf("Invalid profile mode specified. PROF_MODE can be DOALL,DOALL_LIGHT, LIGHT and FULL\n");
 	    exit(0);
 	}
-        printf ("The profiling  mode is: %s\n",pMode);
+        printf("The profiling  mode is: %s\n", pMode);
     }
-    else{
-        printf ("No profiling mode specified. Default mode is DOALL_LIGHT\n");
-	profmode=DOALL_LIGHT;
+    else
+    {
+        printf("No profiling mode specified. Default mode is DOALL_LIGHT\n");
+        profmode = DOALL_LIGHT;
     }
 
     /* Get the values of iThreshold and nThreshold from environment variable (otherwise set to default)*/
-    iThreshold = getenv("ITHRESHOLD")!=NULL ? atoi(getenv("ITHRESHOLD")) : I_THRESHOLD;
-    nThreshold = getenv("NTHRESHOLD")!=NULL ? atoi(getenv("NTHRESHOLD")) : N_THRESHOLD;
+    iThreshold = getenv("ITHRESHOLD") != NULL ? atoi(getenv("ITHRESHOLD")) : I_THRESHOLD;
+    nThreshold = getenv("NTHRESHOLD") != NULL ? atoi(getenv("NTHRESHOLD")) : N_THRESHOLD;
+    timeThreshold = getenv("TIME_THRESHOLD") != NULL ? atoi(getenv("TIME_THRESHOLD")) : TIME_THRESHOLD_MS;
 
-    if(rsched_info.mode != JPROF) {
-        dr_fprintf(STDOUT,"Static rules not intended for %s!\n",print_janus_mode(rsched_info.mode));
+    //For DOALL_LIGHT profiling, in addition to iteration thresholds we also impose a maximum time for execution
+    if (profmode == DOALL_LIGHT)
+    {
+        dr_set_itimer(ITIMER_REAL, timeThreshold, timer_handler);
+    }
+
+    if (rsched_info.mode != JPROF)
+    {
+        dr_fprintf(STDOUT, "Static rules not intended for %s!\n", print_janus_mode(rsched_info.mode));
         return;
     }
 
     emulator_init();
+}
+
+/* This will be executed when the execution time has exceeded timeThreshold in DOALL_LIGHT mode */
+/* DynamoRIO advises against doing any IO or anything big in this function! */
+static void
+timer_handler(void *drcontext, dr_mcontext_t *mcontext)
+{
+    //dr_printf("Time limit exceeded, stopping the planner!\n");
+    stopDependencyChecks = true;
 }
 
 static void
@@ -93,7 +125,10 @@ emulator_init()
     instrumentation_switch = 0;
 
     /* start plan */
-    planner_start(rsched_info.channel ,rsched_info.number_of_threads);
+#ifdef PLANNER_VERBOSE
+    printf("Running planner with %d threads\n", rsched_info.number_of_threads);
+#endif
+    planner_start(rsched_info.channel, rsched_info.number_of_threads);
 }
 
 static void
@@ -117,7 +152,8 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb,
 
     if (rule)
         generate_planner_events(janus_context, bbAddr);
-    else if(external_call_on){
+    else if (external_call_on)
+    {
     	generate_shared_lib_events(janus_context, bbAddr);
      }
     return DR_EMIT_DEFAULT;
@@ -144,26 +180,40 @@ generate_planner_events(JANUS_CONTEXT, app_pc addr)
     {
         current_pc = instr_get_app_pc(instr);
         /* Firstly, check whether this instruction is attached to static rules */
-        while (rule) {
-            if ((app_pc)rule->pc == current_pc) {
+        while (rule)
+        {
+            if ((app_pc)rule->pc == current_pc)
+            {
 #ifdef PLANNER_VERBOSE
                 thread_print_rule(0, rule);
 #endif
                 generate_events_by_rule(janus_context, instr);
-            } else
+                if (rule->opcode == APP_SPLIT_BLOCK)
+                {
+                    break; //The APP_SPLIT_BLOCK handler deletes all remaining instructions in the instrlist,
+                           //if we have another rule at the current instruction, we don't want to process it now
+                           //(it will be processed when the handler for the split off basic block is called)
+                           //Possible bug: What if we've already processed a rule for the current instruction, and then find an APP_SPLIT_BLOCK?
+                           //depends on the order of rule processing.
+                }
+            }
+            else
                 break;
             rule = rule->next;
         }
-	if(external_call_on){ /* if it is a memory access within shared lib, no rules attached so generate memory events explicitly*/
-           int instr_opcode  = instr_get_opcode(instr);
-           if(instr_reads_memory(instr) || instr_writes_memory(instr) ){
+        if (external_call_on)
+        { /* if it is a memory access within shared lib, no rules attached so generate memory events explicitly*/
+            int instr_opcode = instr_get_opcode(instr);
+            if (instr_reads_memory(instr) || instr_writes_memory(instr))
+            {
 	      generate_memory_events(janus_context, instr);
 	   }
 	}
-        last = instr;
     }
 
     /* Generate a clean call at the end of block to execute from the command buffer */
+    last = instrlist_last(bb); //Need to do this, because in the case of an APP_SPLIT_BLOCK, 
+                               // the last processed instruction will be deleted in the handler
     dr_insert_clean_call(drcontext, bb, last, planner_execute, false, 1, OPND_CREATE_INT32(emulate_pc));
 }
 static void

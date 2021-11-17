@@ -1,6 +1,8 @@
 #ifndef _JANUS_ARCH_X86_
 #define _JANUS_ARCH_X86_
 
+#include "../../static/capstone/include/capstone/x86.h"
+
 /** \brief Register mappings used by static analyser/dynamic translator
  * this map also the same as DynamoRIO mappings */
 enum {

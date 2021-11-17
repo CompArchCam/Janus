@@ -9,6 +9,7 @@ const char *print_janus_mode(JMode mode) {
         case GTIME: return "Dynamic Loop Timer";
         case GLTIME: return "Accurate Loop Timer";
         case GPROFILE: return "Runtime Profiler";
+        case JCUSTOM: return "Custom tool with Cinnamon DSL";
         case GCTRACE: return "Dynamic Procedure Tracer";
         default: return "Free Mode";
     }

@@ -211,6 +211,7 @@ liftOpcode(MachineInstruction *minstr)
             case X86_INS_FSUBP:
                 return Instruction::Sub;
             //mul
+            case X86_INS_MUL:
             case X86_INS_IMUL:
             case X86_INS_MULSD:
             case X86_INS_MULPD:
@@ -219,6 +220,7 @@ liftOpcode(MachineInstruction *minstr)
             case X86_INS_VMULSS:
                 return Instruction::Mul;
             //div
+            case X86_INS_DIV:
             case X86_INS_IDIV:
             case X86_INS_DIVSD:
             case X86_INS_DIVSS:
@@ -240,6 +242,8 @@ liftOpcode(MachineInstruction *minstr)
                 return Instruction::AShr;
             //and
             case X86_INS_AND:
+            case X86_INS_ANDPD:
+            case X86_INS_ANDPS:
                 return Instruction::And;
             //or
             case X86_INS_OR:
@@ -250,6 +254,7 @@ liftOpcode(MachineInstruction *minstr)
             case X86_INS_XORPD:
             case X86_INS_VXORPS:
             case X86_INS_VXORPD:
+            case X86_INS_XORPS:
                 return Instruction::Xor;
             //mov
             case X86_INS_MOV:
@@ -259,18 +264,39 @@ liftOpcode(MachineInstruction *minstr)
             case X86_INS_MOVAPD:
             case X86_INS_MOVSD:
             case X86_INS_MOVSS:
+            case X86_INS_MOVSX:
+            case X86_INS_MOVSXD:
             case X86_INS_VMOVSS:
             case X86_INS_VMOVAPS:
             case X86_INS_CVTSI2SD:
             case X86_INS_CVTSI2SS:
-            case X86_INS_MOVSXD:
+            case X86_INS_CVTTSS2SI:
+            case X86_INS_CVTDQ2PD:
+            case X86_INS_CVTDQ2PS:
+            case X86_INS_CVTPD2DQ:
+            case X86_INS_CVTPD2PS:
+            case X86_INS_CVTPS2DQ:
+            case X86_INS_CVTPS2PD:
+            case X86_INS_CVTSD2SI:
+            case X86_INS_CVTSD2SS:
+            case X86_INS_CVTSS2SD:
+            case X86_INS_CVTSS2SI:
+            case X86_INS_CVTTPD2DQ:
+            case X86_INS_CVTTPS2DQ:
+            case X86_INS_CVTTSD2SI:
             case X86_INS_MOVZX:
             case X86_INS_MOVDQA:
             case X86_INS_MOVDQU:
             case X86_INS_MOVUPD:
             case X86_INS_MOVUPS:
+            case X86_INS_MOVLPS:
+            case X86_INS_MOVABS:
+            case X86_INS_MOVHLPS:
+            case X86_INS_MOVHPD:
+            case X86_INS_MOVHPS:
             case X86_INS_UNPCKLPD:
             case X86_INS_CDQE:
+            case X86_INS_CDQ:
             //conditional move
             case X86_INS_CMOVA:
             case X86_INS_CMOVAE:
@@ -343,7 +369,7 @@ static void liftInstruction(Instruction &instr, Function *function)
 
     for(int i=0; i<minstr->opndCount; i++)
     {
-        Variable var = minstr->operands[i].lift(instr.pc);
+        Variable var = minstr->operands[i].lift(instr.pc + instr.minstr->size);
         //record this variable
         function->allVars.insert(var);
         //add outputs to the instruction
@@ -367,7 +393,9 @@ static void liftInstruction(Instruction &instr, Function *function)
 
     //imul
     if ((minstr->opcode == X86_INS_IMUL ||
-         minstr->opcode == X86_INS_IDIV) && minstr->opndCount == 1) {
+         minstr->opcode == X86_INS_IDIV ||
+         minstr->opcode == X86_INS_MUL  ||
+         minstr->opcode == X86_INS_DIV) && minstr->opndCount == 1) {
         //implicit EAX:EDX output
         Variable var((uint32_t)JREG_RAX);
         VarState *vs = new VarState(var, block, &instr);
@@ -386,6 +414,10 @@ static void liftInstruction(Instruction &instr, Function *function)
         VarState *vs = new VarState(var, block, &instr);
         function->allStates.insert(vs);
         instr.outputs.push_back(vs);
+        Variable var2((uint32_t)JREG_XMM0);
+        vs = new VarState(var2, block, &instr);
+        function->allStates.insert(vs);
+        instr.outputs.push_back(vs);
     }
 
     //push or pop
@@ -397,7 +429,7 @@ static void liftInstruction(Instruction &instr, Function *function)
         if (minstr->opcode == X86_INS_POP) {
             for(int i=0; i<minstr->opndCount; i++)
             {
-                Variable var = minstr->operands[i].lift(instr.pc);
+                Variable var = minstr->operands[i].lift(instr.pc + instr.minstr->pc);
                 vs = new VarState(var, block, &instr);
                 function->allStates.insert(vs);
                 instr.outputs.push_back(vs);
@@ -415,7 +447,7 @@ static void liftInstruction(Instruction &instr, Function *function)
 
     else if (minstr->opcode == X86_INS_MOVDQU ||
              minstr->opcode == X86_INS_MOVDQA) {
-        Variable var = minstr->operands[0].lift(instr.pc);
+        Variable var = minstr->operands[0].lift(instr.pc + instr.minstr->pc);
         minstr->operands[0].access = OPND_WRITE;
         minstr->operands[1].access = OPND_READ;
         VarState *vs = new VarState(var, block, &instr);
@@ -432,7 +464,7 @@ void getInstructionInputs(janus::MachineInstruction *minstr, vector<Variable> &v
     {
         if (minstr->operands[i].access == OPND_READ ||
             minstr->operands[i].access == OPND_READ_WRITE) {
-            Variable var = minstr->operands[i].lift(minstr->pc);
+            Variable var = minstr->operands[i].lift(minstr->pc + minstr->size);
             v.push_back(var);
         }
     }
@@ -461,6 +493,8 @@ void getInstructionInputs(janus::MachineInstruction *minstr, vector<Variable> &v
     else if (minstr->isReturn()) {
         Variable var((uint32_t)JREG_RAX);
         v.push_back(var);
+        Variable var2((uint32_t)JREG_XMM0);
+        v.push_back(var2);
     }
 
     else if (minstr->opcode == X86_INS_CDQ ||
@@ -478,7 +512,7 @@ void getInstructionInputs(janus::MachineInstruction *minstr, vector<Variable> &v
     }
     else if (minstr->opcode == X86_INS_MOVDQU ||
              minstr->opcode == X86_INS_MOVDQA) {
-        Variable var = minstr->operands[1].lift(minstr->pc);
+        Variable var = minstr->operands[1].lift(minstr->pc + minstr->size);
         v.push_back(var);
     }
 }
