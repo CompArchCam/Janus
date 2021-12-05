@@ -27,6 +27,9 @@ We are working on Janus to make it better and more useful. Our current plans for
 Janus is still a prototype and although we fix any bugs we find, we cannot guarantee fault-free execution or the same parallelisation performance on binaries other than those we have tested on.  However, we expect that other binaries (especially those that are small and simple) will give similar speed-ups to those we have seen.
 We welcome anyone to contribute to this project and help make this tool more useful. Please contact [Ruoyu Zhou](https://www.cl.cam.ac.uk/~rkz20/)  or [Timothy Jones](https://www.cl.cam.ac.uk/~tmj32/) if you have questions.
 
+### This branch ###
+Warning, this branch contains an experimental version of the Cinnamon DSL that inlines the added code (rather than using clean calls) and adds support for modifying instructions.  Since it is experimental, the syntax of the DSL is in flux and may change without notice, and some features may not work correctly.
+
 ## Components ##
 ### Analyze ###
 A static binary analyser that examines input binaries and identifies opportunities for optimisation. It then encodes the transformation in a domain-specific rewrite schedule.

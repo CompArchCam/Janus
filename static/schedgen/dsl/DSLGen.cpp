@@ -19,17 +19,20 @@ generateCustomRules(JanusContext *jc) {
 	ruleGenerationTemplate(*jc);
 }
 template<> void 
-insertCustomRule<Instruction>(int ruleID, Instruction &comp, int trigger, bool attach_data, int data ){
+insertCustomRule<Instruction>(int ruleID, Instruction &comp, int trigger, bool attach_data, int data0, uint64_t data1){
     Instruction &instr = comp;
     RewriteRule rule; 
     switch(trigger){	
         case BEFORE:
             if(instr.block){
             rule= RewriteRule((RuleOp)ruleID, instr.block->instrs->pc, instr.pc, instr.id);
-            if(attach_data)  
-                rule.reg0 = data;
-            else
+            if(attach_data){  
+                rule.reg0 = data0;
+                rule.reg1 = data1;
+            } else {
                 rule.reg0 = 0;
+                rule.reg1 = 0;
+            }
             insertRule(0, rule, instr.block);
             }
         break;
@@ -37,10 +40,13 @@ insertCustomRule<Instruction>(int ruleID, Instruction &comp, int trigger, bool a
             if(instr.opcode == Instruction::Call /*|| instr.opcode == Instruction::DirectBranch*/){
                 if(instr.block && instr.block->succ1){
                     rule = RewriteRule((RuleOp)ruleID, instr.block->succ1, POST_INSERT);
-                    if(attach_data)  
-                        rule.reg0 = data;
-                    else
+                    if(attach_data){  
+                        rule.reg0 = data0;
+                        rule.reg1 = data1;
+                    } else {
                         rule.reg0 = 0;
+                        rule.reg1 = 0;
+                    }
                     insertRule(0, rule, instr.block);
                 }
             }
@@ -52,17 +58,20 @@ insertCustomRule<Instruction>(int ruleID, Instruction &comp, int trigger, bool a
    }
 }
 template<> void 
-insertCustomRule<Function>(int ruleID, Function &comp, int trigger, bool attach_data, int data){
+insertCustomRule<Function>(int ruleID, Function &comp, int trigger, bool attach_data, int data0, uint64_t data1){
     Function &func = comp;
     RewriteRule rule; 
     if(!func.entry || !func.minstrs.size()) return;
     switch(trigger){
         case ENTRY:
             rule = RewriteRule((RuleOp)ruleID, func.entry, PRE_INSERT);
-            if(attach_data)  
-                rule.reg0 = data;
-            else
+            if(attach_data){  
+                rule.reg0 = data0;
+                rule.reg1 = data1;
+            } else {
                 rule.reg0 = 0;
+                rule.reg1 = 0;
+            }
             insertRule(0, rule, func.entry);
         break;
         case EXIT:
@@ -70,10 +79,13 @@ insertCustomRule<Function>(int ruleID, Function &comp, int trigger, bool attach_
                 BasicBlock &bb = func.blocks[retID];
                 if (bb.lastInstr()->opcode == Instruction::Return) {
                     rule = RewriteRule((RuleOp)ruleID, &bb, PRE_INSERT);
-                    if(attach_data)  
-                        rule.reg0 = data;
-                    else
+                    if(attach_data){  
+                        rule.reg0 = data0;
+                        rule.reg1 = data1;
+                    } else {
                         rule.reg0 = 0;
+                        rule.reg1 = 0;
+                    }
                     insertRule(0, rule, &bb);
                 }
             }
@@ -85,7 +97,7 @@ insertCustomRule<Function>(int ruleID, Function &comp, int trigger, bool attach_
     }
 }
 template<> void 
-insertCustomRule<BasicBlock>(int ruleID, BasicBlock &comp, int trigger, bool attach_data, int data){
+insertCustomRule<BasicBlock>(int ruleID, BasicBlock &comp, int trigger, bool attach_data, int data0, uint64_t data1){
     BasicBlock &bb = comp;
     RewriteRule rule; 
     int instrID;
@@ -94,19 +106,25 @@ insertCustomRule<BasicBlock>(int ruleID, BasicBlock &comp, int trigger, bool att
             /*get first instruction of basic block*/
             instrID = bb.startInstID;
             rule = RewriteRule((RuleOp)ruleID, &bb, PRE_INSERT);
-            if(attach_data) 
-                rule.reg0 = data;
-            else
+            if(attach_data){  
+                rule.reg0 = data0;
+                rule.reg1 = data1;
+            } else {
                 rule.reg0 = 0;
+                rule.reg1 = 0;
+            }
             insertRule(0, rule, &bb);
         break;
         case EXIT:
             instrID = bb.endInstID;
             rule = RewriteRule(PROF_CALL_START,&bb, POST_INSERT);
-            if(attach_data)  
-                rule.reg0 = data;
-            else
+            if(attach_data){  
+                rule.reg0 = data0;
+                rule.reg1 = data1;
+            } else {
                 rule.reg0 = 0;
+                rule.reg1 = 0;
+            }
             insertRule(0, rule, &bb);
         break;
         default:
@@ -115,38 +133,45 @@ insertCustomRule<BasicBlock>(int ruleID, BasicBlock &comp, int trigger, bool att
    
 }
 template<> void 
-insertCustomRule<Loop>(int ruleID, Loop &comp, int trigger, bool attach_data, int data){
+insertCustomRule<Loop>(int ruleID, Loop &comp, int trigger, bool attach_data, int data0, uint64_t data1){
     Loop &loop = comp;
     RewriteRule rule; 
     switch(trigger){	
         case ENTRY:
             for(auto bb: loop.init){
                 rule = RewriteRule((RuleOp)ruleID, loop.parent->entry + bb, POST_INSERT);
-                if(attach_data) { 
-                    rule.reg0 = data;
-                }
-                else
+                if(attach_data){  
+                    rule.reg0 = data0;
+                    rule.reg1 = data1;
+                } else {
                     rule.reg0 = 0;
+                    rule.reg1 = 0;
+                }
                 insertRule(loop.id, rule, loop.parent->entry + bb);
             }
         break;
         case EXIT:
             for(auto bb: loop.exit){
                 rule = RewriteRule((RuleOp)ruleID, loop.parent->entry + bb, POST_INSERT);
-                if(attach_data) { 
-                    rule.reg0 = data;
-                }
-                else
+                if(attach_data){  
+                    rule.reg0 = data0;
+                    rule.reg1 = data1;
+                } else {
                     rule.reg0 = 0;
+                    rule.reg1 = 0;
+                }
                 insertRule(loop.id, rule, loop.parent->entry + bb);
             }
         break;
         case ITER:
                 rule = RewriteRule((RuleOp)ruleID, loop.start, PRE_INSERT);
-                if(attach_data)  
-                    rule.reg0 = data;
-                else
+                if(attach_data){  
+                    rule.reg0 = data0;
+                    rule.reg1 = data1;
+                } else {
                     rule.reg0 = 0;
+                    rule.reg1 = 0;
+                }
                 insertRule(loop.id, rule, loop.start);
 
         break;

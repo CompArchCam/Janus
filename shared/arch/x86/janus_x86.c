@@ -1,5 +1,6 @@
 /* x86 specific analysis in C */
 #include "janus_arch.h"
+#include "janus_x86.h"
 
 static const char *regNameMaps[] =
 {

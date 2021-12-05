@@ -8,8 +8,12 @@ using namespace std;
 /*--- Global Var Decl End ---*/
 
 /*--- Function Global Declaration Start ---*/
+#include <fstream>
+#include <iostream>
+void func_1();
 
 /*--- Function Global Declaration Finish ---*/
 void exit_routine();
 void init_routine();
+bool inRegSet(uint64_t bits, uint32_t reg);
 #endif

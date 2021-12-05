@@ -12,6 +12,10 @@
 //Modification: JANUS code generators
 #include "code_gen.h"
 
+#ifdef JANUS_X86
+#include "dr_ir_macros_x86.h" 
+#endif
+
 ///Global meta information of the rewrite schedule
 extern RSchedInfo rsched_info;
 ///Enable Janus just in time transactional memory in x86-64 mode
