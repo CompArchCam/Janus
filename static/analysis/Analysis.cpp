@@ -205,10 +205,12 @@ variableAnalysis(janus::Loop *loop)
                 loop->checkVars.find(ldpPair.first) != loop->checkVars.end()) {
             loop->privateVars.insert(ldpPair.first);
             loop->privateVars.insert(ldpPair.second);
-            for(auto &vs : loop->initVars) {
-                if (*(Variable *)vs == ldpPair.first || *(Variable *)vs == ldpPair.second) {
-                    loop->initVars.erase(vs);
+
+            for (auto vsIter = loop->initVars.begin(); vsIter != loop->initVars.end()){
+                if (*(Variable *)(*vsIter) == ldpPair.first || *(Variable *)(*vsIter) == ldpPair.second) {
+                    loop->initVars.erase(vsIter++);
                 }
+                else ++vsIter;
             }
             JVarProfile profile1;
             profile1.var = ldpPair.first;

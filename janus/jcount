@@ -1,0 +1,31 @@
+#!/bin/bash     
+
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Janus PC/Address Counter"
+    echo "Usage: "
+    echo "./jcount <address> <executable> [executable_args ...]"
+}
+
+if [ $# -lt "1" ]
+then 
+    usage
+    exit
+fi
+
+address=$1
+shift
+
+binfile=$1
+shift
+
+if [ ! -f $binfile ];
+then
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+$TOOLDIR/bin64/drrun -c $JANUSLIB/libjcount.so @$address -- $binfile $@

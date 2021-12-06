@@ -5,6 +5,10 @@
 #include "IO.h"
 #include <vector>
 
+#ifdef JANUS_X86
+#include "janus_x86.h"
+#endif
+
 #ifdef JANUS_VECT_SUPPORT
 #include "VECT_rule_structs.h"
 #include "VectRule.h"
@@ -79,11 +83,35 @@ prepareLoopHeader(JanusContext *gc, Loop &loop)
     header.loopStartAddr = loop.start->instrs->pc;
     header.registerToCopy = loop.registerToCopy.bits;
     header.registerToMerge = loop.registerToMerge.bits;
+    header.registerToConditionalMerge = loop.registerToConditionalMerge.bits;
     /* Scratch register (4 provided) */
     header.scratchReg0 = loop.scratchRegs.regs.reg0;
     header.scratchReg1 = loop.scratchRegs.regs.reg1;
     header.scratchReg2 = loop.scratchRegs.regs.reg2;
     header.scratchReg3 = loop.scratchRegs.regs.reg3;
+
+    if (loop.check.size() > 1){
+        fprintf(stderr, "Loop has multiple check blocks, jumpInstructionOpcode probably not correct!\n");
+    }
+    for (auto checkID: loop.check) {
+        BasicBlock &checkBlock = loop.parent->entry[checkID];
+        //get the last conditional jump, a check block is always conditional jump
+        Instruction *cjump = checkBlock.lastInstr();
+        std::cout << *cjump << endl;
+        header.jumpInstructionOpcode = cjump->minstr->opcode;
+        header.jumpingGoesBack = (cjump->minstr->getTargetAddress() == loop.start->instrs->pc); //Look whether the jcc jumps to loop start
+    }
+#ifdef JANUS_X86
+    //In dynamic/parallel/arch/x86 emit_init_induction_variable_block we currently require that s1 is not RAX or RDX
+    if (header.scratchReg1 == JREG_RAX || header.scratchReg1 == JREG_RDX){
+        if (header.scratchReg0 != JREG_RAX && header.scratchReg0 != JREG_RDX){ //Try swapping s0 and s1
+            swap(header.scratchReg0, header.scratchReg1); 
+        }
+        else{ //If s1 and s0 are RAX and RDX, swap s1 and s2
+            swap(header.scratchReg1, header.scratchReg2);
+        }
+    }
+#endif 
 
     //if it has ancestors, it means the loop is an inner loop
     if (loop.ancestors.size())
@@ -144,6 +172,19 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
         BasicBlock *bb = entry + bid;
         rule = RewriteRule(PARA_LOOP_INIT, bb, POST_INSERT);
         rule.reg0 = loop.header.id;
+        if (!bb->fake && bb->lastInstr()->isConditionalJump()){
+            //Check whether the rule will be attached to a conditional jump instruction
+            Instruction *trigger = bb->lastInstr();
+            if (trigger->minstr->getTargetAddress() == loop.start->instrs->pc){
+                //Check whether jumping goes to the loop
+                rule.reg1 = 1;
+            }
+            else{
+                //or if not jumping goes to loop
+                rule.reg1 = 2;
+            }
+
+        }
         insertRule(id, rule, bb);
     }
 
@@ -162,6 +203,9 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
     rule.reg0 = loop.header.id;
     insertRule(id, rule, loop.start);
 
+    RegSet checkRegisters;            //We use these for MEM_RESTORE_CHECK_REG rule insertion
+    std::set<Instruction*> cmpInstrs; //
+
     /* Update check conditions */
     for (auto checkID: loop.check) {
         BasicBlock &checkBlock = loop.parent->entry[checkID];
@@ -174,46 +218,73 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
                 cmpInstr = vi->lastModified;
             }
         }
+
+        cmpInstrs.insert(cmpInstr);
+
         if (!cmpInstr) {
             cerr<<"error in finding compare instruction for cjump "<<*cjump<<endl;
             continue;
         }
-        Variable checkVar;
-        Variable inductionVar;
-        Variable condition;
+
+        Variable checkVar; //This is the check variable obtained from the induction variable
+        Variable inductionVar; //This is the induction var in the cmp instruction
+        Variable condition; //This is obtained as the non-induction var operand in the cmp instruction
         Iterator *iter = NULL;
         bool found = false;
+        int inductionVarOpndIndex = -1; //This stores which operand in the cmp instruction is the induction variable
+                                        //Used when handling PARA_LOOP_UPDATE_BOUNDS
+        int i = 0;
         for (auto phi: cmpInstr->inputs) {
             if (phi->expr && phi->expr->expandedLoopForm) {
                 iter =  phi->expr->expandedLoopForm->hasIterator(&loop);
                 if (iter) {
-                    checkVar = (Variable)*phi;
+                    //We retrieve checkVar from the main iterator
+                    if (iter->checkState) checkVar = (Variable)*(iter->checkState);
                     inductionVar = (Variable)*(iter->vs);
+                    inductionVarOpndIndex = i;
                     found = true;
                 }
             }
-            else if (loop.isConstant(phi)) {
+            if (loop.isConstant(phi)) {
+                //Is this branch redundant?
                 condition = (Variable)*phi;
             }
+            i++;
         }
+        //JAN-59
+        //There are scenarios like:
+        //mov rax, 0x10
+        //cmp inductionreg, rax
+        //In this case, the static analysis will determine (with Loop::getAbsoluteStorage) that 
+        //the check value is 0x10, not rax
+        //So we use that, instead of the second operand of the instruction
+        if (checkVar.type != JVAR_UNKOWN) condition = checkVar;
+        if (condition.type == JVAR_REGISTER) checkRegisters.insert(condition.value);
+
         if (!found) {
             //cerr<<"Loop "<<loop.id<<" compare instruction does not contain induction variable, quit rule generation"<<endl;
             //we relax this condition since this would never be a constant bound
             break;
         }
 
-        //if condition is immediate, then update the immediate
-        if (condition.type == JVAR_CONSTANT) {
+        if (condition.type == JVAR_UNKOWN){
+            cerr << "Loop condition variable unknown!" << endl;
+        }
+        //if condition is a constant or memory location, then emit a rewrite rule to alter the cmp instruction at runtime
+        if (condition.type == JVAR_CONSTANT || condition.type == JVAR_MEMORY || condition.type == JVAR_ABSOLUTE) {
             rule = RewriteRule(PARA_UPDATE_LOOP_BOUND, cmpInstr->block->instrs->pc, cmpInstr->pc, cmpInstr->id);
             int var_index = 0;
-            rule.reg0 = var_index;
-            rule.reg1 = loop.header.id;
+
             for (auto var: loop.encodedVariables) {
                 Variable test = var.var;
                 if (test == inductionVar)
                     break;
                 var_index++;
             }
+
+            rule.ureg0.down = var_index;
+            rule.ureg0.up = inductionVarOpndIndex;
+            rule.reg1 = loop.header.id;
             insertRule(id, rule, cmpInstr->block);
         }
     }
@@ -222,21 +293,46 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
     bool useStack = false;
     for (auto bid: loop.body) {
         BasicBlock *bb = entry + bid;
+        //Which of the conditional merge registers have been written to in this block
+        uint64_t blockWrittenCondMergeRegs = 0;
 
-        if (loop.spillRegs.bits) {
-            for (int i=0; i<bb->size; i++) {
-                Instruction &instr = bb->instrs[i];
-                //skip function call
-                if (instr.opcode == Instruction::Call) continue;
+        for (int i=0; i<bb->size; i++) {
+            Instruction &instr = bb->instrs[i];
+            //skip function call
+            if (instr.opcode == Instruction::Call) continue;
 
-                if (loop.spillRegs.bits & instr.regReads.bits ||
-                    loop.spillRegs.bits & instr.regWrites.bits) {
-                    /* Insert MEM_SCRATCH_REG */
-                    rule = RewriteRule(MEM_SCRATCH_REG, bb->instrs->pc, instr.pc, instr.id);
-                    rule.reg1 = loop.header.id;
-                    insertRule(id,rule,bb);
-                }
+            if (loop.spillRegs.bits & instr.regReads.bits ||
+                loop.spillRegs.bits & instr.regWrites.bits) {
+                /* Insert MEM_SCRATCH_REG */
+                rule = RewriteRule(MEM_SCRATCH_REG, bb->instrs->pc, instr.pc, instr.id);
+                rule.reg1 = loop.header.id;
+                insertRule(id,rule,bb);
             }
+
+            //If an instruction uses the loop check register and is not a cmp
+            //we want the original check value, not our modified one
+            //so we insert a MEM_RESTORE_CHECK_REG rule
+            //If the same instruction also gets a MEM_SCRATCH_REG, dynamically it's processed before,
+            //so that if the check reg is a scratch reg, the MEM_RESTORE_CHECK_REG value stays
+            if ((checkRegisters.bits & instr.regReads.bits) && 
+                instr.opcode != Instruction::Compare) {        
+                rule = RewriteRule(MEM_RESTORE_CHECK_REG, bb->instrs->pc, instr.pc, instr.id);
+                //reg0 contains the check register id that we need to spill
+                rule.reg0 = (checkRegisters & instr.regReads).getNextLowest(JREG_RAX); //The regset should contain only one register
+                rule.reg1 = loop.header.id;
+                insertRule(id,rule,bb);
+            }
+
+            if (loop.registerToConditionalMerge.bits & instr.regWrites.bits){
+                //reg0 contains the register id that is written to
+                blockWrittenCondMergeRegs |= (loop.registerToConditionalMerge.bits & instr.regWrites.bits);
+            }
+        }
+        if (blockWrittenCondMergeRegs){
+            rule = RewriteRule(MEM_RECORD_REG_WRITE, bb->instrs->pc, bb->instrs->pc, bb->instrs->id);
+            rule.reg0 = blockWrittenCondMergeRegs;
+            rule.reg1 = loop.header.id;
+            insertRule(id,rule,bb);
         }
 
 

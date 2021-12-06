@@ -18,6 +18,7 @@ bool is_type(VarState* elem, _jvar_type type){
     else
         return false;
 }
+
 void writeToFile(fstream &file, uintptr_t val ){
     file<<val<<endl;
 }
@@ -27,6 +28,7 @@ void writeToFile(fstream &file, std::string val ){
 void writeToFile(fstream &file, char* val ){
     file<<val<<endl;
 }
+
 std::string 
 get_target_name(Instruction &instr){
     std::string trgname;
@@ -68,6 +70,7 @@ int get_opcode(Instruction *instr){
     }
     return instr->opcode;
 }
+
 VarState*
 get_input(Instruction &instr, int index){
     return instr.inputs[index];

@@ -147,10 +147,14 @@ void planner_new_loop_iteration()
     if (!shared.loop_on) return;
 
     if (current_core) {
-        /* Switch to the next thread */
+        /* Switch to the next thread
+         * For every new iteration, switch the core.
+         * Round Robin of iterations assignment to cores.
+         * Core represents a thread.
+         * */
         current_core = current_core->next;
         shared.current_iteration++;
-	current_DepSet.clear();
+        current_DepSet.clear();
     } else {
         current_core = cores;
         shared.current_iteration = 0;
@@ -159,14 +163,19 @@ void planner_new_loop_iteration()
     current_core->clear();
     
     if(profmode==DOALL_LIGHT){
-	if(shared.current_iteration >= iThreshold && shared.dep_found == false){ //Only profile for first N iterations
-	    /* screen output */
-	    shared.loop_on = false;
-            shared.total_iteration += (shared.current_iteration);
-            shared.total_invocation++;
-	    planner_summarize(cout);
-	    exit(0);
-	}
+        if((shared.total_invocation >= nThreshold && 
+            shared.total_iteration+shared.current_iteration >= iThreshold) ||
+            stopDependencyChecks){ //Check if we've either run the loop for the required number of iterations of invocations
+                                   //or the StopDependecyChecks flag is on (set when allowed time has run out)
+                if (shared.dep_found == false){
+                    // screen output 
+                    shared.loop_on = false;
+                    shared.total_iteration += (shared.current_iteration);
+                    shared.total_invocation++;
+                    planner_summarize(cout);
+                    exit(0);
+            }
+        }
     }
 #ifdef PLANNER_VERBOSE
     cout <<endl<<"Loop iteration "<<shared.current_iteration<<" begins"<<endl;
@@ -183,15 +192,17 @@ void planner_finish_loop()
     shared.total_iteration += (shared.current_iteration+1);
 
 #ifdef PLANNER_VERBOSE
-    cout <<endl<<"Loop finishes"<<endl;
+    cout <<endl<<"Loop finishes, total invocations so far: " << shared.total_invocation <<endl;
 #endif
     instrumentation_switch = 0;
-    if(profmode==LIGHT){
-	if(shared.total_invocation >= nThreshold){ //Only profile for first N invocations
-	    /* screen output */
-	    planner_summarize(cout);
-	    exit(0);
-	}
+    if(profmode==DOALL_LIGHT){
+        //in DOALL_LIGHT, we break after at least nThreshold invocations AND iThreshold total iterations
+        //or when stopDependencyChecks is true (when we've run out of time)
+        if((shared.total_invocation >= nThreshold && shared.total_iteration >= iThreshold) || stopDependencyChecks){  
+            /* screen output */
+            planner_summarize(cout);
+            exit(0);
+        }
     }
 }
 /* Main execution loop for planner */
@@ -214,7 +225,7 @@ void planner_execute(int command_size)
                     planner_read(command.addr, command.pc, command.size);
                     planner_write(command.addr, command.pc, command.size);
                 }
-		addr_map[command.pc] = command.v_pc; /*application PC to be used for symbol debug information*/
+                addr_map[command.pc] = command.v_pc; /*application PC to be used for symbol debug information*/
                 shared.total_memory_access++;
             break;
             case CM_LOOP_START:
@@ -235,12 +246,12 @@ void planner_execute(int command_size)
                 printf("Dynamic operation not recognised %d\n", op);
             break;
         }
-	if(profmode == DOALL || profmode == DOALL_LIGHT){
-	    if(shared.dep_found){
-		cout<< "Loop "<<shared.loop_id << ": cross memory dependences found - not a dynamic DOALL"<<endl; 
-		exit(0);
-	    }
-	}
+        if(profmode == DOALL || profmode == DOALL_LIGHT){ 
+            if(shared.dep_found){
+                cout<< "Loop "<<shared.loop_id << ": cross memory dependences found - not a dynamic DOALL"<<endl; 
+                exit(0);
+            }
+        }
     }
     /* Reset pc */
     emulate_pc = 0;
@@ -286,9 +297,6 @@ void Core::read(addr_t addr, pc_t pc, int size)
     addr = addr - addr % GRANULARITY;
     auto query = memory.find(addr);
     /* Cross iteration dependences */
-    //  memory.end() - Returns an iterator pointing to the past-the-end element in the unordered_map container (1) or in one of its buckets (2).
-    // Checking if the address was already analysed in this iteration. If yes, then no need to check previous iterations.
-    // - If it is a new memory location in this iteration, proceed with the check of the previous iterations.
     if (query == memory.end()) {
         /* Not found in current core, search for previous core */
         Core *check = prev;
@@ -298,12 +306,12 @@ void Core::read(addr_t addr, pc_t pc, int size)
                 Unit &entry = (*query2).second;
                 if (entry.write_pc) {
                     /* Record this dependence */
-		    shared.dep_found= true;
-		    if(profmode == DOALL || profmode == DOALL_LIGHT) return; //no further analysis needed
-		    if(!current_DepSet.count(make_pair(pc, entry.write_pc))){ //skip adding the pair if already there in the same iteration
-		       (crossDDG[pc])[entry.write_pc]++;
-		       current_DepSet.insert(make_pair(pc, entry.write_pc));
-		    }
+                    shared.dep_found= true;
+                    if(profmode == DOALL || profmode == DOALL_LIGHT) return; //no further analysis needed
+                    if(!current_DepSet.count(make_pair(pc, entry.write_pc))){ //skip adding the pair if already there in the same iteration
+                        (crossDDG[pc])[entry.write_pc]++;
+                        current_DepSet.insert(make_pair(pc, entry.write_pc));
+                    }
                 }
                 break;
             }
@@ -315,8 +323,32 @@ void Core::read(addr_t addr, pc_t pc, int size)
 
 void Core::write(addr_t addr, pc_t pc, int size)
 {
-    if (!shared.loop_on || !current_core) return;
+    if (!shared.loop_on || !current_core) return; //Not sure what this is about
     addr = addr - addr % GRANULARITY;
+    int check_round = ((int)shared.current_iteration > (int)shared.num_of_threads) ? shared.num_of_threads : shared.current_iteration;
+    auto query = memory.find(addr);
+    /* Cross iteration dependences */
+    if (query == memory.end()) {
+        /* Not found in current core, search for previous core */
+        Core *check = prev;
+        for (int i=0; i<check_round; i++) {
+            auto query2 = check->memory.find(addr);
+            if (query2 != check->memory.end()) {
+                Unit &entry = (*query2).second;
+                if (entry.write_pc || entry.read_pc) { //Check for WAW and WAR
+                    /* Record this dependence */
+                    shared.dep_found= true;
+                    if(profmode == DOALL || profmode == DOALL_LIGHT) return; //no further analysis needed
+                    if(!current_DepSet.count(make_pair(pc, entry.write_pc))){ //skip adding the pair if already there in the same iteration
+                        (crossDDG[pc])[entry.write_pc]++;
+                        current_DepSet.insert(make_pair(pc, entry.write_pc));
+                    }
+                }
+                break;
+            }
+            check = check->prev;
+        }
+    }
     memory[addr].write_pc = pc;
 }
 
@@ -368,8 +400,8 @@ print_debug_info(ostream &os, app_pc addr)
     module_data_t *data;
     data = dr_lookup_module(addr);
     if (data == NULL) {
-	os<<"NO MODULE FOUND"<<endl;
-	return;
+        os<<"NO MODULE FOUND"<<endl;
+        return;
     }
     sym.struct_size = sizeof(sym);
     sym.name = name;
@@ -406,23 +438,23 @@ static void planner_summarize(ostream &os)
         os <<"Loop "<<shared.loop_id<<" was not executed during this run." <<endl;
     os << "Cross Iteration Memory Dependences: "<<crossDDG.size()<<endl;
     if(profmode ==DOALL || profmode == DOALL_LIGHT){
-	if(!crossDDG.size()){
-	    ofstream selectFile;
-	    std::string str(app_name);
-	    selectFile.open(str + ".loop.select", ios::app);
-	    selectFile << shared.loop_id << " 1" <<endl;
-	    selectFile.close();
-	}
+        if(!crossDDG.size()){
+            ofstream selectFile;
+            std::string str(app_full_name);
+            selectFile.open(str + ".loop.select", ios::app);
+            selectFile << shared.loop_id << " 1" <<endl;
+            selectFile.close();
+        }
     }
     for (auto ddgmap:crossDDG) {
         for (auto pair:ddgmap.second) {
             os <<dec<<ddgmap.first<<" -> "<<pair.first<<" ratio: "<<(float)pair.second/(float)shared.total_iteration<<endl;
             os<<"Dependency pair: <";
-	    print_debug_info(os, (app_pc)addr_map[ddgmap.first]);
-	    os<<" , ";
-	    print_debug_info(os, (app_pc)addr_map[pair.first]);
-	    os<<" >"<<endl; 
-	}
+            print_debug_info(os, (app_pc)addr_map[ddgmap.first]);
+            os<<" , ";
+            print_debug_info(os, (app_pc)addr_map[pair.first]);
+            os<<" >"<<endl; 
+        }
     }
 }
 
@@ -466,7 +498,7 @@ static void print_addr(bool read, addr_t addr, int id, pc_t pc)
     if (addr < NUM_OF_REGS)
         cout <<print_reg_name(addr)<<dec<<" ";
     else
-        cout <<hex<<"0x"<<addr<<" ";
+        cout <<hex<<"0x"<<addr<<" " <<dec;
     cout <<endl;
 }
 

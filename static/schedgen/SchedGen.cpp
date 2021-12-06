@@ -4,6 +4,7 @@
 #include "SchedGenInt.h"
 //#include "OptRule.h"
 #include "ParaRule.h"
+#include "dllRule.h"
 #include "CoverageRule.h"
 #include "DSLGen.h"
 #ifdef JANUS_X86
@@ -69,11 +70,17 @@ generateRules(JanusContext *gc)
     case JPROF:
         generateLoopPlannerRules(gc);
         break;
+    //case JSECURE:
+        //generateSecurityRule(gc);
+        //break;
     case JFETCH:
         generatePrefetchRules(gc);
         break;
     case JCUSTOM:
         generateCustomRules(gc);
+        break;
+    case JDLL:
+        generateDLLRules(gc);
         break;
     default:
         break;
@@ -222,11 +229,11 @@ RuleCluster::remove(RewriteRule &rule)
     PCAddress addr = rule.blockAddr;
     auto &ruleSet = ruleMap[addr];
 
-    for (auto oRule : ruleSet) {
-        if (oRule.ruleAddr == rule.ruleAddr) {
-            ruleSet.erase(oRule);
+    for (auto oRuleIter = ruleSet.begin(); oRuleIter != ruleSet.end() ; ){
+        if (oRuleIter->ruleAddr == rule.ruleAddr) {
+            ruleSet.erase(oRuleIter++);
         }
-
+        else ++oRuleIter;
     }
 }
 
@@ -255,7 +262,7 @@ RewriteRule::RewriteRule(RuleOp op, BasicBlock *block, bool pre_insert)
             ruleAddr = block->succ1->instrs->pc;
             id = block->succ1->instrs->id;
         }
-        //for post insert, it the instruction is a jump, then insert before the jump
+        //for post insert, if the instruction is a jump, then insert before the jump
         else {
             ruleAddr = block->lastInstr()->pc;
             id = block->lastInstr()->id;

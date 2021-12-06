@@ -208,6 +208,8 @@ set(SCHEDGEN_SOURCES
     #cinnamon dsl extension
     schedgen/dsl/DSLGen.cpp
     schedgen/dsl/StaticGenCode.cpp
+    #dll -
+    schedgen/dll/dllRule.cpp
     #schedgen/vector/FindInduction.cpp
     #schedgen/vector/MemoryCheck.cpp
     #schedgen/vector/FindReduction.cpp
@@ -224,7 +226,9 @@ set(SCHEDGEN_INCLUDE
     schedgen/vector/
     schedgen/prefetch/
     schedgen/plan/
+    schedgen/security
     schedgen/dsl/
+    schedgen/dll/
 )
 
 set(SCHEDUMP_SOURCES

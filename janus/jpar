@@ -7,13 +7,22 @@ source $my_dir/janus_header
 function usage {
     echo "Janus Binary Paralleliser"
     echo "Usage: "
-    echo "./jpar <number_of_threads> <executable> [executable_args ...]"
+    echo "./jpar [-t] <number_of_threads> <executable> [executable_args ...]"
+    echo "-t : do not run janus under linux time command"
 }
 
 if [ $# -lt 2 ]
 then 
   usage
   exit
+fi
+
+
+with_time=1
+if [[ $1 = "-t" ]];
+then
+    with_time=0
+    shift
 fi
 
 numthreads=$1
@@ -43,4 +52,10 @@ fi
 
 echo "Starting Janus Paralleliser"
 echo "$TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads -- $binfile $*"
-time $TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads @1 -- $binfile $@
+
+if [[ $with_time = 1 ]]; then
+    time $TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads @1 -- $binfile $@
+else
+    $TOOLDIR/bin64/drrun $JFLAGS -c $JANUSLIB/libjpar.so @$hintfile @$numthreads @1 -- $binfile $@
+fi
+

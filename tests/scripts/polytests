@@ -1,0 +1,5 @@
+title Polybench Test
+jpar [2-4] ../polybench/arm-gcc/2mm
+jpar [2-4] ../polybench/arm-gcc/3mm
+jpar [2-4] ../polybench/arm-gcc/correlation
+

@@ -11,6 +11,7 @@ static void usage()
     cout<<"  -a: static analysis without generating rules"<<endl;
     cout<<"  -c: generate custom analysis and rules from Cinnamon DSL"<<endl;
     cout<<"  -cfg: generate CFG from the binary"<<endl;
+    cout<<"  -s: generate rules for secure execution"<<endl;
     cout<<"  -p: generate rules for automatic parallelisation"<<endl;
     cout<<"  -f: generate rules for automatic prefetch"<<endl;
     cout<<"  -lc: generate rules for loop coverage profiling"<<endl;
@@ -19,6 +20,7 @@ static void usage()
     cout<<"  -pr -noshared: generate rules for automatic loop profiling & disable shared library profiling"<<endl;
     cout<<"  -o: generate rules for single thread optimisation"<<endl;
     cout<<"  -v: generate rules for automatic vectorisation"<<endl;
+    cout<<"  -d: generate rules for testing dll instrumentation"<<endl;
 }
 
 int main(int argc, char **argv) {
@@ -78,7 +80,9 @@ int main(int argc, char **argv) {
                 }
                 break;
             case 'v': mode = JVECTOR; IF_VERBOSE(cout<<"Loop vectorisation enabled"<<endl); break;
+            case 's': mode = JSECURE; IF_VERBOSE(cout<<"Secure execution enabled"<<endl); break;
             case 'o': mode = JOPT; IF_VERBOSE(cout<<"Binary optimiser mode enabled"<<endl); break;
+            case 'd': mode = JDLL; IF_VERBOSE(cout<<"Testing for dll instrumentation enabled"<<endl); break;
             default: {
                 usage();
                 return 1;

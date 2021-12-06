@@ -38,10 +38,11 @@ clone(int (*fn) (void *arg), void *child_stack, int flags, void *arg, ...);
 /** \brief internal thread creation using clone */
 static pid_t create_thread(int (*fcn)(void *), void *arg);
 
-static void* stack_alloc(int size);
+static void* stack_alloc(size_t size);
 static void stack_free(void *p, int size);
 static void save_stack_pointer(janus_thread_t *tls);
 
+static size_t janus_get_thread_stack_size();
 /* ------------------------------------------------------
  * The following functions are called in DR mode
  * They are executed normally as client code
@@ -120,6 +121,47 @@ void janus_thread_spawn_handler(void *drcontext)
 #endif
 }
 
+/** \brief Allocates a second stack to use during parallelization for thread 0 */
+void janus_allocate_main_thread_stack()
+{
+
+    janus_thread_t *local = oracle[0];
+    local->stack = stack_alloc(janus_get_thread_stack_size());
+    uint64_t stack_ptr = (uint64_t)local->stack;
+    //make stack 64 bytes aligned
+    stack_ptr -= stack_ptr & 64;
+    local->stack_ptr = (void *)stack_ptr;
+}
+
+/** \brief AGets the required parallelization stack size, based on the stack size requirement of parallelized loops */
+static size_t janus_get_thread_stack_size()
+{
+    //We calculate the stack size only on the first call, save the result in the static variable
+    //and on further calls return the static variable
+    static size_t requiredStackSize = 0; 
+    if (requiredStackSize != 0)
+    {
+        return requiredStackSize;
+    } 
+    loop_t *loop_array = shared->loops;
+    RSchedHeader *header = rsched_info.header;
+    int numLoops = header->numLoops;
+    for (int i = 0; i < numLoops; i++)
+    {
+        if (loop_array[i].header->useStack && loop_array[i].header->stackFrameSize > requiredStackSize)
+        {
+            requiredStackSize = loop_array[i].header->stackFrameSize;
+        }
+    }
+    requiredStackSize += 8 * 1024; //We add a little extra for safety
+    if (requiredStackSize < 32 * 1024)
+        requiredStackSize = 32 * 1024;
+#ifdef JANUS_VERBOSE
+    dr_printf("Janus thread stack size: %lu bytes!\n", requiredStackSize);
+#endif
+    return requiredStackSize;
+}
+
 /** \brief Thread exit event 
  *
  * It will be called whenever an application thread is deleted. */
@@ -158,17 +200,8 @@ static void janus_thread_init(janus_thread_t *local, uint64_t tid)
 {
     local->id = tid;
 
-    if (tid == 0) {
-        //for the main thread, we need to allocate another stack for the main thread to operate
-        local->stack = stack_alloc(JANUS_THREAD_STACK_SIZE);
-        uint64_t stack_ptr = (uint64_t)local->stack;
-        //make stack 64 bytes aligned
-        stack_ptr -= stack_ptr & 64;
-        local->stack_ptr = (void *)stack_ptr;
-    }
-
     //allocate thread private loop code
-    local->gen_code = (loop_code_t *)malloc(sizeof(loop_code_t)*rsched_info.header->numLoops);
+    local->gen_code = (loop_code_t *)malloc(sizeof(loop_code_t) * rsched_info.header->numLoops);
 
 #ifdef JANUS_JITSTM
     //allocate data structures for the just-in-time STM
@@ -242,6 +275,9 @@ int janus_reenter_thread_pool_app(janus_thread_t *tls)
 {
     tls->flag_space.loop_on = 0;
 
+#ifdef JANUS_VERBOSE
+    dr_printf("Thread %d reenters thread pool because iteration count < thread count!\n", tls->id);
+#endif
     /* set finished */
     tls->flag_space.finished = 1;
     /* wait for the main thread */
@@ -257,7 +293,7 @@ create_thread(int (*fcn)(void *), void *arg)
     int flags;
     void *my_stack;
 
-    my_stack = stack_alloc(JANUS_THREAD_STACK_SIZE);
+    my_stack = stack_alloc(janus_get_thread_stack_size());
 
     flags = (CLONE_THREAD | CLONE_VM | CLONE_PARENT |
              CLONE_FS | CLONE_FILES  | CLONE_IO | CLONE_SIGHAND);
@@ -265,15 +301,15 @@ create_thread(int (*fcn)(void *), void *arg)
 
     if (newpid == -1) {
         dr_printf("Error in calling syscall clone\n");
-        stack_free(my_stack, JANUS_THREAD_STACK_SIZE);
+        stack_free(my_stack, janus_get_thread_stack_size());
         return -1;
     }
     return newpid;
 }
 
 /* allocate stack storage on the app's heap */
-void*
-stack_alloc(int size)
+void *
+stack_alloc(size_t size)
 {
     size_t sp;
     void *q = NULL;

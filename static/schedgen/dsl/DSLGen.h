@@ -17,4 +17,5 @@ ruleGenerationTemplate(JanusContext &gc);
 
 template<typename T> void
 insertCustomRule(int ruleID, T &comp, int trigger, bool attach_data, int data0, uint64_t data1);
+
 #endif

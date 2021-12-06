@@ -21,7 +21,6 @@ shift
 
 hintfile="$binfile.jrs"
 
-
 if [ -f $binfile ];
 then
    echo "Found executable $binfile"
@@ -30,24 +29,7 @@ else
    exit
 fi
 
-start_time=$(date +%s.%3N)
 $JANUSBIN/analyze -c $binfile
-$TOOLDIR/bin64/drrun -ops "-opt_cleancall 3" -c $JANUSLIB/libjdsl.so @$hintfile @1 @0 -- $binfile $*
-end_time=$(date +%s.%3N)
-elapsed=$(echo "scale=3; $end_time - $start_time" | bc)
-echo "with not inlined janus" $elapsed
 
-start_time=$(date +%s.%3N)
-$JANUSBIN/analyze -c $binfile
 $TOOLDIR/bin64/drrun -ops "-opt_cleancall 3" -c $JANUSLIB/libjdsl.so @$hintfile @1 @0 -- $binfile $*
-end_time=$(date +%s.%3N)
-elapsed=$(echo "scale=3; $end_time - $start_time" | bc)
-echo "with not inlined janus" $elapsed
-
-start_time=$(date +%s.%3N)
-$JANUSBIN/analyze -c $binfile
-$TOOLDIR/bin64/drrun -ops "-opt_cleancall 3" -c $JANUSLIB/libjdsl.so @$hintfile @1 @0 -- $binfile $*
-end_time=$(date +%s.%3N)
-elapsed=$(echo "scale=3; $end_time - $start_time" | bc)
-echo "with not inlined janus" $elapsed
 

@@ -84,6 +84,10 @@ Instruction::isControlFlow() {
             opcode == Instruction::Interupt);
 }
 
+bool
+Instruction::isConditionalJump(){
+    return (opcode == Instruction::ConditionalBranch);
+}
 int
 Instruction::getTargetInstID()
 {

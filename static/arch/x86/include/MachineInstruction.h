@@ -131,6 +131,8 @@ namespace janus {
         bool                            isVectorInstruction();
         /** \brief returns whether this instruction uses xmm, ymm, or zmm registers */
         bool                            isXMMInstruction();
+        /** \brief returns whether this instructions uses the FPU register stack */
+        bool                            isFPU();
         /** \brief returns whether this instruction reads/writes any register (excluding EFLAGS) 
          *         which is not given as an operand.
          */

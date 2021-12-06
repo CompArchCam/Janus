@@ -35,6 +35,21 @@ checkSafeSubCalls(Loop &loop)
     return true;
 }
 
+bool loopHasFPUInstructions(Loop &loop){
+    Function *function = loop.parent;
+    JanusContext *jc = function->context;
+    for (auto bid: loop.body) {
+        BasicBlock &bb = function->entry[bid];
+        for (int i=0; i<bb.size; i++) {
+            Instruction &instr = bb.instrs[i];
+            if (instr.minstr->isFPU()){
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool
 checkSafetyForParallelisation(Loop &loop)
 {
@@ -114,6 +129,24 @@ selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
         }
         bool passed = true;
 
+        //Condition 0: Loop doesn't have init in same BB as start of main
+        BasicBlock *mainEntry = jc->main->entry;
+        Function *parent = loop.parent;
+        BasicBlock *parentEntry = parent->entry;
+        for (auto bid: loop.init) {
+            BasicBlock *bb = parentEntry + bid;
+            if (bb == mainEntry){
+                LOOPLOG("Loop will have THREAD_CREATE in same BB as PARA_LOOP_INIT, so PARA_LOOP_INIT will create an infinite loop when run, therefore loop is rejected");
+                passed = false;
+            }
+            for (auto bb2: bb->pred){
+                if (bb2->fake && bb2 == mainEntry){
+                    LOOPLOG("Loop will have THREAD_CREATE in same BB as PARA_LOOP_INIT, so PARA_LOOP_INIT will create an infinite loop when run, therefore loop is rejected");
+                    passed = false;
+                }
+            }
+        }
+
         //condition 1: no undecided cross-iteration dependencies
         if (loop.undecidedPhiVariables.size()) {
             for (auto phi: loop.undecidedPhiVariables) {
@@ -157,11 +190,14 @@ selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
                 LOOPLOG("\tThis loop contains SIMD iterators which is not yet implemented"<<endl);
                 passed = false;
                 break;
-            } else if (iter.second.kind == Iterator::INDUCTION_IMM &&
-                       iter.second.stride < 0) {
-                LOOPLOG("\tThis loop contains induction variable with subtraction, which is not yet implemented"<<endl);
-                passed = false;
             }
+        }
+        
+        //condition 7: no FPU instructions
+        //We currently don't really analyze them, which causes issues
+        if (loopHasFPUInstructions(loop)){
+            LOOPLOG("\tThis loop has FPU instructions, which are currently not analyzed by Janus, so loop might be unsafe!");
+            passed = false;
         }
 
         if (passed) {
@@ -275,6 +311,7 @@ static bool
 encodeLoopVariables(JanusContext *jc, Loop &loop)
 {
     //XXX: TODO currently we reject induction variables with negative stride
+    /*
     for (auto &ind: loop.encodedVariables) {
         if (ind.type == INDUCTION_PROFILE) {
             if (ind.induction.op == UPDATE_ADD) {
@@ -285,6 +322,7 @@ encodeLoopVariables(JanusContext *jc, Loop &loop)
             }
         }
     }
+    */
     return !loop.unsafe;
 }
 
@@ -368,9 +406,11 @@ selectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
     LOOPLOG(endl);
 
     //remove unsafe loops
-    for (auto lid: selected) {
-        if (jc->loops[lid-1].unsafe)
-            selected.erase(lid);
+    for (auto lidIter = selected.begin(); lidIter != selected.end() ; ){
+        if (jc->loops[(*lidIter)-1].unsafe)
+            selected.erase(lidIter++);
+        else
+            ++lidIter;
     }
     return true;
 }

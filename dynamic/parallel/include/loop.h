@@ -77,6 +77,19 @@ loop_switch_to_main_stack_handler(JANUS_CONTEXT);
 void
 loop_scratch_register_handler(JANUS_CONTEXT);
 
+/** \brief Janus dynamic handler for RRule: MEM_RESTORE_CHECK_REG 
+ Restores the correct check register value from the shared register bank
+ for the attached non-cmp instruction that uses the check register */
+void
+loop_restore_check_register_handler(JANUS_CONTEXT);
+
+/** \brief Janus dynami handler for RRule: MEM_RECORD_REG_WRITE
+ * Sets a flag that the current thread has overwritten a register
+ * used in conditional merging after the loop ends, 
+ * to find the last thread that wrote to the register */
+void
+loop_record_reg_write_handler(JANUS_CONTEXT);
+
 /** \brief Janus dynamic handler for RRule: MEM_BOUNDS_CHECK */
 void
 loop_array_bound_check_handler(JANUS_CONTEXT);

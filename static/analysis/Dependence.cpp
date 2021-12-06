@@ -81,9 +81,9 @@ bool buildCyclicExpr(janus::Expr *expr, janus::Loop *loop)
  * Return true when the cycle is detected
  * Return false when the loop boundary is reached while no cycle is detected */
 static CyclicStatus
-buildCyclicExpr(Expr            *startExpr,
-                Expr            *currentExpr,
-                ExpandedExpr    *expr,
+buildCyclicExpr(Expr            *startExpr,     //IN
+                Expr            *currentExpr,   //IN
+                ExpandedExpr    *expr,          //OUT
                 Loop            *loop,
                 set<Expr *>     &visitedPhi)
 {
@@ -199,7 +199,7 @@ buildCyclicExpr(Expr            *startExpr,
                 }
 
                 //return status
-                if (r1 == Error || r1 == Error) return Error;
+                if (r1 == Error || r2 == Error) return Error;
                 if (r1 == FoundUndecidedPhi ||
                     r2 == FoundUndecidedPhi) return FoundUndecidedPhi;
                 if (r1 == FoundConstPhi) {
@@ -279,8 +279,9 @@ buildCyclicExpr(Expr            *startExpr,
                     ExpandedExpr *ep2 = new ExpandedExpr(ExpandedExpr::SUM);
                     CyclicStatus r2 = buildCyclicExpr(startExpr, currentExpr->p.e1, ep2, loop, visitedPhi);
 
-
-                    if (r1==FoundCyclic && r2==FoundCyclic) {
+                    if (r1 == Error || r2 == Error) 
+                        return Error;
+                    else if (r1==FoundCyclic && r2==FoundCyclic) {
                          if (*ep1 == *ep2) {
                             expr->merge(ep1);
                             LOOPLOG("\t\t\tFound an iterator with phi expressions in stride, but expression is the same: "<<currentExpr->vs<<endl);
