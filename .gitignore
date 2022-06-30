@@ -3,6 +3,6 @@ bin/
 lib/
 own_test/
 .cache/
-docs/
+docs/html/
 
 compile_commands.json
