@@ -1,3 +1,12 @@
+# Formating file based on LLVM
+# Changes to LLVM Style:
+#   1. Use 4 space indentation (seems to be the preference of
+#      the group in existing code base)
+#   2. Breaks braces following Linux Kernel style, i.e
+#       i. breaks braces after class definition\
+#       ii. breaks braces after (multiline) function definition
+#       iii. follows LLVM style otherwise (don't break in control flows)
+
 ---
 Language:        Cpp
 # BasedOnStyle:  LLVM
@@ -22,7 +31,7 @@ AllowShortLambdasOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterDefinitionReturnType: None
-AlwaysBreakAfterReturnType: TopLevel
+AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: MultiLine
 AttributeMacros:
