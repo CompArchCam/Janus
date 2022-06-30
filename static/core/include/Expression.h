@@ -205,8 +205,8 @@ class ExpandedExpr
     enum ExpandedExprKind {
         EMPTY, ///< Empty expressions
         SUM,   ///< sum of all the nodes in the expression
-        PHI, ///< phi selection from one of the nodes in the expression, it has
-             ///< higher priority than the SUM
+        PHI,  ///< phi selection from one of the nodes in the expression, it has
+              ///< higher priority than the SUM
         MUL,  ///< product of all the nodes in the expression
         SENSI ///< sensitivity list only, no actual calculation listed
     };

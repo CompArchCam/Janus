@@ -473,10 +473,10 @@ int ExpandedSCEV::evaluate1StepDistance(Loop *loop)
             result += eval.second;
     }
 
-    for (auto i : strides) {
+    for (auto [_, expr] : strides) {
         // evaluate the difference when the iterator is 1 step away
-        if (i.second.kind == Expr::INTEGER)
-            result += i.second.i;
+        if (expr.kind == Expr::INTEGER)
+            result += expr.i;
     }
 
     // get absolute distance
@@ -488,10 +488,11 @@ int ExpandedSCEV::evaluate1StepDistance(Loop *loop)
 /** \brief return the iterator of the current loop */
 Iterator *ExpandedSCEV::getCurrentIterator(Loop *loop)
 {
-    for (auto s : strides) {
-        if (s.first->loop == loop)
-            return s.first;
+    for (auto &[iterator, expr] : strides) {
+        if (iterator->loop == loop)
+            return iterator;
     }
+    // TODO: Handle case where we cannot find any iterator to loop
 }
 
 static void buildSCEV(SCEV *scev, ExpandedExpr &expr, Loop *loop)

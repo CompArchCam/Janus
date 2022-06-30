@@ -272,9 +272,9 @@ void filterLoopNests(JanusContext *jc, std::set<LoopID> &selected)
     }
 
     // remove children loop in each bucket
-    for (auto bucket : buckets) {
-        for (auto loop : bucket.second) {
-            for (auto loop2 : bucket.second) {
+    for (auto [funcID, funcLoops] : buckets) {
+        for (auto loop : funcLoops) {
+            for (auto loop2 : funcLoops) {
                 if (loop != loop2) {
                     if (loop2->isAncestorOf(loop)) {
                         // remove this loop
@@ -292,8 +292,8 @@ void filterLoopNests(JanusContext *jc, std::set<LoopID> &selected)
     // clear the selected
     selected.clear();
     // reload the new version
-    for (auto bucket : buckets) {
-        for (auto loop : bucket.second) {
+    for (auto [funcID, loops] : buckets) {
+        for (auto loop : loops) {
             if (toRemove.find(loop) == toRemove.end())
                 selected.insert(loop->id);
         }
