@@ -1,0 +1,8 @@
+build/
+bin/
+lib/
+own_test/
+.cache/
+docs/
+
+compile_commands.json
