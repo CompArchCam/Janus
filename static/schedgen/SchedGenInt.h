@@ -7,26 +7,25 @@
 #include <set>
 #include <vector>
 
-namespace janus {
+namespace janus
+{
 /* Data structures for storing rules */
-class RuleCluster {
-public:
-    uint32_t                              channel;    //cluster channel
-    std::map<PCAddress, std::set<RewriteRule>>      ruleMap;    //map for easy lookup
-    RuleCluster(uint32_t channel):channel(channel){};
-    void                    insert(RewriteRule &rule);
-    void                    replace(RewriteRule &rule);
-    void                    remove(RewriteRule &rule);
-    void                    print(void *outputStream);
+class RuleCluster
+{
+  public:
+    uint32_t channel;                                   // cluster channel
+    std::map<PCAddress, std::set<RewriteRule>> ruleMap; // map for easy lookup
+    RuleCluster(uint32_t channel) : channel(channel){};
+    void insert(RewriteRule &rule);
+    void replace(RewriteRule &rule);
+    void remove(RewriteRule &rule);
+    void print(void *outputStream);
 };
 
-
 /* overloading operations for static rules */
-bool
-operator<(const RewriteRule &lhs, const RewriteRule &rhs);
-bool
-operator==(const RewriteRule &lhs, const RewriteRule &rhs);
-}
+bool operator<(const RewriteRule &lhs, const RewriteRule &rhs);
+bool operator==(const RewriteRule &lhs, const RewriteRule &rhs);
+} // namespace janus
 
 #define PRE_INSERT true
 #define POST_INSERT false

@@ -3,10 +3,8 @@
 
 #include "SchedGenInt.h"
 
-void
-generateLoopPlannerRules(JanusContext *gc);
+void generateLoopPlannerRules(JanusContext *gc);
 
-///Generate a full report of all loops in the binary
-void
-generateLoopReport(JanusContext *gc);
+/// Generate a full report of all loops in the binary
+void generateLoopReport(JanusContext *gc);
 #endif

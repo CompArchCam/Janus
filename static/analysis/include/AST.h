@@ -7,7 +7,7 @@
 
 /** \brief builds the abstract syntax tree for the given function.
  *
- * Requires the SSA graph to be constructed. 
+ * Requires the SSA graph to be constructed.
  */
 void buildASTGraph(janus::Function *function);
 

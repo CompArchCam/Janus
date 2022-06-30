@@ -9,24 +9,23 @@
 using namespace std;
 using namespace janus;
 
-void ruleGenerationTemplate(JanusContext &jc) {
+void ruleGenerationTemplate(JanusContext &jc)
+{
 
-/*--- Static RuleGen Start ---*/
-for (auto &func: jc.functions){
-    for (auto &B: func.blocks){
-        uint64_t local_inst_count = 0;
-        Instruction *End = B.instrs+ B.size;
-        for(auto *I=B.instrs; I < End;I++){
-            if( get_opcode(I) == Instruction::Load){
-                local_inst_count = local_inst_count + 1;
+    /*--- Static RuleGen Start ---*/
+    for (auto &func : jc.functions) {
+        for (auto &B : func.blocks) {
+            uint64_t local_inst_count = 0;
+            Instruction *End = B.instrs + B.size;
+            for (auto *I = B.instrs; I < End; I++) {
+                if (get_opcode(I) == Instruction::Load) {
+                    local_inst_count = local_inst_count + 1;
+                }
+            }
+            if (local_inst_count > 0) {
+                insertCustomRule<BasicBlock>(1, B, 4, true, local_inst_count);
             }
         }
-        if(local_inst_count > 0){
-            insertCustomRule<BasicBlock>(1,B,4, true,local_inst_count);
-        }
     }
+    /*--- Static RuleGen Finish ---*/
 }
-/*--- Static RuleGen Finish ---*/
-
-}
-

@@ -1,36 +1,38 @@
-#include "JanusContext.h"
 #include "Function.h"
-#include "Executable.h"
-#include "Arch.h"
-#include "Analysis.h"
-#include "ControlFlow.h"
-#include "SSA.h"
 #include "AST.h"
+#include "Analysis.h"
+#include "Arch.h"
+#include "ControlFlow.h"
+#include "Executable.h"
+#include "JanusContext.h"
+#include "SSA.h"
+#include <algorithm>
 #include <iostream>
+#include <queue>
 #include <sstream>
 #include <string>
-#include <queue>
-#include <algorithm>
 
 using namespace std;
 using namespace janus;
 
-Function::Function(JanusContext *gc,FuncID fid, const Symbol &symbol, uint32_t size)
-:context(gc),fid(fid),size(size)
+Function::Function(JanusContext *gc, FuncID fid, const Symbol &symbol,
+                   uint32_t size)
+    : context(gc), fid(fid), size(size)
 {
     startAddress = symbol.startAddr;
     endAddress = startAddress + size;
 
     int offset = startAddress - (symbol.section->startAddr);
-    
+
     contents = symbol.section->contents + offset;
 
     name = symbol.name;
-    replace(name.begin(),name.end(), '.', '_'); // replace all '.' to '_'
+    replace(name.begin(), name.end(), '.', '_'); // replace all '.' to '_'
 
-    if(symbol.type == SYM_FUNC)
+    if (symbol.type == SYM_FUNC)
         isExecutable = true;
-    else isExecutable = false;
+    else
+        isExecutable = false;
 
     domTree = NULL;
     entry = NULL;
@@ -47,7 +49,7 @@ Function::Function(JanusContext *gc,FuncID fid, const Symbol &symbol, uint32_t s
 Function::~Function()
 {
     /* Now we free all the instructions */
-    for (auto &instr: minstrs) {
+    for (auto &instr : minstrs) {
         if (instr.operands)
             free(instr.operands);
         if (instr.name)
@@ -58,10 +60,10 @@ Function::~Function()
 }
 
 /* retrieve further information from instructions */
-void
-Function::translate()
+void Function::translate()
 {
-    if (translated) return;
+    if (translated)
+        return;
 
     if (!entry) {
         available = false;
@@ -70,7 +72,7 @@ Function::translate()
 
     translated = true;
 
-    GASSERT(entry, "CFG not found in "<<name<<endl);
+    GASSERT(entry, "CFG not found in " << name << endl);
 
     /* Scan the code to retrieve stack information
      * this has to be done at first */
@@ -81,12 +83,9 @@ Function::translate()
 
     /* For other mode, memory accesses are enough,
      * Only paralleliser and analysis mode needs to go further */
-    if (context->mode != JPARALLEL &&
-        context->mode != JPROF &&
-        context->mode != JANALYSIS &&
-        context->mode != JVECTOR &&
-        context->mode != JOPT &&
-	    context->mode != JSECURE &&
+    if (context->mode != JPARALLEL && context->mode != JPROF &&
+        context->mode != JANALYSIS && context->mode != JVECTOR &&
+        context->mode != JOPT && context->mode != JSECURE &&
         context->mode != JFETCH)
         return;
 
@@ -100,68 +99,71 @@ Function::translate()
     livenessAnalysis(this);
 }
 
-static void
-assign_loop_blocks(Loop *loop) {
+static void assign_loop_blocks(Loop *loop)
+{
     BasicBlock *entry = loop->parent->entry;
-    for (auto bid: loop->body) {
+    for (auto bid : loop->body) {
         entry[bid].parentLoop = loop;
     }
-    //then call subloops
-    for (auto subLoop: loop->subLoops)
+    // then call subloops
+    for (auto subLoop : loop->subLoops)
         assign_loop_blocks(subLoop);
 }
 
-void
-Function::analyseLoopRelations()
+void Function::analyseLoopRelations()
 {
-    //get loop array
+    // get loop array
     Loop *loopArray = context->loops.data();
-    //step 1 we simply use a O(n^2) comparison
-    for (auto loopID: loops) {
+    // step 1 we simply use a O(n^2) comparison
+    for (auto loopID : loops) {
         for (auto loopID2 : loops) {
             if (loopID != loopID2) {
-                //if loop 2 start block is in the loop 1's body
-                if (loopArray[loopID-1].contains(loopArray[loopID2-1].start->bid)) {
-                    //then loop 2 is descendant of loop 1 
-                    loopArray[loopID-1].descendants.insert(loopArray + loopID2-1);
-                    //loop 1 is ancestor of loop 2
-                    loopArray[loopID2-1].ancestors.insert(loopArray + loopID-1);
+                // if loop 2 start block is in the loop 1's body
+                if (loopArray[loopID - 1].contains(
+                        loopArray[loopID2 - 1].start->bid)) {
+                    // then loop 2 is descendant of loop 1
+                    loopArray[loopID - 1].descendants.insert(loopArray +
+                                                             loopID2 - 1);
+                    // loop 1 is ancestor of loop 2
+                    loopArray[loopID2 - 1].ancestors.insert(loopArray + loopID -
+                                                            1);
                 }
             }
         }
     }
-    //step 2 assign immediate parent and children
-    map<LoopID,int> levels;
+    // step 2 assign immediate parent and children
+    map<LoopID, int> levels;
     int undecided = 0;
-    for (auto loopID: loops) {
-        Loop &loop = loopArray[loopID-1];
-        //starts with loops with 0 ancestors
-        if (loop.ancestors.size()==0) {
+    for (auto loopID : loops) {
+        Loop &loop = loopArray[loopID - 1];
+        // starts with loops with 0 ancestors
+        if (loop.ancestors.size() == 0) {
             loop.level = 0;
             levels[loopID] = 0;
-        }
-        else {
+        } else {
             levels[loopID] = -1;
             undecided++;
         }
     }
-    //if all loops are level 0, simply return
-    if (!undecided) goto assign_blocks;
-    //if all are undecided, it is a recursive loop
-    if (undecided == loops.size()) return;
+    // if all loops are level 0, simply return
+    if (!undecided)
+        goto assign_blocks;
+    // if all are undecided, it is a recursive loop
+    if (undecided == loops.size())
+        return;
 
-
-    //step 3 recursively calculates the levels for each loop
+    // step 3 recursively calculates the levels for each loop
     bool converge;
     do {
         converge = true;
-        for (auto loopID: loops) {
-            Loop &loop = loopArray[loopID-1];
-            if (loop.ancestors.size()==0) continue;
+        for (auto loopID : loops) {
+            Loop &loop = loopArray[loopID - 1];
+            if (loop.ancestors.size() == 0)
+                continue;
             bool allVisited = true;
             LoopID maxLoopID = 0;
             int maxLevel = -1;
-            for (auto anc: loop.ancestors) {
+            for (auto anc : loop.ancestors) {
                 if (levels[anc->id] == -1) {
                     allVisited = false;
                     break;
@@ -171,144 +173,153 @@ Function::analyseLoopRelations()
                     maxLoopID = anc->id;
                 }
             }
-            //if all visited, this loop is the immediate children of the deepest loop.
+            // if all visited, this loop is the immediate children of the
+            // deepest loop.
             if (allVisited) {
-                loopArray[maxLoopID-1].subLoops.insert(loopArray+loopID-1);
-                loopArray[loopID-1].parentLoop = loopArray+maxLoopID-1;
+                loopArray[maxLoopID - 1].subLoops.insert(loopArray + loopID -
+                                                         1);
+                loopArray[loopID - 1].parentLoop = loopArray + maxLoopID - 1;
                 levels[loopID] = levels[maxLoopID] + 1;
-                loopArray[loopID-1].level = levels[loopID];
+                loopArray[loopID - 1].level = levels[loopID];
             } else {
                 converge = false;
             }
         }
-    } while(!converge);
+    } while (!converge);
 
 assign_blocks:
-    //assign basic block to inner most loops
-    for (auto loopID: loops) {
-        assign_loop_blocks(loopArray + loopID -1);
+    // assign basic block to inner most loops
+    for (auto loopID : loops) {
+        assign_loop_blocks(loopArray + loopID - 1);
     }
 }
 
-void
-Function::print(void *outputStream)
+void Function::print(void *outputStream)
 {
     ostream &os = *(ostream *)outputStream;
-    os << fid<<" "<<name <<": 0x"<<hex<<startAddress<<"-0x"<<endAddress<<" size "<<dec<<size<<endl;
+    os << fid << " " << name << ": 0x" << hex << startAddress << "-0x"
+       << endAddress << " size " << dec << size << endl;
 }
 
-void
-Function::visualize(void *outputStream)
+void Function::visualize(void *outputStream)
 {
     ostream &os = *(ostream *)outputStream;
 
-    //if block size less than 4, there is no need to draw it since it is too simple
-    if(size<=2) return;
-    os<<dec;
-    os << "digraph "<<name<<"CFG {"<<endl;
-    os << "label=\""<<name<<"_"<<dec<<fid+1<<"_CFG\";"<<endl;
+    // if block size less than 4, there is no need to draw it since it is too
+    // simple
+    if (size <= 2)
+        return;
+    os << dec;
+    os << "digraph " << name << "CFG {" << endl;
+    os << "label=\"" << name << "_" << dec << fid + 1 << "_CFG\";" << endl;
 
-    for (auto &bb:blocks) {
-        //name of the basic block
-        os << "\tBB"<<dec<<bb.bid<<" ";
-        //append attributes
-        os <<"[";
-        //os <<"label=<"<< bb.dot_print()<<">";
-        os <<"label=\"BB"<<dec<<bb.bid<<" 0x"<<hex<<bb.instrs->pc<<"\\l";
+    for (auto &bb : blocks) {
+        // name of the basic block
+        os << "\tBB" << dec << bb.bid << " ";
+        // append attributes
+        os << "[";
+        // os <<"label=<"<< bb.dot_print()<<">";
+        os << "label=\"BB" << dec << bb.bid << " 0x" << hex << bb.instrs->pc
+           << "\\l";
         bb.printDot(outputStream);
-        os <<"\"";
-        os<<",shape=box"<<"];";
+        os << "\"";
+        os << ",shape=box"
+           << "];";
 
-        os <<endl;
+        os << endl;
     }
 
-    //print all the edges
-    os<<dec;
-    for (auto &bb:blocks) {
-        if(bb.succ1) 
-            os << "\tBB"<<bb.bid<<" -> BB"<<bb.succ1->bid<<";"<<endl;
-        if(bb.succ2) 
-            os << "\tBB"<<bb.bid<<" -> BB"<<bb.succ2->bid<<";"<<endl;
+    // print all the edges
+    os << dec;
+    for (auto &bb : blocks) {
+        if (bb.succ1)
+            os << "\tBB" << bb.bid << " -> BB" << bb.succ1->bid << ";" << endl;
+        if (bb.succ2)
+            os << "\tBB" << bb.bid << " -> BB" << bb.succ2->bid << ";" << endl;
     }
 
-    os << "} "<<endl;
+    os << "} " << endl;
 
-    //cfg tree
-    os << "digraph "<<name<<"CFG_TREE {"<<endl;
-    os << "label=\""<<name<<"_"<<dec<<fid+1<<"_CFG_Simplify\";"<<endl;
+    // cfg tree
+    os << "digraph " << name << "CFG_TREE {" << endl;
+    os << "label=\"" << name << "_" << dec << fid + 1 << "_CFG_Simplify\";"
+       << endl;
 
-    for (auto &bb:blocks) {
-        //name of the basic block
-        os << "\tBB"<<dec<<bb.bid<<" ";
-        //append attributes
-        os <<"[";
-        //os <<"label=<"<< bb.dot_print()<<">";
-        os <<"label=\"BB"<<dec<<bb.bid<<"\"";
-        os<<",shape=box"<<"];";
-        os <<endl;
+    for (auto &bb : blocks) {
+        // name of the basic block
+        os << "\tBB" << dec << bb.bid << " ";
+        // append attributes
+        os << "[";
+        // os <<"label=<"<< bb.dot_print()<<">";
+        os << "label=\"BB" << dec << bb.bid << "\"";
+        os << ",shape=box"
+           << "];";
+        os << endl;
     }
 
-    //print the dom edge
-    os<<dec;
-    for (auto &bb:blocks) {
-        if(bb.succ1) 
-            os << "\tBB"<<bb.bid<<" -> BB"<<bb.succ1->bid<<";"<<endl;
-        if(bb.succ2) 
-            os << "\tBB"<<bb.bid<<" -> BB"<<bb.succ2->bid<<";"<<endl;
+    // print the dom edge
+    os << dec;
+    for (auto &bb : blocks) {
+        if (bb.succ1)
+            os << "\tBB" << bb.bid << " -> BB" << bb.succ1->bid << ";" << endl;
+        if (bb.succ2)
+            os << "\tBB" << bb.bid << " -> BB" << bb.succ2->bid << ";" << endl;
     }
-    os << "} "<<endl;
+    os << "} " << endl;
 
-    //dominator tree
-    os << "digraph "<<name<<"DOM_TREE {"<<endl;
-    os << "label=\""<<name<<"_"<<dec<<fid+1<<"_Dom_Tree\";"<<endl;
+    // dominator tree
+    os << "digraph " << name << "DOM_TREE {" << endl;
+    os << "label=\"" << name << "_" << dec << fid + 1 << "_Dom_Tree\";" << endl;
 
-    for (auto &bb:blocks) {
-        //name of the basic block
-        os << "\tBB"<<dec<<bb.bid<<" ";
-        //append attributes
-        os <<"[";
-        //os <<"label=<"<< bb.dot_print()<<">";
-        os <<"label=\"BB"<<dec<<bb.bid<<"\"";
-        os<<",shape=box"<<"];";
-        os <<endl;
-    }
-
-    //print the dom edge
-    os<<dec;
-    for (auto &bb:blocks) {
-        if(bb.idom && bb.idom->bid != bb.bid)
-            os << "\tBB"<<bb.idom->bid<<" -> BB"<<bb.bid<<";"<<endl;
+    for (auto &bb : blocks) {
+        // name of the basic block
+        os << "\tBB" << dec << bb.bid << " ";
+        // append attributes
+        os << "[";
+        // os <<"label=<"<< bb.dot_print()<<">";
+        os << "label=\"BB" << dec << bb.bid << "\"";
+        os << ",shape=box"
+           << "];";
+        os << endl;
     }
 
-    os << "} "<<endl;
-
-    //post dominator tree
-    os << "digraph "<<name<<"POST_DOM_TREE {"<<endl;
-    os << "label=\""<<name<<"_"<<dec<<fid+1<<"_Post_Dom_Tree\";"<<endl;
-
-    for (auto &bb:blocks) {
-        //name of the basic block
-        os << "\tBB"<<dec<<bb.bid<<" ";
-        //append attributes
-        os <<"[";
-        //os <<"label=<"<< bb.dot_print()<<">";
-        os <<"label=\"BB"<<dec<<bb.bid<<"\"";
-        os<<",shape=box"<<"];";
-        os <<endl;
+    // print the dom edge
+    os << dec;
+    for (auto &bb : blocks) {
+        if (bb.idom && bb.idom->bid != bb.bid)
+            os << "\tBB" << bb.idom->bid << " -> BB" << bb.bid << ";" << endl;
     }
 
-    //print the dom edge
-    os<<dec;
-    for (auto &bb:blocks) {
-        if(bb.ipdom)
-            os << "\tBB"<<bb.ipdom->bid<<" -> BB"<<bb.bid<<";"<<endl;
+    os << "} " << endl;
+
+    // post dominator tree
+    os << "digraph " << name << "POST_DOM_TREE {" << endl;
+    os << "label=\"" << name << "_" << dec << fid + 1 << "_Post_Dom_Tree\";"
+       << endl;
+
+    for (auto &bb : blocks) {
+        // name of the basic block
+        os << "\tBB" << dec << bb.bid << " ";
+        // append attributes
+        os << "[";
+        // os <<"label=<"<< bb.dot_print()<<">";
+        os << "label=\"BB" << dec << bb.bid << "\"";
+        os << ",shape=box"
+           << "];";
+        os << endl;
     }
 
-    os << "} "<<endl;
+    // print the dom edge
+    os << dec;
+    for (auto &bb : blocks) {
+        if (bb.ipdom)
+            os << "\tBB" << bb.ipdom->bid << " -> BB" << bb.bid << ";" << endl;
+    }
+
+    os << "} " << endl;
 }
 
-bool
-Function::needSync()
+bool Function::needSync()
 {
     /* For the moment we only check the name
      * Check the relocation pattern in the future */

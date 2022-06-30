@@ -3,8 +3,6 @@
 
 #include "SchedGenInt.h"
 
-void
-generateLoopCoverageProfilingRules(JanusContext *gc);
-void
-generateFunctionCoverageProfilingRules(JanusContext *gc);
+void generateLoopCoverageProfilingRules(JanusContext *gc);
+void generateFunctionCoverageProfilingRules(JanusContext *gc);
 #endif

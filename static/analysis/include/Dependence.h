@@ -6,17 +6,16 @@
 #ifndef _JANUS_DEPD_
 #define _JANUS_DEPD_
 
-#include "janus.h"
-#include "Variable.h"
 #include "Expression.h"
+#include "Variable.h"
+#include "janus.h"
 
 /** \brief Dependence analysis for Janus variables
  *
  * Traverse the SSA graph for each phi node that the start node of the loop
- * Construct a cyclic expression for each phi node 
+ * Construct a cyclic expression for each phi node
  */
 void dependenceAnalysis(janus::Loop *loop);
-
 
 /** \brief Cyclic analysis for Janus expressions
  *

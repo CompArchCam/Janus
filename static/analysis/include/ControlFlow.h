@@ -1,11 +1,11 @@
 #ifndef _Janus_CONTROLFLOW_
 #define _Janus_CONTROLFLOW_
 
-//Control flow related analysis
+// Control flow related analysis
 
-#include "janus.h"
 #include "Function.h"
 #include "JanusContext.h"
+#include "janus.h"
 
 /** \brief build the control flow graph*/
 void buildCFG(janus::Function &function);

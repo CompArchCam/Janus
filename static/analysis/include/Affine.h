@@ -1,8 +1,8 @@
 /*! \file Affine.h
  *  \brief Affine analysis for loops
  *
- * Affine analysis is used for detecting a specific type of loops that have constant loop bounds
- * and regular memory accesses
+ * Affine analysis is used for detecting a specific type of loops that have
+ * constant loop bounds and regular memory accesses
  */
 #ifndef _JANUS_AFFINE_ANALYSIS_
 #define _JANUS_AFFINE_ANALYSIS_

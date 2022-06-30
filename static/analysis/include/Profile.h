@@ -5,21 +5,16 @@
 
 class JanusContext;
 
-void
-getBodyTemperature(JanusContext *gc, janus::Loop *loop);
+void getBodyTemperature(JanusContext *gc, janus::Loop *loop);
 
-void
-loadLoopSelection(JanusContext *gc);
+void loadLoopSelection(JanusContext *gc);
 
-void
-loadDDGProfile(JanusContext *gc);
+void loadDDGProfile(JanusContext *gc);
 
-void
-loadLoopCoverageProfiles(JanusContext *gc);
+void loadLoopCoverageProfiles(JanusContext *gc);
 
-//filter out the loops that are not beneficial
-void
-filterParallelisableLoop(JanusContext *gc);
+// filter out the loops that are not beneficial
+void filterParallelisableLoop(JanusContext *gc);
 
 #define JANUS_LOOP_COVERAGE_THRESHOLD 1.0
 #define JANUS_LOOP_MIN_ITER_COUNT 15

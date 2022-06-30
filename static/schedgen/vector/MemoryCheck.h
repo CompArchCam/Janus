@@ -1,10 +1,10 @@
 #include "JanusContext.h"
-#include "VectUtils.h"
 #include "VECT_rule_structs.h"
-#include <set>
+#include "VectUtils.h"
 #include <map>
+#include <set>
 
 using namespace std;
 using namespace janus;
 
-bool checkMemory(Loop * loop, uint64_t stride);
+bool checkMemory(Loop *loop, uint64_t stride);
