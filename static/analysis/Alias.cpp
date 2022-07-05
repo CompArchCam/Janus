@@ -79,7 +79,9 @@ void aliasAnalysis(janus::Loop *loop)
             memVar->getSCEV();
             LOOPLOG2("\t\t\tScalar evolution: " << *memVar->escev << endl);
             // insert the memory location into the loop array accesses
-            MemoryLocation *location = getOrInsertMemLocations(loop, memVar);
+            MemoryLocation *location = getOrInsertMemLocations(
+                loop,
+                memVar); // NOTE: this is where loop->arrayAccesses are updated
             // add to read and write set
             if (mi.type == MemoryInstruction::Read ||
                 mi.type == MemoryInstruction::ReadAndRead) {
@@ -144,7 +146,7 @@ void aliasAnalysis(janus::Loop *loop)
         // check the alias relation against each read.
         for (auto mem : locations) {
             // we skip all invisible reads and writes
-            if (mem == memWrite)
+            if (mem == memWrite) // NOTE: figure out what this means
                 continue;
 
             LOOPLOG2("\t\t\tvs: " << *mem << endl);
@@ -152,12 +154,16 @@ void aliasAnalysis(janus::Loop *loop)
             checkAliasRelation(*memWrite, *mem, loop);
         }
     }
+    // TODO: Check function call access handling
 
     // step 3: encode array bases for further runtime checks
     for (auto &memBase : loop->arrayAccesses) {
         // get the iterators contributed to this base
         // print the accessed instructions
-        auto &iterSet = loop->arrayIterators[memBase.first];
+        auto &iterSet =
+            loop->arrayIterators[memBase.first]; // NOTE: this is where
+                                                 // arrayIterators are modified
+                                                 // NOTE: Print
         for (auto ml : memBase.second) {
             if (ml->writeFrom.size())
                 loop->arrayToCheck.insert(memBase.first);
@@ -166,11 +172,12 @@ void aliasAnalysis(janus::Loop *loop)
             }
         }
     }
+    // NOTE: PRINT loop_arrayIterators; loop->arrayToCheck
 
     for (auto &memBase : loop->arrayIterators) {
         JVarProfile profile;
         profile.type = ARRAY_PROFILE;
-        // temp fix
+        // temp fix TODO: find out what's wrong
         if (memBase.first.kind == Expr::EXPANDED)
             continue;
         if (memBase.first.vs == NULL)
@@ -590,21 +597,18 @@ void MemoryLocation::getSCEV()
     escev->start.kind = Expr::EXPANDED;
     escev->start.ee = new ExpandedExpr(ExpandedExpr::SUM);
 
-    for (auto e : expr.exprs) {
-        Expr term = e.first;
+    for (auto [term, coeff] : expr.exprs) {
         if (term.iteratorTo) {
             // add to the stack
-            checkList.push(make_pair(term.iteratorTo, e.second));
+            checkList.push(make_pair(term.iteratorTo, coeff));
         } else {
-            escev->start.ee->addTerm(e.first, e.second);
+            escev->start.ee->addTerm(term, coeff);
         }
     }
 
     while (!checkList.empty()) {
-        auto check = checkList.top();
+        auto [iter, scale] = checkList.top();
         checkList.pop();
-
-        Iterator *iter = check.first;
 
         if (iter->kind == Iterator::ITER_GENERIC) {
             LOOPLOG2("\t\tScalar evolution contains complex iterators!"
@@ -612,8 +616,6 @@ void MemoryLocation::getSCEV()
             escev->kind = ExpandedSCEV::Ambiguous;
             return;
         }
-
-        Expr scale = check.second;
 
         Expr init = iter->getInitExpr();
         // check if the init has other iterators
