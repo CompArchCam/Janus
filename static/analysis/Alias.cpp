@@ -14,6 +14,7 @@
 #include <queue>
 #include <set>
 #include <stack>
+#include <string>
 
 using namespace janus;
 using namespace std;
@@ -24,8 +25,12 @@ static AliasType GCDTest(ExpandedSCEV &e1, ExpandedSCEV &e2, ExpandedSCEV &diff,
                          Loop &loop);
 static AliasType banerjeeTest(ExpandedSCEV &diff);
 
+ofstream aliasAnalysisLog;
+
 void aliasAnalysis(janus::Loop *loop)
 {
+    aliasAnalysisLog.open("Loop" + to_string(loop->id) + "_aliasAnalysis.log",
+                          ios::out);
     Function *parent = loop->parent;
     BasicBlock *entry = parent->entry;
 
@@ -37,12 +42,17 @@ void aliasAnalysis(janus::Loop *loop)
     LOOPLOG2("---------------------------------------------------------"
              << endl);
     LOOPLOG2("Loop " << dec << loop->id << " Alias Analysis" << endl);
+    LOOPLOG2("Conditional Branch Instruction: "
+             << *entry[*(loop->check).rbegin()].lastInstr() << endl);
 
     // step 0: affine analysis
     // scan for a specific affine conditions for the given loop
     affineAnalysis(loop);
 
     LOOPLOG2("\n\tStep 0: Extracting loop ranges in the loop nest:" << endl);
+    LOOPLOG2("\t\t*NOTE*: trip count = 0 indicates it cannot be determined "
+             "statically"
+             << endl);
     LOOPLOG2("\t\tMain Loop " << dec << loop->id << " range "
                               << *loop->mainIterator << " trip count "
                               << loop->staticIterCount << endl);
@@ -146,7 +156,7 @@ void aliasAnalysis(janus::Loop *loop)
         // check the alias relation against each read.
         for (auto mem : locations) {
             // we skip all invisible reads and writes
-            if (mem == memWrite) // NOTE: figure out what this means
+            if (mem == memWrite)
                 continue;
 
             LOOPLOG2("\t\t\tvs: " << *mem << endl);
@@ -172,12 +182,22 @@ void aliasAnalysis(janus::Loop *loop)
             }
         }
     }
+
+    for (auto tc : loop->arrayToCheck) {
+        aliasAnalysisLog << tc << " will be checked in runtime." << endl;
+    }
+    for (auto [base, memLocations] : loop->arrayAccesses) {
+        aliasAnalysisLog << "Array Base " << base << endl;
+        for (auto itp : loop->arrayIterators[base]) {
+            aliasAnalysisLog << "\t\tHas iterator: " << *itp << endl;
+        }
+    }
     // NOTE: PRINT loop_arrayIterators; loop->arrayToCheck
 
     for (auto &memBase : loop->arrayIterators) {
         JVarProfile profile;
         profile.type = ARRAY_PROFILE;
-        // temp fix TODO: find out what's wrong
+        // temp fix XXX: find out what's wrong
         if (memBase.first.kind == Expr::EXPANDED)
             continue;
         if (memBase.first.vs == NULL)
@@ -204,6 +224,7 @@ void aliasAnalysis(janus::Loop *loop)
         else
             loopLog2 << "!" << endl;
     });
+    aliasAnalysisLog.close();
 }
 
 /** \brief Check alias relation for two memory locations

@@ -4,5 +4,6 @@ lib/
 own_test/
 .cache/
 docs/html/
+tests/**/*_test/
 
 compile_commands.json
