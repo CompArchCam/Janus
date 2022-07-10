@@ -5,7 +5,9 @@
 #include "Profile.h"
 #include "SSA.h"
 
+#include <algorithm>
 #include <map>
+#include <memory>
 #include <string>
 
 using namespace std;
@@ -65,12 +67,206 @@ void JanusContext::buildProgramDependenceGraph()
     }
 }
 
+void loopAnalysisFirstPass(JanusContext *jc)
+{
+    for (auto &loop : jc->loops) {
+        loop.analyse2(jc);
+    }
+}
+
+void loopAnalysisSecondPass(JanusContext *jc)
+{
+    for (auto &loop : jc->loops) {
+        loop.analyse2(jc);
+    }
+}
+
+void loopAnalysisThirdPass(JanusContext *jc)
+{
+    for (auto &loop : jc->loops) {
+        loop.analyse3(jc);
+    }
+}
+
+// TODO: change the name
+void analysisAnalysis(JanusContext *jc)
+{
+    if (jc->mode != JPARALLEL) {
+        std::cerr << "Wrong Mode: Expecting " << JPARALLEL << " Actually have "
+                  << jc->mode << endl;
+    }
+
+    /* Step 1: identify loops from the control flow graph*/
+    for (auto &func : jc->functions) {
+        searchLoop(jc, &func);
+    }
+    GSTEPCONT(loops.size() << " loops recognised" << endl);
+
+    GSTEP("Analysing loop relations" << endl);
+    /* Step 2: analyse loop relations within one procedure */
+    for (auto &func : jc->functions) {
+        func.analyseLoopRelations();
+    }
+
+    /* Step 3: analyse loop relations across procedures */
+    jc->analyseLoopAndFunctionRelations();
+
+    /* Step 4: load loop selection from previous run*/
+    loadLoopSelection(jc);
+
+    /* Step 5: first loop analysis pass:
+     *      analysis set up
+     *      variable analysis
+     *      dependence analysis
+     *      iterator analysis */
+    loopAnalysisFirstPass(jc);
+
+    /* Step 6: second loop analysis pass:
+     *      post-iterator analysis */
+    loopAnalysisSecondPass(jc);
+
+    /* Step 7: final loop analysis pass:
+     *      alias analysis
+     *      scratch analysis
+     *      encode iterators */
+    loopAnalysisThirdPass(jc);
+}
+
+void parallelisationAnalysis(JanusContext *jc)
+{
+    if (jc->mode != JPARALLEL) {
+        std::cerr << "Wrong Mode: Expecting " << JPARALLEL << " Actually have "
+                  << jc->mode << endl;
+    }
+
+    /* Step 1: identify loops from the control flow graph*/
+    for (auto &func : jc->functions) {
+        searchLoop(jc, &func);
+    }
+    GSTEPCONT(loops.size() << " loops recognised" << endl);
+
+    GSTEP("Analysing loop relations" << endl);
+    /* Step 2: analyse loop relations within one procedure */
+    for (auto &func : jc->functions) {
+        func.analyseLoopRelations();
+    }
+
+    /* Step 3: analyse loop relations across procedures */
+    jc->analyseLoopAndFunctionRelations();
+
+    /* Step 4: load loop selection from previous run*/
+    loadLoopSelection(jc);
+
+    /* Step 5: first loop analysis pass:
+     *      analysis set up
+     *      variable analysis
+     *      dependence analysis
+     *      iterator analysis */
+    loopAnalysisFirstPass(jc);
+
+    /* Step 6: second loop analysis pass:
+     *      post-iterator analysis */
+    loopAnalysisSecondPass(jc);
+
+    /* Step 7: final loop analysis pass:
+     *      alias analysis
+     *      scratch analysis
+     *      encode iterators */
+    loopAnalysisThirdPass(jc);
+}
+
+void loadProfilingAnalysis(JanusContext *jc)
+{
+    if (jc->mode != JPARALLEL) {
+        std::cerr << "Wrong Mode: Expecting " << JPARALLEL << " Actually have "
+                  << jc->mode << endl;
+    }
+
+    /* Step 1: identify loops from the control flow graph*/
+    for (auto &func : jc->functions) {
+        searchLoop(jc, &func);
+    }
+    GSTEPCONT(loops.size() << " loops recognised" << endl);
+
+    GSTEP("Analysing loop relations" << endl);
+    /* Step 2: analyse loop relations within one procedure */
+    for (auto &func : jc->functions) {
+        func.analyseLoopRelations();
+    }
+
+    /* Step 3: analyse loop relations across procedures */
+    jc->analyseLoopAndFunctionRelations();
+
+    /* Step 4: load loop selection from previous run*/
+    loadLoopCoverageProfiles(jc);
+
+    /* Step 5: first loop analysis pass:
+     *      analysis set up
+     *      variable analysis
+     *      dependence analysis
+     *      iterator analysis */
+    loopAnalysisFirstPass(jc);
+
+    /* Step 6: second loop analysis pass:
+     *      post-iterator analysis */
+    loopAnalysisSecondPass(jc);
+
+    /* Step 7: final loop analysis pass:
+     *      alias analysis
+     *      scratch analysis
+     *      encode iterators */
+    loopAnalysisThirdPass(jc);
+}
+
+void loopCoverageAnalysis(JanusContext *jc)
+{
+    /* Step 1: identify loops from the control flow graph */
+    GSTEP("Recognising loops: ");
+    for (auto &func : jc->functions) {
+        searchLoop(jc, &func);
+    }
+    GSTEPCONT(loops.size() << " loops recognised" << endl);
+}
+
+void controlFlowGraphAnalysis(JanusContext *jc)
+{
+    /* Step 1: identify loops from the control flow graph */
+    GSTEP("Recognising loops: ");
+    for (auto &func : jc->functions) {
+        searchLoop(jc, &func);
+    }
+    GSTEPCONT(loops.size() << " loops recognised" << endl);
+}
+
 void JanusContext::analyseLoop()
 {
     /* Function timer doesn't need to recognise loop */
-    if (mode == JFCOV)
+    switch (mode) {
+    case JFCOV:
         return;
-
+    case JLCOV: {
+        loopCoverageAnalysis(this);
+        return;
+    };
+    case JGRAPH: {
+        controlFlowGraphAnalysis(this);
+        return;
+    };
+    case JPARALLEL: {
+        parallelisationAnalysis(this);
+        return;
+    };
+    case JANALYSIS: {
+        analysisAnalysis(this);
+        return;
+    };
+    case JPROF: {
+        loadProfilingAnalysis(this);
+        return;
+    }
+    default:
+        break;
+    }
     GSTEP("Recognising loops: ");
 
     /* Step 1: identify loops from the control flow graph */
@@ -93,17 +289,6 @@ void JanusContext::analyseLoop()
 
     /* Step 3: analyse loop relations across procedures */
     analyseLoopAndFunctionRelations();
-
-    /* Step 4: load profiling information */
-    if (mode == JPROF) {
-        /* For automatic profiler mode, load loop coverage before analysis */
-        loadLoopCoverageProfiles(this);
-    }
-
-    if (mode == JPARALLEL || mode == JANALYSIS) {
-        // load loop selection from previous run
-        loadLoopSelection(this);
-    }
 
     /* Step 5: analyse each loop more in depth (Pass 1) */
     GSTEP("Analysing loops" << endl);
