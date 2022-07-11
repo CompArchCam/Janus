@@ -91,8 +91,8 @@ void loopAnalysisThirdPass(JanusContext *jc)
 // TODO: change the name
 void analysisAnalysis(JanusContext *jc)
 {
-    if (jc->mode != JPARALLEL) {
-        std::cerr << "Wrong Mode: Expecting " << JPARALLEL << " Actually have "
+    if (jc->mode != JANALYSIS) {
+        std::cerr << "Wrong Mode: Expecting " << JANALYSIS << " Actually have "
                   << jc->mode << endl;
     }
 
@@ -177,8 +177,8 @@ void parallelisationAnalysis(JanusContext *jc)
 
 void loadProfilingAnalysis(JanusContext *jc)
 {
-    if (jc->mode != JPARALLEL) {
-        std::cerr << "Wrong Mode: Expecting " << JPARALLEL << " Actually have "
+    if (jc->mode != JPROF) {
+        std::cerr << "Wrong Mode: Expecting " << JPROF << " Actually have "
                   << jc->mode << endl;
     }
 
