@@ -67,21 +67,21 @@ void JanusContext::buildProgramDependenceGraph()
     }
 }
 
-void loopAnalysisFirstPass(JanusContext *jc)
+static void loopAnalysisFirstPass(JanusContext *jc)
 {
     for (auto &loop : jc->loops) {
         loop.analyse(jc);
     }
 }
 
-void loopAnalysisSecondPass(JanusContext *jc)
+static void loopAnalysisSecondPass(JanusContext *jc)
 {
     for (auto &loop : jc->loops) {
         loop.analyse2(jc);
     }
 }
 
-void loopAnalysisThirdPass(JanusContext *jc)
+static void loopAnalysisThirdPass(JanusContext *jc)
 {
     for (auto &loop : jc->loops) {
         loop.analyse3(jc);
@@ -89,7 +89,7 @@ void loopAnalysisThirdPass(JanusContext *jc)
 }
 
 // TODO: change the name
-void analysisAnalysis(JanusContext *jc)
+static void analysisAnalysis(JanusContext *jc)
 {
     if (jc->mode != JANALYSIS) {
         std::cerr << "Wrong Mode: Expecting " << JANALYSIS << " Actually have "
@@ -132,7 +132,7 @@ void analysisAnalysis(JanusContext *jc)
     loopAnalysisThirdPass(jc);
 }
 
-void parallelisationAnalysis(JanusContext *jc)
+static void parallelisationAnalysis(JanusContext *jc)
 {
     if (jc->mode != JPARALLEL) {
         std::cerr << "Wrong Mode: Expecting " << JPARALLEL << " Actually have "
@@ -175,7 +175,7 @@ void parallelisationAnalysis(JanusContext *jc)
     loopAnalysisThirdPass(jc);
 }
 
-void loadProfilingAnalysis(JanusContext *jc)
+static void loadProfilingAnalysis(JanusContext *jc)
 {
     if (jc->mode != JPROF) {
         std::cerr << "Wrong Mode: Expecting " << JPROF << " Actually have "
@@ -218,7 +218,7 @@ void loadProfilingAnalysis(JanusContext *jc)
     loopAnalysisThirdPass(jc);
 }
 
-void loopCoverageAnalysis(JanusContext *jc)
+static void loopCoverageAnalysis(JanusContext *jc)
 {
     /* Step 1: identify loops from the control flow graph */
     GSTEP("Recognising loops: ");
@@ -228,7 +228,7 @@ void loopCoverageAnalysis(JanusContext *jc)
     GSTEPCONT(loops.size() << " loops recognised" << endl);
 }
 
-void controlFlowGraphAnalysis(JanusContext *jc)
+static void controlFlowGraphAnalysis(JanusContext *jc)
 {
     /* Step 1: identify loops from the control flow graph */
     GSTEP("Recognising loops: ");
