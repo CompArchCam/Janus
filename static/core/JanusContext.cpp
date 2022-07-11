@@ -70,7 +70,7 @@ void JanusContext::buildProgramDependenceGraph()
 void loopAnalysisFirstPass(JanusContext *jc)
 {
     for (auto &loop : jc->loops) {
-        loop.analyse2(jc);
+        loop.analyse(jc);
     }
 }
 
