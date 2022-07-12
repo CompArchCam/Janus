@@ -6,4 +6,7 @@ own_test/
 docs/html/
 tests/**/*_test/
 
+# Ignore for now 
+static/analysis/ControlFlowRf.cpp
+
 compile_commands.json
