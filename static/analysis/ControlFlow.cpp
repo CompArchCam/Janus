@@ -261,12 +261,15 @@ ControlFlowGraph::ControlFlowGraph(
     }
 
     if (bSize <= 1) {
-        cout << "cfg constructor early exit" << endl;
-        entry = blocks.data();
+        if (dbg)
+            cout << "cfg constructor early exit" << endl;
+        entry = &blocks[0];
         numBlocks = static_cast<uint32_t>(blocks.size());
-        cout << numBlocks << endl;
+        if (dbg)
+            cout << numBlocks << endl;
         copyToFunction();
-        cout << "Copied to function" << endl;
+        if (dbg)
+            cout << "Copied to function" << endl;
         return;
     }
 
@@ -326,7 +329,7 @@ ControlFlowGraph::ControlFlowGraph(
             }
         }
     }
-    entry = blocks.data();
+    entry = &(blocks[0]);
     numBlocks = static_cast<uint32_t>(blocks.size());
     copyToFunction();
 }
@@ -396,9 +399,11 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg)
 {
     uint32_t size = ControlFlowGraph::numBlocks;
     if (!size) {
-        cout << "\t\t numBlocks = 0" << endl;
+        if (dbg)
+            cout << "\t\t numBlocks = 0" << endl;
         buildDominanceFrontiers();
-        cout << "\t\t Dominance Frontier Built" << endl;
+        if (dbg)
+            cout << "\t\t Dominance Frontier Built" << endl;
         copyToFunction();
         return;
     }
@@ -410,7 +415,8 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg)
         vector<BitVector>(size, BitVector(size, uint32_t(-1))));
     vector<BitVector> &curDomTree = *domTree;
 
-    cout << "df1" << endl;
+    if (dbg)
+        cout << "df1" << endl;
 
     /* initialisation */
     curDomTree[0].clear();
@@ -419,12 +425,14 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg)
     bool converge;
     BitVector scratch(size);
 
-    cout << "df2" << endl;
+    if (dbg)
+        cout << "df2" << endl;
 
     do {
         converge = true;
         for (int i = 0; i < size; i++) {
-            cout << "df3 " << i << endl;
+            if (dbg)
+                cout << "df3 " << i << endl;
             BasicBlock &bb = ControlFlowGraph::blocks[i];
             /* If no predecessor, set itself as its dominator (for entry block)
              */
@@ -468,9 +476,11 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg)
         dominators.clear();
     }
 
-    cout << "\t\t Dominanec Tree End" << endl;
+    if (dbg)
+        cout << "\t\t Dominanec Tree End" << endl;
     buildDominanceFrontiers();
-    cout << "\t\t Dominance Frontier Built" << endl;
+    if (dbg)
+        cout << "\t\t Dominance Frontier Built" << endl;
     copyToFunction();
 }
 
@@ -610,18 +620,22 @@ PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
     uint32_t size = ControlFlowGraph::numBlocks;
     if (!size) {
         // TODO: cleanup this bit
-        cout << "numBlocks = 0" << endl;
+        if (dbg)
+            cout << "numBlocks = 0" << endl;
         buildPostDominanceFrontiers();
-        cout << "\t\t Post Dominance Frontier Built" << endl;
+        if (dbg)
+            cout << "\t\t Post Dominance Frontier Built" << endl;
         copyToFunction();
         return;
     }
 
     if (!ControlFlowGraph::terminations.size()) {
         // TODO: cleanup this bit
-        cout << "terminations = 0" << endl;
+        if (dbg)
+            cout << "terminations = 0" << endl;
         buildPostDominanceFrontiers();
-        cout << "\t\t Post Dominance Frontier Built" << endl;
+        if (dbg)
+            cout << "\t\t Post Dominance Frontier Built" << endl;
         copyToFunction();
         return;
     }
@@ -706,9 +720,11 @@ PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
         pdominators.clear();
     }
 
-    cout << "\t\t End of buildPostDominanceFrontiers" << endl;
+    if (dbg)
+        cout << "\t\t End of buildPostDominanceFrontiers" << endl;
     buildPostDominanceFrontiers();
-    cout << "\t\t Post Dominance Frontier Built" << endl;
+    if (dbg)
+        cout << "\t\t Post Dominance Frontier Built" << endl;
     copyToFunction();
 }
 
