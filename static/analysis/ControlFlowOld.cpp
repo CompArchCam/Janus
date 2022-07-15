@@ -1,5 +1,5 @@
-#include "ControlFlow.h"
 #include "BasicBlock.h"
+#include "ControlFlow.h"
 #include "Function.h"
 #include "JanusContext.h"
 #include "Utility.h"
@@ -22,7 +22,7 @@ static void buildDominanceTree(Function &function);
 static void buildPostDominanceTree(Function &function);
 
 // Construct control flow graph for each function
-void buildCFG(Function &function)
+void buildCFGOld(Function &function)
 {
     /* step 1: construct a vector of basic blocks
      * and link them together */

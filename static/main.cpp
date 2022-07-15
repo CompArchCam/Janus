@@ -4,6 +4,8 @@
 
 using namespace std;
 
+#define JANUS_VERBOSE true
+
 static void usage()
 {
     cout << "Usage: analyze + <option> + <executable> + [profile_info]" << endl;
