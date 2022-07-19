@@ -18,52 +18,16 @@ using namespace janus;
 #define BB_LEADER 2
 #define BB_TERMINATOR 1
 
-static bool dbg = true;
+constexpr static bool dbg = true;
 
-class ControlFlowGraph
+void ControlFlowGraph::buildCFG()
 {
-  private:
-    void buildBasicBlocks(std::map<PCAddress, janus::Function *> &);
-
-    /// Temporary workaround to copy all fields back into the functions
-    /// after initialisation; delete after reorg is done.
-    void copyToFunction();
-
-  public:
-    /// The function the CFG is representing
-    janus::Function &func;
-    /// Entry block of the function CFG
-    BasicBlock *entry;
-    /// Block size
-    uint32_t numBlocks;
-    /// Actual storage of all the function's basic blocks
-    std::vector<BasicBlock> blocks;
-    /// Function Call Instructions
-    std::map<janus::InstID, janus::Function *> calls;
-    /// Block id which block target not determined in binary
-    std::set<BlockID> unRecognised;
-    /// Block id which block terminates this function
-    std::set<BlockID> terminations;
-    /// Block id which block ends with a return instruction
-    std::set<BlockID> returnBlocks;
-    /// Split point for oversized basic block (only used for dynamic
-    /// modification)
-    std::map<BlockID, std::set<InstID>> blockSplitInstrs;
-
-    /// Constructor
-    ControlFlowGraph(Function &, std::map<PCAddress, janus::Function *> &);
-};
-
-void ControlFlowGraph::buildBasicBlocks(
-    std::map<PCAddress, janus::Function *> &functionMap)
-{
-    int cornerCase = false;
-    auto &instrs = func.instrs;
-    auto &instrTable = func.minstrTable;
-    auto &blocks = func.blocks;
-
-    // Each function has a vector of machine instructions,
-    // each insn has an ID Mark the target and branch as basic block boundaries
+    auto &instrs = func.instrs;          // Instructions of the function
+    auto &instrTable = func.minstrTable; // Instruction table that maps from
+    auto &functionMap = func.context->functionMap;
+    // PCAddress to Instruction id
+    /* Each function has a vector of machine instructions, each insn has an ID
+     * Mark the target and branch as basic block boundaries */
     map<InstID, uint32_t> marks;
     map<InstID, set<InstID>> edges;
     set<InstID> notRecognised;
@@ -78,7 +42,6 @@ void ControlFlowGraph::buildBasicBlocks(
     uint32_t instrCount = instrs.size();
 
     for (InstID id = 0; id < instrCount; id++) {
-
         Instruction &instr = instrs[id];
 
         if (instr.isControlFlow()) {
@@ -104,14 +67,13 @@ void ControlFlowGraph::buildBasicBlocks(
                 PCAddress target = instr.minstr->getTargetAddress();
                 if (target) {
                     // find this target in the instruction table
-                    auto query = instrTable.find(target);
-                    if (query == instrTable.end()) {
+                    if (!instrTable.contains(target)) {
                         notRecognised.insert(id);
                     }
                     // if found the target instruction, mark the target as a
                     // leader
                     else {
-                        targetID = (*query).second;
+                        targetID = instrTable.at(target);
                         marks[targetID] += BB_LEADER;
                         edges[id].insert(targetID);
                     }
@@ -132,7 +94,6 @@ void ControlFlowGraph::buildBasicBlocks(
             // for call instructions, no more further actions, just to construct
             // the call graph
             if (instr.opcode == Instruction::Call) {
-
                 // Currently assume all calls would return except indirect call
                 if (id + offset < instrCount)
                     edges[id].insert(id + offset);
@@ -140,13 +101,14 @@ void ControlFlowGraph::buildBasicBlocks(
                 PCAddress callTarget = instr.minstr->getTargetAddress();
                 if (callTarget) {
                     // find this target in the function map
-                    auto query = functionMap.find(callTarget);
-                    if (query == functionMap.end()) {
+                    if (!functionMap.contains(callTarget)) {
                         notRecognised.insert(id);
                     }
                     // if found in the function map
                     else {
-                        Function *targetFunc = (*query).second;
+                        auto targetFunc = functionMap.at(callTarget);
+                        calls[id] = targetFunc;
+                        // TODO: check if we need this
                         func.calls[id] = targetFunc;
                         func.subCalls.insert(targetFunc->fid);
                     }
@@ -164,11 +126,9 @@ void ControlFlowGraph::buildBasicBlocks(
                 returnBlocks.insert(id);
             }
         }
-        //[ > Corner case:final instruction not a cti <
-        //]
+        /* Corner case: final instruction not a cti */
         if (id == instrCount - 1 && !instr.isControlFlow()) {
             marks[id] += BB_TERMINATOR;
-            cornerCase = true;
         }
     }
 
@@ -182,7 +142,6 @@ void ControlFlowGraph::buildBasicBlocks(
     // since all boundaries are already sorted by InstID, we just iterate
     // through it
     for (auto mark = marks.begin(); mark != marks.end(); mark++) {
-
         InstID boundary = (*mark).first;
         // if mark is out of function boundary
         if (boundary >= instrCount)
@@ -193,10 +152,8 @@ void ControlFlowGraph::buildBasicBlocks(
         // it is the start of a block
         if (property % 2 == 0) {
             // find the next LEADER or TERMINATOR for the end of the block
-            /*[ > We must make sure that there is no only nops in the block <*/
-            /*]*/
-            auto nextMark = mark;
-            nextMark++;
+            /* We must make sure that there is no only nops in the block */
+            auto nextMark = std::next(mark);
             if (nextMark == marks.end())
                 break;
             InstID blockEnd = (*nextMark).first;
@@ -223,16 +180,18 @@ void ControlFlowGraph::buildBasicBlocks(
                                     (*nextMark).second % 2 == 0);
             } else {
                 trueBlockEnd = trueBlockStart + MAX_BLOCK_INSTR_COUNT;
+
                 blockSplitInstrs[blockID].insert(trueBlockEnd);
                 blocks.emplace_back(&func, blockID++, boundary, trueBlockEnd,
                                     1);
                 // update the boundary
                 boundary = trueBlockEnd;
 
-                // For further oversize blocks,
-                // split the block into multiple block
+                /* For further oversize blocks, split the block into multiple
+                 * block */
                 while (blockEnd - boundary > MAX_BLOCK_INSTR_COUNT) {
                     trueBlockEnd = boundary + MAX_BLOCK_INSTR_COUNT;
+
                     blockSplitInstrs[blockID].insert(trueBlockEnd);
                     blocks.emplace_back(&func, blockID++, boundary,
                                         trueBlockEnd, 1);
@@ -266,8 +225,9 @@ void ControlFlowGraph::buildBasicBlocks(
         }
     }
 
-    if (bSize <= 1)
+    if (bSize <= 1) {
         return;
+    }
 
     // step 3.2 after all instructions are linked with their parent blocks, we
     // can then link each block to block
@@ -280,23 +240,28 @@ void ControlFlowGraph::buildBasicBlocks(
             blockArray[i + 1].pred.insert(block);
             continue;
         }
-        InstID endID = block->lastInstr()->id;
-        auto query = edges.find(endID);
+        InstID blockEndID = block->lastInstr()->id;
+        auto query = edges.find(blockEndID);
 
-        if (query == edges.end()) {
+        if (!edges.contains(blockEndID)) {
             if (block->lastInstr()->isControlFlow()) {
-                if (notRecognised.find(endID) == notRecognised.end()) {
+                if (notRecognised.contains(blockEndID)) {
                     terminations.insert(block->bid);
+
+                    // XXX: block.terminate is redundant
                     block->terminate = true;
-                } else
+                } else {
                     unRecognised.insert(block->bid);
+                }
             }
         } else {
-            for (auto succBlockID : (*query).second) {
+            const auto succBlocksIDs = edges.at(blockEndID);
+            for (auto succBlockID : succBlocksIDs) {
                 auto &instr = instrs[succBlockID];
                 BasicBlock *targetBlock = instr.block;
                 if (targetBlock)
                     targetBlock->pred.insert(block);
+
                 if (block->succ1) {
                     block->succ2 = targetBlock;
                 } else {
@@ -312,23 +277,25 @@ void ControlFlowGraph::buildBasicBlocks(
             if (block->lastInstr()->opcode == Instruction::Call) {
                 PCAddress target =
                     block->lastInstr()->minstr->getTargetAddress();
-                if (func.context->functionMap.find(target) !=
-                    func.context->functionMap.end())
-                    if (func.context->functionMap[target]->name ==
-                        "_gfortran_stop_string@plt")
-                        func.terminations.insert(i);
+                if (func.context->functionMap.contains(target) &&
+                    func.context->functionMap[target]->name ==
+                        "_gfortran_stop_string@plt") {
+                    terminations.insert(i);
+                }
             }
         }
     }
 }
 
 ControlFlowGraph::ControlFlowGraph(
-    Function &function, std::map<PCAddress, janus::Function *> &functionMap)
+    janus::Function &function,
+    std::map<PCAddress, janus::Function *> &functionMap)
     : func{function}
 {
-    buildBasicBlocks(functionMap);
-    numBlocks = static_cast<uint32_t>(blocks.size());
+    buildCFG();
+    func.cfg = this;
     entry = blocks.data();
+    numBlocks = blocks.size();
     copyToFunction();
 }
 
@@ -431,7 +398,7 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg)
         for (int i = 0; i < size; i++) {
             if (dbg)
                 cout << "df3 " << i << endl;
-            BasicBlock &bb = ControlFlowGraph::blocks[i];
+            BasicBlock &bb = ControlFlowGraph::entry[i];
             /* If no predecessor, set itself as its dominator (for entry block)
              */
             if (bb.pred.size() == 0) {
@@ -461,13 +428,13 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg)
 
     set<BlockID> dominators;
     for (int i = 0; i < size; i++) {
-        BasicBlock &bb = ControlFlowGraph::blocks[i];
+        BasicBlock &bb = ControlFlowGraph::entry[i];
         curDomTree[i].toSTLSet(dominators);
         for (BlockID d : dominators) {
             /* If the number of dominators of BB d is 1 less than the dominators
              * of BB i, Then it means the immediate dominator of i is d */
             if (curDomTree[d].size() + 1 == dominators.size()) {
-                bb.idom = &(ControlFlowGraph::blocks[d]);
+                bb.idom = &(ControlFlowGraph::entry[d]);
                 break;
             }
         }
@@ -682,7 +649,7 @@ PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
             }
 
             // normal case
-            BasicBlock &bb = ControlFlowGraph::blocks[i];
+            BasicBlock &bb = ControlFlowGraph::entry[i];
 
             /* create a universal set */
             scratch.setUniversal();
@@ -704,14 +671,14 @@ PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
 
     set<BlockID> pdominators;
     for (int i = 0; i < size; i++) {
-        BasicBlock &bb = ControlFlowGraph::blocks[i];
+        BasicBlock &bb = ControlFlowGraph::entry[i];
         pdomTreeDref[i].toSTLSet(pdominators);
         for (BlockID d : pdominators) {
             /* If the number of pdominators of BB d is 1 less than the
              * pdominators of BB i, Then it means the immediate post dominator
              * of i is d */
             if (pdomTreeDref[d].size() + 1 == pdominators.size()) {
-                bb.ipdom = &(ControlFlowGraph::blocks[d]);
+                bb.ipdom = &(ControlFlowGraph::entry[d]);
                 break;
             }
         }
@@ -762,7 +729,7 @@ template <std::derived_from<ControlFlowGraph> PCFG> void traverseCFG(PCFG &pcfg)
 }
 
 // Construct control flow graph for each function
-void buildCFG(Function &function)
+void buildCFG(janus::Function &function)
 {
     if (dbg)
         cout << function.fid << ": start" << endl;
@@ -793,7 +760,7 @@ void buildCFG(Function &function)
 }
 
 // Construct control dependence graph for each function
-void buildCDG(Function &function)
+void buildCDG(janus::Function &function)
 {
     /* All of the instructions within a basic block are
      * immediately control dependent on the branches
@@ -812,7 +779,7 @@ void buildCDG(Function &function)
 /* Study the link between functions and build call graphs */
 void buildCallGraphs(JanusContext *gc)
 {
-    Function *functions = gc->functions.data();
+    janus::Function *functions = gc->functions.data();
     uint32_t numFunc = gc->functions.size();
 
     GSTEP("Building call graphs: " << endl);
