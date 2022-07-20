@@ -50,9 +50,11 @@ static void createSuccFromPred(Function &function);
 
 void buildSSAGraph(Function &function)
 {
-
+    if (dbg) {
+        cout << "BP 1" << endl;
+    }
     /* Step 1: collect variable inputs and outputs for each basic block */
-    for (auto &bb : function.blocks) {
+    for (auto &bb : function.getCFG().blocks) {
         bb.lastStates.clear();
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
@@ -62,16 +64,29 @@ void buildSSAGraph(Function &function)
         }
     }
 
+    if (dbg) {
+        cout << "BP 2" << endl;
+    }
     /* Step 2: Insert Phi node */
     for (auto var : function.allVars)
         insertPhiNodes(function, var);
 
+    if (dbg) {
+        cout << "BP 3" << endl;
+    }
     /* Step 3: Link all instruction's input to Phi and outputs */
     linkSSANodes(function);
 
+    if (dbg) {
+        cout << "BP 4" << endl;
+    }
     /* Step 3.1: From the pred computed in the previous step, create the succ
      * for each varstate */
     createSuccFromPred(function);
+
+    if (dbg) {
+        cout << "BP 5" << endl;
+    }
 
     /* Step 4: Assign an id/version for each variable state
      * Used for human readable SSA */
@@ -84,9 +99,15 @@ void buildSSAGraph(Function &function)
         vs->version = version;
         versions[var] = version + 1;
     }
+    if (dbg) {
+        cout << "BP 6" << endl;
+    }
 
     /* Step 5: Link dependants and mark unused variables */
     linkDependentNodes(function);
+    if (dbg) {
+        cout << "BP 7" << endl;
+    }
 }
 
 /* Copy all the variable definitions from block orig to dest */
@@ -108,7 +129,7 @@ void linkSSANodes(Function &function)
     // A distinct record for each basic block
     map<BlockID, map<Variable, VarState *> *> globalDefs;
 
-    BasicBlock *entry = function.entry;
+    BasicBlock *entry = function.getCFG().entry;
 
     // We use the order BFS to link all the inputs and outputs
     queue<pair<BlockID, BlockID>> q;
@@ -183,21 +204,21 @@ static VarState *getOrInitVarState(Variable var,
     // for constant immediate, there is no need to query, simply create a new
     // state
     if (var.type == JVAR_CONSTANT) {
-        VarState *vs = new VarState(var, function.entry, false);
+        VarState *vs = new VarState(var, function.getCFG().entry, false);
         function.allStates.insert(vs);
         return vs;
     }
 
     // we currently assume all memory variables are different
     if (var.type == JVAR_MEMORY || var.type == JVAR_POLYNOMIAL) {
-        VarState *vs = new VarState(var, function.entry, false);
+        VarState *vs = new VarState(var, function.getCFG().entry, false);
         function.allStates.insert(vs);
         linkMemoryNodes(var, vs, latestDefs, function);
         return vs;
     }
 
     if (var.type == JVAR_SHIFTEDCONST || var.type == JVAR_SHIFTEDREG) {
-        VarState *vs = new VarState(var, function.entry, false);
+        VarState *vs = new VarState(var, function.getCFG().entry, false);
         function.allStates.insert(vs);
         linkShiftedNodes(var, vs, latestDefs, function);
         return vs;
@@ -212,7 +233,7 @@ static VarState *getOrInitVarState(Variable var,
         }
 
         // not constructed yet
-        vs = new VarState(var, function.entry, false);
+        vs = new VarState(var, function.getCFG().entry, false);
         function.allStates.insert(vs);
         latestDefs[var] = vs;
         function.inputStates[var] = vs;
@@ -232,7 +253,7 @@ static void createSuccFromPred(Function &function)
 static void updatePhiNodes(Function &function, BlockID bid,
                            map<Variable, VarState *> &previousDefs)
 {
-    BasicBlock &bb = function.entry[bid];
+    BasicBlock &bb = function.getCFG().entry[bid];
 
     // Link phi node for this block
     for (auto phi : bb.phiNodes) {
@@ -248,7 +269,7 @@ static void updatePhiNodes(Function &function, BlockID bid,
 static void updateSSANodes(Function &function, BlockID bid,
                            map<Variable, VarState *> &latestDefs)
 {
-    BasicBlock &bb = function.entry[bid];
+    BasicBlock &bb = function.getCFG().entry[bid];
     vector<Variable> inputs;
 
     // Register phi nodes in the definitions
@@ -320,7 +341,7 @@ static void linkMemoryNodes(Variable var, VarState *vs,
         Variable ivar;
         ivar.type = JVAR_CONSTANT;
         ivar.value = var.value;
-        VarState *ivs = new VarState(ivar, function.entry, false);
+        VarState *ivs = new VarState(ivar, function.getCFG().entry, false);
         function.allStates.insert(ivs);
         vs->pred.insert(ivs);
     }
@@ -333,7 +354,8 @@ static void linkShiftedNodes(Variable var, VarState *vs,
     Variable immedShift;
     immedShift.type = JVAR_CONSTANT;
     immedShift.value = var.shift_value;
-    VarState *shiftvs = new VarState(immedShift, function.entry, false);
+    VarState *shiftvs =
+        new VarState(immedShift, function.getCFG().entry, false);
     function.allStates.insert(shiftvs);
     vs->pred.insert(shiftvs);
 
@@ -341,7 +363,8 @@ static void linkShiftedNodes(Variable var, VarState *vs,
         Variable immedVal;
         immedVal.type = JVAR_CONSTANT;
         immedVal.value = var.value;
-        VarState *immedvs = new VarState(immedVal, function.entry, false);
+        VarState *immedvs =
+            new VarState(immedVal, function.getCFG().entry, false);
         function.allStates.insert(immedvs);
         vs->pred.insert(immedvs);
     } else if (var.type == JVAR_SHIFTEDREG) {
@@ -356,7 +379,7 @@ static void linkDependentNodes(Function &function)
     queue<VarState *> usedQ;
     set<VarState *> initInputs;
     set<Variable *> visitedState;
-    for (auto &bb : function.blocks) {
+    for (auto &bb : function.getCFG().blocks) {
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
             for (auto vs : instr.inputs) {
@@ -412,28 +435,71 @@ void buildDominanceFrontierClosure(Function &function, Variable var,
                                    set<BasicBlock *> &bbs /*OUT*/,
                                    set<BasicBlock *> &phiblocks) /*OUT*/
 {
+    if (dbg) {
+        cout << "\t DFC: FID = " << function.fid << endl;
+    }
+    if (dbg) {
+        cout << "\t DFC: BP 1" << endl;
+    }
     queue<BasicBlock *> q;
 
+    if (dbg) {
+        cout << "\t DFC: BP 2" << endl;
+    }
     // Find all basic blocks that contain definitions of variable var
-    for (auto &bb : function.blocks) {
+    for (auto &bb : function.getCFG().blocks) {
         if (bb.lastStates.find(var) != bb.lastStates.end()) {
             bbs.insert(&bb);
             q.push(&bb);
         }
     }
+    if (dbg) {
+        cout << "\t DFC: BP 3" << endl;
+    }
 
     // BFS to generate transitive closure
     while (!q.empty()) {
         BasicBlock *bb = q.front();
+        if (dbg) {
+            cout << "\t\t DFC LOOP; BID = " << bb->bid << endl;
+        }
         q.pop();
+        if (dbg) {
+            cout << "\t\t DFC LOOP; BP 1" << endl;
+        }
+        if (dbg) {
+            cout << "\t\t DFC LOOP; bb->dominanceFrontier.size() = "
+                 << bb->dominanceFrontier.size() << endl;
+        }
         // insert phi node at the dominance frontier of the definition
         for (BasicBlock *cc : bb->dominanceFrontier) {
+            if (dbg) {
+                cout << "\t\t\t DFC INNER; BP 1" << endl;
+            }
             phiblocks.insert(cc);
+            if (dbg) {
+                cout << "\t\t\t DFC INNER; BP 2" << endl;
+            }
             if (bbs.find(cc) != bbs.end())
                 continue;
+            if (dbg) {
+                cout << "\t\t\t DFC INNER; BP 3" << endl;
+            }
             q.push(cc);
+            if (dbg) {
+                cout << "\t\t\t DFC INNER; BP 4" << endl;
+            }
             bbs.insert(cc);
+            if (dbg) {
+                cout << "\t\t\t DFC INNER; BP 5" << endl;
+            }
         }
+        if (dbg) {
+            cout << "\t\t DFC LOOP; BP 2" << endl;
+        }
+    }
+    if (dbg) {
+        cout << "\t DFC: BP 4" << endl;
     }
 }
 
@@ -445,13 +511,22 @@ void insertPhiNodes(Function &function, Variable var)
     if (var.type == JVAR_MEMORY || var.type == JVAR_POLYNOMIAL ||
         var.type == JVAR_CONSTANT || var.type == JVAR_UNKOWN)
         return;
+    if (dbg) {
+        cout << "\t PhiNodes: BP 1" << endl;
+    }
 
     set<BasicBlock *> bbs;
     set<BasicBlock *> phiblocks;
 
+    if (dbg) {
+        cout << "\t PhiNodes: BP 2" << endl;
+    }
     // step 1: build DF+ of the variable
     buildDominanceFrontierClosure(function, var, bbs, phiblocks);
 
+    if (dbg) {
+        cout << "\t PhiNodes: BP 3" << endl;
+    }
     // step 2: insert phi nodes
     for (auto bb : phiblocks) {
         // create a variable state at each phi block for this variable
@@ -463,5 +538,8 @@ void insertPhiNodes(Function &function, Variable var)
             bb->lastStates[var] = vs;
         // insert phi node
         bb->phiNodes.push_back(vs);
+    }
+    if (dbg) {
+        cout << "\t PhiNodes: BP 4" << endl;
     }
 }

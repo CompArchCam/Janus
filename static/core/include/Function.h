@@ -3,7 +3,15 @@
 #ifndef _Janus_FUNCTION_
 #define _Janus_FUNCTION_
 
+#include <iostream>
+#include <list>
+#include <map>
+#include <memory>
+#include <set>
+#include <vector>
+
 #include "BasicBlock.h"
+#include "ControlFlow.h"
 #include "Executable.h"
 #include "Expression.h"
 #include "Instruction.h"
@@ -12,11 +20,6 @@
 #include "Utility.h"
 #include "Variable.h"
 #include "janus.h"
-#include <iostream>
-#include <list>
-#include <map>
-#include <set>
-#include <vector>
 
 class JanusContext;
 
@@ -25,6 +28,7 @@ namespace janus
 class Function
 {
   public:
+    Function(Function &&f) = default;
     /// function id
     FuncID fid;
     /// number of bytes in byte code
@@ -53,11 +57,11 @@ class Function
     /// Set of all SSA variables ever defined (or used) in this function
     std::set<VarState *> allStates;
     /// Entry block of the function CFG
-    BasicBlock *entry;
+    // BasicBlock *entry;
     /// Block size
-    uint32_t numBlocks;
+    // uint32_t numBlocks;
     /// Actual storage of all the function's basic blocks
-    std::vector<BasicBlock> blocks;
+    // std::vector<BasicBlock> blocks;
     /// The root of the dominator tree (indexed by blockID) for the CFG in this
     /// function
     std::vector<BitVector> *domTree;
@@ -79,18 +83,20 @@ class Function
     /// all function id that is called by the current function
     std::set<FuncID> subCalls;
     /// Block id which block target not determined in binary
-    std::set<BlockID> unRecognised;
+    // std::set<BlockID> unRecognised;
     /// Block id which block terminates this function
-    std::set<BlockID> terminations;
+    // std::set<BlockID> terminations;
     /// Block id which block ends with a return instruction
-    std::set<BlockID> returnBlocks;
+    // std::set<BlockID> returnBlocks;
     /// Split point for oversized basic block (only used for dynamic
     /// modification)
-    std::map<BlockID, std::set<InstID>> blockSplitInstrs;
+    // std::map<BlockID, std::set<InstID>> blockSplitInstrs;
     /// A set of expression pointers used in this function
     std::set<Expr *> exprs;
     /// The initial states for all variables found in this function
     std::map<Variable, VarState *> inputStates;
+    /// Unique pointer to the control flow graph
+    std::unique_ptr<ControlFlowGraph> cfg;
 
     /* --------------------------------------------------------------
      *                Architecture specific information
@@ -153,6 +159,9 @@ class Function
     bool needSync();
     /** \brief Contruct the relations of the loop in this function */
     void analyseLoopRelations();
+    /** \brief creates the cfg is not present; otherwise return the cfg object
+     */
+    ControlFlowGraph &getCFG();
 };
 } // namespace janus
 

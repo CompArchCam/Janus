@@ -17,7 +17,7 @@ void generateLoopCoverageProfilingRules(JanusContext *gc)
 
     /* Generate rules for each loops */
     for (auto &loop : gc->loops) {
-        entry = loop.parent->entry;
+        entry = loop.parent->getCFG().entry;
 
         /* Get information of parent function name*/
         std::string parent_name = loop.parent->name;
@@ -25,7 +25,7 @@ void generateLoopCoverageProfilingRules(JanusContext *gc)
 
         /* Insert rules for manually split over-sized blocks */
         Function *parent = loop.parent;
-        for (auto bset : parent->blockSplitInstrs) {
+        for (auto bset : parent->getCFG().blockSplitInstrs) {
             BasicBlock *bb = entry + bset.first;
             for (auto sid : bset.second) {
                 rule = RewriteRule(APP_SPLIT_BLOCK, bb->instrs->pc,
@@ -79,15 +79,15 @@ void generateFunctionCoverageProfilingRules(JanusContext *gc)
     RewriteRule rule;
     /* Generate rules for each function */
     for (auto &func : gc->functions) {
-        if (!func.entry || !func.minstrs.size())
+        if (!func.getCFG().entry || !func.minstrs.size())
             continue;
         /* CTIMER_FUNC_START is inserted at all entry blocks */
-        rule = RewriteRule(CTIMER_FUNC_START, func.entry, PRE_INSERT);
+        rule = RewriteRule(CTIMER_FUNC_START, func.getCFG().entry, PRE_INSERT);
         rule.reg0 = func.fid;
-        insertRule(0, rule, func.entry);
+        insertRule(0, rule, func.getCFG().entry);
         /* CTIMER_LOOP_END is inserted at all exit blocks */
-        for (auto retID : func.terminations) {
-            BasicBlock &bb = func.blocks[retID];
+        for (auto retID : func.getCFG().terminations) {
+            BasicBlock &bb = func.getCFG().blocks[retID];
             if (bb.lastInstr()->opcode == Instruction::Return) {
                 rule = RewriteRule(CTIMER_FUNC_END, &bb, PRE_INSERT);
                 rule.reg0 = func.fid;

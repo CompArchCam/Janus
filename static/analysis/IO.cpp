@@ -210,7 +210,7 @@ void printSSADot(janus::Loop &loop, void *outputStream)
     // set generic style
     os << "node [style=\"rounded,filled\"]" << endl;
 
-    BasicBlock *entry = loop.parent->entry;
+    BasicBlock *entry = loop.parent->getCFG().entry;
     set<VarState *> loopNodes;
     set<VarState *> loopNodeExpanded;
     for (auto bid : loop.body) {

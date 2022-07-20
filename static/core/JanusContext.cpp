@@ -35,7 +35,7 @@ void JanusContext::buildProgramDependenceGraph()
     for (auto &func : functions) {
         if (func.isExecutable) {
             buildCFG(func);
-            numBlocks += func.blocks.size();
+            numBlocks += func.getCFG().blocks.size();
         }
     }
     GSTEPCONT(numBlocks << " blocks" << endl);
@@ -45,7 +45,7 @@ void JanusContext::buildProgramDependenceGraph()
     GSTEP("Lifting disassembly to IR: ");
     uint32_t numInstrs = 0;
     for (auto &func : functions) {
-        if (func.isExecutable && func.blocks.size()) {
+        if (func.isExecutable && func.getCFG().blocks.size()) {
             numInstrs += liftInstructions(&func);
         }
     }
@@ -55,7 +55,7 @@ void JanusContext::buildProgramDependenceGraph()
     /* Step 3: construct SSA graph */
     GSTEP("Building SSA graphs" << endl);
     for (auto &func : functions) {
-        if (func.isExecutable && func.blocks.size()) {
+        if (func.isExecutable && func.getCFG().blocks.size()) {
             buildSSAGraph(func);
         }
     }
@@ -64,7 +64,7 @@ void JanusContext::buildProgramDependenceGraph()
     /* Step 4: construct Control Dependence Graph */
     GSTEP("Building control dependence graphs" << endl);
     for (auto &func : functions) {
-        if (func.isExecutable && func.blocks.size()) {
+        if (func.isExecutable && func.getCFG().blocks.size()) {
             buildCDG(func);
         }
     }

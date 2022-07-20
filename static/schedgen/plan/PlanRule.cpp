@@ -11,12 +11,12 @@ using namespace std;
 static void generateRulesForEachLoop(JanusContext *gc, Loop &loop)
 {
     /* Get the array of CFG */
-    BasicBlock *entry = loop.parent->entry;
+    BasicBlock *entry = loop.parent->getCFG().entry;
     /* Place holder for a static rule for copy */
     RewriteRule rule;
 
     /* Insert rules for manually split over-sized blocks */
-    for (auto bset : loop.parent->blockSplitInstrs) {
+    for (auto bset : loop.parent->getCFG().blockSplitInstrs) {
         BasicBlock *bb = entry + bset.first;
         for (auto sid : bset.second) {
             rule = RewriteRule(APP_SPLIT_BLOCK, bb->instrs->pc,
@@ -77,7 +77,7 @@ static void generateRulesForEachLoop(JanusContext *gc, Loop &loop)
     /* Add PROF_MEM_ACCESS in sub calls */
     for (auto fid : loop.subCalls) {
         Function &func = gc->functions[fid];
-        for (auto &bb : func.blocks) {
+        for (auto &bb : func.getCFG().blocks) {
             /* PROF_MEM_ACCESS is inserted before every memory access
              * TODO: reduce the number of checks using alias analysis */
             for (auto &mem : bb.minstrs) {

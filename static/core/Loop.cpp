@@ -34,8 +34,8 @@ void searchLoop(JanusContext *gc, Function *function)
         return;
 
     auto &loopArray = gc->loops;
-    BasicBlock *entry = function->entry;
-    uint32_t size = function->blocks.size();
+    BasicBlock *entry = function->getCFG().entry;
+    uint32_t size = function->getCFG().blocks.size();
 
     if (size == 0)
         return;
@@ -144,10 +144,10 @@ Loop::Loop(BasicBlock *start, Function *parent)
      * if the start node dominate this node, then this node
      * is the body node of the loop.
      */
-    uint32_t blockCount = parent->blocks.size();
+    uint32_t blockCount = parent->getCFG().blocks.size();
     bool *visited = (bool *)malloc(blockCount * sizeof(bool));
     memset(visited, 0, blockCount * sizeof(bool));
-    BasicBlock *entry = parent->entry;
+    BasicBlock *entry = parent->getCFG().entry;
 
     stack<BlockID> bbStack;
 
@@ -215,7 +215,7 @@ void Loop::analyse(JanusContext *gc)
 
 proceed:
     analysed = true;
-    BasicBlock *entry = parent->entry;
+    BasicBlock *entry = parent->getCFG().entry;
 
     /* translate parent function before analysis */
     if (parent)
@@ -254,8 +254,8 @@ proceed:
      * and unsafe exits */
     for (auto bid : body) {
         // check whether it is terminated by indirect branches
-        auto check = parent->unRecognised.find(bid);
-        if (check != parent->unRecognised.end()) {
+        // auto check = parent->unRecognised.find(bid);
+        if (parent->getCFG().unRecognised.contains(bid)) {
             sync.insert(bid);
             continue;
         }
@@ -500,7 +500,7 @@ VarState *Loop::getAbsoluteStorage(VarState *vs)
         // JAN-59
         // This covers the case of when vs->expr comes from a lea with an rip
         // relative address (The RIP relative address gets changed to a constant
-        //in the IR) Since then expr->kind isn't Expr::Unary (with u.op ==
+        // in the IR) Since then expr->kind isn't Expr::Unary (with u.op ==
         // Expr::MOV) But instead an Expr::INTEGER, bundled with a scalar value
         // So now we need to wrap that scalar value in a VarState
         return new VarState(Variable((uint64_t)vs->expr->i));
@@ -514,7 +514,7 @@ void Loop::printDot(void *outputStream)
     ostream &os = *(ostream *)outputStream;
     GASSERT((parent != NULL && parent->entry != NULL),
             "Parent function CFG not found");
-    BasicBlock *entry = parent->entry;
+    BasicBlock *entry = parent->getCFG().entry;
     bool hasTemperature = (temperature.size() != 0);
 
     os << "digraph loop_" << id << "_CFG {" << endl;

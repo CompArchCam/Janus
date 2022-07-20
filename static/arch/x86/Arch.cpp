@@ -161,7 +161,7 @@ void getOutputCallConvention(std::vector<janus::Variable> &v)
 
 void analyseStack(Function *function)
 {
-    BasicBlock *entry = function->entry;
+    BasicBlock *entry = function->getCFG().entry;
     function->hasBasePointer = false;
     function->hasConstantStackPointer = true;
     uint64_t totalFrameSize;
@@ -194,11 +194,11 @@ void analyseStack(Function *function)
     }
     function->totalFrameSize = function->stackFrameSize + size;
 
-    for (int i = 1; i < function->numBlocks; i++) {
-        if (function->terminations.find(i) != function->terminations.end())
+    for (int i = 1; i < function->getCFG().numBlocks; i++) {
+        if (function->getCFG().terminations.contains(i))
             continue;
 
-        auto &bb = function->entry[i];
+        auto &bb = function->getCFG().entry[i];
         for (int j = 0; j < bb.size; j++) {
             auto &mi = *bb.instrs[j].minstr;
 

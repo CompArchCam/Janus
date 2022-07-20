@@ -59,15 +59,15 @@ void generateParallelRules(JanusContext *gc)
     Function *main = gc->main;
 
     RewriteRule rule =
-        RewriteRule(THREAD_CREATE, main->entry, FIRST_INSTRUCTION);
+        RewriteRule(THREAD_CREATE, main->getCFG().entry, FIRST_INSTRUCTION);
     rule.reg0 = gc->functions.size();
     rewriteRules[MAIN_CHANNEL].insert(rule);
     /* Thread create explicitly changes the basic block termination
      * The basic block structure has been changed */
-    reshapeBlock = main->entry;
+    reshapeBlock = main->getCFG().entry;
 
-    for (auto t : main->terminations) {
-        BasicBlock *end_block = main->entry + t;
+    for (auto t : main->getCFG().terminations) {
+        BasicBlock *end_block = main->getCFG().entry + t;
         insertRule(MAIN_CHANNEL,
                    RewriteRule(THREAD_EXIT, end_block, PRE_INSERT), end_block);
     }
@@ -92,7 +92,7 @@ static void prepareLoopHeader(JanusContext *gc, Loop &loop)
                         "probably not correct!\n");
     }
     for (auto checkID : loop.check) {
-        BasicBlock &checkBlock = loop.parent->entry[checkID];
+        BasicBlock &checkBlock = loop.parent->getCFG().entry[checkID];
         // get the last conditional jump, a check block is always conditional
         // jump
         Instruction *cjump = checkBlock.lastInstr();
@@ -131,14 +131,14 @@ static void generateDOALLRules(JanusContext *gc, Loop &loop)
 {
     Function *parent = loop.parent;
     /* Get entry block of the CFG */
-    BasicBlock *entry = parent->entry;
+    BasicBlock *entry = parent->getCFG().entry;
     /* Get the array of instructions */
     Instruction *instrs = parent->instrs.data();
     RewriteRule rule;
     uint32_t id = loop.id;
 
     /* Insert rules for manually split over-sized blocks */
-    for (auto bset : parent->blockSplitInstrs) {
+    for (auto bset : parent->getCFG().blockSplitInstrs) {
         BasicBlock *bb = entry + bset.first;
         for (auto sid : bset.second) {
             rule = RewriteRule(APP_SPLIT_BLOCK, bb->instrs->pc,
@@ -210,7 +210,7 @@ static void generateDOALLRules(JanusContext *gc, Loop &loop)
 
     /* Update check conditions */
     for (auto checkID : loop.check) {
-        BasicBlock &checkBlock = loop.parent->entry[checkID];
+        BasicBlock &checkBlock = loop.parent->getCFG().entry[checkID];
         // get the last conditional jump, a check block is always conditonal
         // jump
         auto *cjump = checkBlock.lastInstr();

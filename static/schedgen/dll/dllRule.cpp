@@ -6,7 +6,7 @@ using namespace janus;
 void generateDLLRules(JanusContext *jc)
 {
     for (auto &f : jc->functions) {
-        for (auto &bb : f.blocks) {
+        for (auto &bb : f.getCFG().blocks) {
             int local_inst_count = 0;
             for (auto &I : bb.minstrs) {
                 if (I.type == MemoryInstruction::Read) {

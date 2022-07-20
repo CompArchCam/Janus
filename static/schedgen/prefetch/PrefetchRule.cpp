@@ -1,4 +1,3 @@
-
 #include "PrefetchRule.h"
 #include "Alias.h"
 #include "JanusContext.h"
@@ -286,7 +285,7 @@ static void emitInstrCloneRules(list<Instruction *> &instrs,
 static void prepareLoopMemoryAccesses(Loop *loop)
 {
     Function *parent = loop->parent;
-    BasicBlock *entry = parent->entry;
+    BasicBlock *entry = parent->getCFG().entry;
     // a temporary dictionary holding intermediate scevs
     map<VarState *, SCEV> ranges;
 

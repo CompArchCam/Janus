@@ -8,6 +8,7 @@
 #include "SSA.h"
 #include <algorithm>
 #include <iostream>
+#include <memory>
 #include <queue>
 #include <sstream>
 #include <string>
@@ -35,7 +36,6 @@ Function::Function(JanusContext *gc, FuncID fid, const Symbol &symbol,
         isExecutable = false;
 
     domTree = NULL;
-    entry = NULL;
     translated = false;
     hasIndirectStackAccesses = false;
     available = true;
@@ -65,7 +65,9 @@ void Function::translate()
     if (translated)
         return;
 
-    if (!entry) {
+    // XXX: change this bit; this will always work because getCFG is called in
+    // the condition
+    if (!getCFG().entry) {
         available = false;
         return;
     }
@@ -101,7 +103,7 @@ void Function::translate()
 
 static void assign_loop_blocks(Loop *loop)
 {
-    BasicBlock *entry = loop->parent->entry;
+    BasicBlock *entry = loop->parent->getCFG().entry;
     for (auto bid : loop->body) {
         entry[bid].parentLoop = loop;
     }
@@ -213,7 +215,7 @@ void Function::visualize(void *outputStream)
     os << "digraph " << name << "CFG {" << endl;
     os << "label=\"" << name << "_" << dec << fid + 1 << "_CFG\";" << endl;
 
-    for (auto &bb : blocks) {
+    for (auto &bb : getCFG().blocks) {
         // name of the basic block
         os << "\tBB" << dec << bb.bid << " ";
         // append attributes
@@ -231,7 +233,7 @@ void Function::visualize(void *outputStream)
 
     // print all the edges
     os << dec;
-    for (auto &bb : blocks) {
+    for (auto &bb : getCFG().blocks) {
         if (bb.succ1)
             os << "\tBB" << bb.bid << " -> BB" << bb.succ1->bid << ";" << endl;
         if (bb.succ2)
@@ -245,7 +247,7 @@ void Function::visualize(void *outputStream)
     os << "label=\"" << name << "_" << dec << fid + 1 << "_CFG_Simplify\";"
        << endl;
 
-    for (auto &bb : blocks) {
+    for (auto &bb : getCFG().blocks) {
         // name of the basic block
         os << "\tBB" << dec << bb.bid << " ";
         // append attributes
@@ -259,7 +261,7 @@ void Function::visualize(void *outputStream)
 
     // print the dom edge
     os << dec;
-    for (auto &bb : blocks) {
+    for (auto &bb : getCFG().blocks) {
         if (bb.succ1)
             os << "\tBB" << bb.bid << " -> BB" << bb.succ1->bid << ";" << endl;
         if (bb.succ2)
@@ -271,7 +273,7 @@ void Function::visualize(void *outputStream)
     os << "digraph " << name << "DOM_TREE {" << endl;
     os << "label=\"" << name << "_" << dec << fid + 1 << "_Dom_Tree\";" << endl;
 
-    for (auto &bb : blocks) {
+    for (auto &bb : getCFG().blocks) {
         // name of the basic block
         os << "\tBB" << dec << bb.bid << " ";
         // append attributes
@@ -285,7 +287,7 @@ void Function::visualize(void *outputStream)
 
     // print the dom edge
     os << dec;
-    for (auto &bb : blocks) {
+    for (auto &bb : getCFG().blocks) {
         if (bb.idom && bb.idom->bid != bb.bid)
             os << "\tBB" << bb.idom->bid << " -> BB" << bb.bid << ";" << endl;
     }
@@ -297,7 +299,7 @@ void Function::visualize(void *outputStream)
     os << "label=\"" << name << "_" << dec << fid + 1 << "_Post_Dom_Tree\";"
        << endl;
 
-    for (auto &bb : blocks) {
+    for (auto &bb : getCFG().blocks) {
         // name of the basic block
         os << "\tBB" << dec << bb.bid << " ";
         // append attributes
@@ -311,7 +313,7 @@ void Function::visualize(void *outputStream)
 
     // print the dom edge
     os << dec;
-    for (auto &bb : blocks) {
+    for (auto &bb : getCFG().blocks) {
         if (bb.ipdom)
             os << "\tBB" << bb.ipdom->bid << " -> BB" << bb.bid << ";" << endl;
     }
@@ -335,4 +337,12 @@ bool Function::needSync()
         return true;
     }
     return false;
+}
+
+ControlFlowGraph &Function::getCFG()
+{
+    if (!cfg) {
+        cfg = make_unique<ControlFlowGraph>(this, context->functionMap);
+    }
+    return *cfg;
 }

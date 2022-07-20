@@ -73,7 +73,7 @@ bool isVectorRuntimeCompatible(Loop &loop, set<InstOp> &supported_opcode,
 {
     Function *parent = loop.parent;
     /* Get entry block of the CFG */
-    BasicBlock *entry = parent->entry;
+    BasicBlock *entry = parent->getCFG().entry;
     bool foundVector = false;
     // examine each loop instructions
 #ifdef JANUS_X86

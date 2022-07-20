@@ -21,7 +21,7 @@ using namespace std;
 
 void scanMemoryAccess(Function *function)
 {
-    for (auto &bb : function->blocks) {
+    for (auto &bb : function->getCFG().blocks) {
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
             if (instr.isMemoryAccess()) {
@@ -34,7 +34,7 @@ void scanMemoryAccess(Function *function)
 // Identify different types of variables in the loop
 void variableAnalysis(janus::Loop *loop)
 {
-    BasicBlock *entry = loop->parent->entry;
+    BasicBlock *entry = loop->parent->getCFG().entry;
     Function *parent = loop->parent;
 
 #ifdef JANUS_AARCH64
@@ -231,7 +231,7 @@ void variableAnalysis(janus::Loop *loop)
 
 void scratchAnalysis(janus::Loop *loop)
 {
-    BasicBlock *entry = loop->parent->entry;
+    BasicBlock *entry = loop->parent->getCFG().entry;
     LOOPLOG("\tStarted scratch analysis" << endl);
     /* Work out all the registers needed for copying before loop context */
     for (auto v : loop->initVars) {
@@ -416,8 +416,8 @@ void variableAnalysis(janus::Function *function)
 
 void livenessAnalysis(Function *function)
 {
-    BasicBlock *entry = function->entry;
-    uint32_t numBlocks = function->numBlocks;
+    BasicBlock *entry = function->getCFG().entry;
+    uint32_t numBlocks = function->getCFG().numBlocks;
     uint32_t numInstrs = function->instrs.size();
 
     if (function->liveRegIn != NULL || function->liveRegOut != NULL)

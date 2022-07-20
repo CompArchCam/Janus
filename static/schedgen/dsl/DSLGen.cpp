@@ -58,20 +58,20 @@ void insertCustomRule<Function>(int ruleID, Function &comp, int trigger,
 {
     Function &func = comp;
     RewriteRule rule;
-    if (!func.entry || !func.minstrs.size())
+    if (!func.getCFG().entry || !func.minstrs.size())
         return;
     switch (trigger) {
     case ENTRY:
-        rule = RewriteRule((RuleOp)ruleID, func.entry, PRE_INSERT);
+        rule = RewriteRule((RuleOp)ruleID, func.getCFG().entry, PRE_INSERT);
         if (attach_data)
             rule.reg0 = data;
         else
             rule.reg0 = 0;
-        insertRule(0, rule, func.entry);
+        insertRule(0, rule, func.getCFG().entry);
         break;
     case EXIT:
-        for (auto retID : func.terminations) {
-            BasicBlock &bb = func.blocks[retID];
+        for (auto retID : func.getCFG().terminations) {
+            BasicBlock &bb = func.getCFG().blocks[retID];
             if (bb.lastInstr()->opcode == Instruction::Return) {
                 rule = RewriteRule((RuleOp)ruleID, &bb, PRE_INSERT);
                 if (attach_data)
@@ -131,24 +131,24 @@ void insertCustomRule<Loop>(int ruleID, Loop &comp, int trigger,
     switch (trigger) {
     case ENTRY:
         for (auto bb : loop.init) {
-            rule = RewriteRule((RuleOp)ruleID, loop.parent->entry + bb,
+            rule = RewriteRule((RuleOp)ruleID, loop.parent->getCFG().entry + bb,
                                POST_INSERT);
             if (attach_data) {
                 rule.reg0 = data;
             } else
                 rule.reg0 = 0;
-            insertRule(loop.id, rule, loop.parent->entry + bb);
+            insertRule(loop.id, rule, loop.parent->getCFG().entry + bb);
         }
         break;
     case EXIT:
         for (auto bb : loop.exit) {
-            rule = RewriteRule((RuleOp)ruleID, loop.parent->entry + bb,
+            rule = RewriteRule((RuleOp)ruleID, loop.parent->getCFG().entry + bb,
                                POST_INSERT);
             if (attach_data) {
                 rule.reg0 = data;
             } else
                 rule.reg0 = 0;
-            insertRule(loop.id, rule, loop.parent->entry + bb);
+            insertRule(loop.id, rule, loop.parent->getCFG().entry + bb);
         }
         break;
     case ITER:

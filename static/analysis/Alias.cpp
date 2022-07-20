@@ -32,7 +32,7 @@ void aliasAnalysis(janus::Loop *loop)
     aliasAnalysisLog.open("Loop" + to_string(loop->id) + "_aliasAnalysis.log",
                           ios::out);
     Function *parent = loop->parent;
-    BasicBlock *entry = parent->entry;
+    BasicBlock *entry = parent->getCFG().entry;
 
     /* Read set */
     auto &readSets = loop->memoryReads;

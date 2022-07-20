@@ -14,7 +14,7 @@ void ruleGenerationTemplate(JanusContext &jc)
 
     /*--- Static RuleGen Start ---*/
     for (auto &func : jc.functions) {
-        for (auto &B : func.blocks) {
+        for (auto &B : func.getCFG().blocks) {
             uint64_t local_inst_count = 0;
             Instruction *End = B.instrs + B.size;
             for (auto *I = B.instrs; I < End; I++) {

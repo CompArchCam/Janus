@@ -41,7 +41,7 @@ bool loopHasFPUInstructions(Loop &loop)
     Function *function = loop.parent;
     JanusContext *jc = function->context;
     for (auto bid : loop.body) {
-        BasicBlock &bb = function->entry[bid];
+        BasicBlock &bb = function->getCFG().entry[bid];
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
             if (instr.minstr->isFPU()) {
@@ -139,9 +139,9 @@ void selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
         bool passed = true;
 
         // Condition 0: Loop doesn't have init in same BB as start of main
-        BasicBlock *mainEntry = jc->main->entry;
+        BasicBlock *mainEntry = jc->main->getCFG().entry;
         Function *parent = loop.parent;
-        BasicBlock *parentEntry = parent->entry;
+        BasicBlock *parentEntry = parent->getCFG().entry;
         for (auto bid : loop.init) {
             BasicBlock *bb = parentEntry + bid;
             if (bb == mainEntry) {

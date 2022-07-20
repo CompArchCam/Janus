@@ -89,7 +89,7 @@ static bool finalValueAnalysis(Loop *loop)
     auto &miter = loop->mainIterator;
 
     for (auto checkID : loop->check) {
-        BasicBlock &checkBlock = loop->parent->entry[checkID];
+        BasicBlock &checkBlock = loop->parent->getCFG().entry[checkID];
         // get the last conditional jump, a check block is always conditional
         // jump
         Instruction *cjump = checkBlock.lastInstr();

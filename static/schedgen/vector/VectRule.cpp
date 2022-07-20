@@ -29,7 +29,7 @@ static void prepareLoopHeader(JanusContext *gc, Loop &loop)
 
 void generateVectorRulesForLoop(JanusContext *gc, Loop *loop)
 {
-    BasicBlock *entry = loop->parent->entry;
+    BasicBlock *entry = loop->parent->getCFG().entry;
     /* Get the array of instructions */
     Instruction *instrs = loop->parent->instrs.data();
 
@@ -212,7 +212,7 @@ void generateVectorRules(JanusContext *gc)
 
 bool alignmentAnalysis(Loop &loop)
 {
-    BasicBlock *entry = loop.parent->entry;
+    BasicBlock *entry = loop.parent->getCFG().entry;
     bool aligned = true;
     int64_t strideImm = 0;
 
