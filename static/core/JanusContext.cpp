@@ -41,7 +41,6 @@ void JanusContext::buildProgramDependenceGraph()
     GSTEPCONT(numBlocks << " blocks" << endl);
 
     /* Step 2: lift the disassembly to IR (the CFG must be ready) */
-    cout << "Lifting instructions" << endl;
     GSTEP("Lifting disassembly to IR: ");
     uint32_t numInstrs = 0;
     for (auto &func : functions) {
@@ -51,7 +50,6 @@ void JanusContext::buildProgramDependenceGraph()
     }
     GSTEPCONT(numInstrs << " instructions lifted" << endl);
 
-    cout << "Building SSA" << endl;
     /* Step 3: construct SSA graph */
     GSTEP("Building SSA graphs" << endl);
     for (auto &func : functions) {
@@ -59,7 +57,6 @@ void JanusContext::buildProgramDependenceGraph()
             buildSSAGraph(func);
         }
     }
-    cout << "SSA Built" << endl;
 
     /* Step 4: construct Control Dependence Graph */
     GSTEP("Building control dependence graphs" << endl);
@@ -68,7 +65,6 @@ void JanusContext::buildProgramDependenceGraph()
             buildCDG(func);
         }
     }
-    cout << "CDG Built" << endl;
 }
 
 static void loopAnalysisFirstPass(JanusContext *jc)

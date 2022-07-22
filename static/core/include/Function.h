@@ -64,10 +64,10 @@ class Function
     // std::vector<BasicBlock> blocks;
     /// The root of the dominator tree (indexed by blockID) for the CFG in this
     /// function
-    std::vector<BitVector> *domTree;
+    std::shared_ptr<std::vector<BitVector>> domTree;
     /// The root of the post dominator tree (indexed by blockID) for the CFG in
     /// this function
-    std::vector<BitVector> *pdomTree;
+    std::shared_ptr<std::vector<BitVector>> pdomTree;
 
     /* --------------------------------------------------------------
      *                    query data structure

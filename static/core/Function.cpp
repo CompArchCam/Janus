@@ -1,4 +1,12 @@
 #include "Function.h"
+
+#include <algorithm>
+#include <iostream>
+#include <memory>
+#include <queue>
+#include <sstream>
+#include <string>
+
 #include "AST.h"
 #include "Analysis.h"
 #include "Arch.h"
@@ -6,12 +14,6 @@
 #include "Executable.h"
 #include "JanusContext.h"
 #include "SSA.h"
-#include <algorithm>
-#include <iostream>
-#include <memory>
-#include <queue>
-#include <sstream>
-#include <string>
 
 using namespace std;
 using namespace janus;
@@ -35,7 +37,6 @@ Function::Function(JanusContext *gc, FuncID fid, const Symbol &symbol,
     else
         isExecutable = false;
 
-    domTree = NULL;
     translated = false;
     hasIndirectStackAccesses = false;
     available = true;
@@ -55,8 +56,6 @@ Function::~Function()
         if (instr.name)
             free(instr.name);
     }
-    if (domTree)
-        delete domTree;
 }
 
 /* retrieve further information from instructions */

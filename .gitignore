@@ -1,12 +1,15 @@
-build/
+build
+build/dynamic/
+build/static/
+build/tests/
 bin/
 lib/
 own_test/
 .cache/
 docs/html/
 tests/**/*_test/
+tests/**/*.log
 
 # Ignore for now 
-static/analysis/ControlFlowRf.cpp
 
 compile_commands.json

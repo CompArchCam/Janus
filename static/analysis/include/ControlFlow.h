@@ -9,8 +9,6 @@
 #include "MachineInstruction.h"
 #include "janus.h"
 
-constexpr static bool dbg = true;
-
 class JanusContext;
 
 /** \brief build the control flow graph*/
@@ -23,18 +21,6 @@ void traverseCFG(janus::Function &function);
 
 void buildCallGraphs(JanusContext *gc);
 
-/** \brief builds the dominance frontier of each block the given function.
-
- * It can be used for control flow analysis and SSA construction
- */
-void buildDominanceFrontiers(janus::Function &function);
-
-/** \brief builds the post dominance frontier of each block the given function.
-
- * It can be used for building control dependence graph
- */
-void buildPostDominanceFrontiers(janus::Function &function);
-
 /** \brief Data structure representing a basic block
  *
  */
@@ -42,10 +28,16 @@ class ControlFlowGraph
 {
   private:
     void buildBasicBlocks(std::map<PCAddress, janus::Function *> &);
-
-    /// Temporary workaround to copy all fields back into the functions
-    /// after initialisation; delete after reorg is done.
-    // void copyToFunction();
+    /// Private variable for blocks
+    std::vector<janus::BasicBlock> bs;
+    /// Private variable for unRecognised blocks
+    std::set<BlockID> urs;
+    /// Private variable for termination blocks
+    std::set<BlockID> ts;
+    /// Private variable for returnBlocks blocks
+    std::set<BlockID> rbs;
+    /// Private variable for blockSplitInstrs
+    std::map<BlockID, std::set<InstID>> bsis;
 
   public:
     /// The function the CFG is representing
@@ -55,22 +47,21 @@ class ControlFlowGraph
     /// Block size
     uint32_t numBlocks;
     /// Actual storage of all the function's basic blocks
-    std::vector<janus::BasicBlock> blocks;
-    /// Function Call Instructions
-    std::map<janus::InstID, janus::Function *> calls;
+    std::vector<janus::BasicBlock> &blocks;
     /// Block id which block target not determined in binary
-    std::set<BlockID> unRecognised;
+    std::set<BlockID> &unRecognised;
     /// Block id which block terminates this function
-    std::set<BlockID> terminations;
+    std::set<BlockID> &terminations;
     /// Block id which block ends with a return instruction
-    std::set<BlockID> returnBlocks;
+    std::set<BlockID> &returnBlocks;
     /// Split point for oversized basic block (only used for dynamic
     /// modification)
-    std::map<BlockID, std::set<InstID>> blockSplitInstrs;
+    std::map<BlockID, std::set<InstID>> &blockSplitInstrs;
 
     /// Constructor
     ControlFlowGraph(janus::Function &,
                      std::map<PCAddress, janus::Function *> &);
+    /// Constructor
     ControlFlowGraph(janus::Function *,
                      std::map<PCAddress, janus::Function *> &);
 };
@@ -92,15 +83,17 @@ class DominanceAnalysis : public ProcessedCFG
                    (X->idom != X) &&
                    // stop when you reach the idom of Y
                    (X != Y->idom)) {
-                if (dbg)
-                    std::cout << "\t\t\t" << X->bid << "->domFront.size(): "
-                              << X->dominanceFrontier.size() << std::endl;
                 X->dominanceFrontier.insert(Y);
                 // traverse upwards till entry or idom of Y (loop)
                 X = X->idom;
             }
         }
     }
+
+    void buildDominanceTree();
+
+    /// builds the dominance frontiers of the basic blocks
+    void buildDominanceFrontiers();
 
   public:
     /// Constructor
@@ -112,13 +105,6 @@ class DominanceAnalysis : public ProcessedCFG
     /// The root of the dominator tree (indexed by blockID) for the CFG in this
     /// function
     std::shared_ptr<std::vector<janus::BitVector>> domTree;
-
-    /// Temporary workaround to copy all fields back into the functions
-    /// after initialisation; delete after reorg is done.
-    void copyToFunction();
-
-    /// builds the dominance frontiers of the basic blocks
-    void buildDominanceFrontiers();
 };
 
 template <std::derived_from<ControlFlowGraph> PCFG>
@@ -168,15 +154,7 @@ class PostDominanceAnalysis : public PCFG
         }
     }
 
-    /// Temporary workaround to copy all fields back into the functions
-    /// after initialisation; delete after reorg is done.
-    void copyToFunction();
-
-    void cleanup()
-    {
-        buildPostDominanceFrontiers();
-        copyToFunction();
-    }
+    void buildPostDominanceTree();
 
   public:
     PostDominanceAnalysis(const PCFG &);

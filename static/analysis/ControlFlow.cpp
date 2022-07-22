@@ -65,14 +65,13 @@ void ControlFlowGraph::buildBasicBlocks(
                 PCAddress target = instr.minstr->getTargetAddress();
                 if (target) {
                     // find this target in the instruction table
-                    auto query = instrTable.find(target);
-                    if (query == instrTable.end()) {
+                    if (!instrTable.contains(target)) {
                         notRecognised.insert(id);
                     }
                     // if found the target instruction, mark the target as a
                     // leader
                     else {
-                        targetID = (*query).second;
+                        targetID = instrTable.at(target);
                         marks[targetID] += BB_LEADER;
                         edges[id].insert(targetID);
                     }
@@ -100,13 +99,12 @@ void ControlFlowGraph::buildBasicBlocks(
                 PCAddress callTarget = instr.minstr->getTargetAddress();
                 if (callTarget) {
                     // find this target in the function map
-                    auto query = functionMap.find(callTarget);
-                    if (query == functionMap.end()) {
+                    if (!functionMap.contains(callTarget)) {
                         notRecognised.insert(id);
                     }
                     // if found in the function map
                     else {
-                        Function *targetFunc = (*query).second;
+                        Function *targetFunc = functionMap.at(callTarget);
                         func.calls[id] = targetFunc;
                         func.subCalls.insert(targetFunc->fid);
                     }
@@ -239,18 +237,17 @@ void ControlFlowGraph::buildBasicBlocks(
             continue;
         }
         InstID endID = block->lastInstr()->id;
-        auto query = edges.find(endID);
 
-        if (query == edges.end()) {
+        if (!edges.contains(endID)) {
             if (block->lastInstr()->isControlFlow()) {
-                if (notRecognised.find(endID) == notRecognised.end()) {
+                if (!notRecognised.contains(endID)) {
                     terminations.insert(block->bid);
                     block->terminate = true;
                 } else
                     unRecognised.insert(block->bid);
             }
         } else {
-            for (auto succBlockID : (*query).second) {
+            for (auto succBlockID : edges.at(endID)) {
                 auto &instr = instrs[succBlockID];
                 BasicBlock *targetBlock = instr.block;
                 if (targetBlock)
@@ -270,7 +267,7 @@ void ControlFlowGraph::buildBasicBlocks(
             if (block->lastInstr()->opcode == Instruction::Call) {
                 PCAddress target =
                     block->lastInstr()->minstr->getTargetAddress();
-                if (functionMap.find(target) != functionMap.end())
+                if (functionMap.contains(target))
                     if (functionMap[target]->name ==
                         "_gfortran_stop_string@plt")
                         terminations.insert(i);
@@ -281,12 +278,17 @@ void ControlFlowGraph::buildBasicBlocks(
 
 ControlFlowGraph::ControlFlowGraph(
     Function &function, std::map<PCAddress, janus::Function *> &functionMap)
-    : func{function}
+    // clang-format off
+    : func{function}, 
+      bs{}, blocks(bs),
+      urs{}, unRecognised(urs),
+      ts{}, terminations(ts),
+      rbs{}, returnBlocks(rbs),
+      bsis{}, blockSplitInstrs(bsis)
+// clang-format on
 {
     buildBasicBlocks(functionMap);
     numBlocks = static_cast<uint32_t>(blocks.size());
-    if (dbg)
-        cout << "numBlocks = " << numBlocks << endl;
     entry = blocks.data();
     // copyToFunction();
 }
@@ -295,38 +297,29 @@ ControlFlowGraph::ControlFlowGraph(
     Function *function, std::map<PCAddress, janus::Function *> &functionMap)
     : ControlFlowGraph(*function, functionMap){};
 
-// void ControlFlowGraph::copyToFunction()
-//{
-// func.numBlocks = numBlocks;
-// func.entry = entry;
-//// func.calls = calls;
-// func.unRecognised = unRecognised;
-// func.terminations = terminations;
-// func.returnBlocks = returnBlocks;
-// func.blockSplitInstrs = blockSplitInstrs;
-//}
+template <std::derived_from<ControlFlowGraph> PCFG>
+DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg) : PCFG(cfg)
+{
+    buildDominanceTree();
+    buildDominanceFrontiers();
+    ControlFlowGraph::func.domTree = domTree;
+}
 
 template <std::derived_from<ControlFlowGraph> PCFG>
-DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg)
-    : PCFG(std::move(cfg))
+void DominanceAnalysis<PCFG>::buildDominanceTree()
 {
     uint32_t size = ControlFlowGraph::numBlocks;
-    if (!size) {
-        buildDominanceFrontiers();
-        copyToFunction();
+    if (!size)
         return;
-    }
 
-    /* construct a two dimensional dominator tree */
-    // make_shared is equivalent to the old 'new' statement, with the additional
-    // benefit of not needing to be explicitly deleted when done
-    domTree = make_shared<std::vector<BitVector>>(
-        vector<BitVector>(size, BitVector(size, uint32_t(-1))));
-    vector<BitVector> &curDomTree = *domTree;
+    //[> construct a two dimensional dominator tree <]
+    domTree =
+        make_shared<vector<BitVector>>(size, BitVector(size, uint32_t(-1)));
+    vector<BitVector> &curdomTree = *domTree;
 
-    /* initialisation */
-    curDomTree[0].clear();
-    curDomTree[0].insert(0);
+    //[> initialisation <]
+    curdomTree[0].clear();
+    curdomTree[0].insert(0);
 
     bool converge;
     BitVector scratch(size);
@@ -338,47 +331,44 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg)
             /* If no predecessor, set itself as its dominator (for entry block)
              */
             if (bb.pred.size() == 0) {
-                curDomTree[i].clear();
+                curdomTree[i].clear();
                 if (bb.bid == 0) {
-                    curDomTree[i].insert(i);
+                    curdomTree[i].insert(i);
                     bb.idom = &bb;
                 }
                 continue;
             }
-            /* create a universal set */
+            //[> create a universal set <]
             scratch.setUniversal();
 
-            /* Get intersect of all its predecessors */
+            //[> Get intersect of all its predecessors <]
             for (auto predecessor : bb.pred) {
-                scratch.intersect(curDomTree[predecessor->bid]);
+                scratch.intersect(curdomTree[predecessor->bid]);
             }
-            /* And also include the block itself */
+            //[> And also include the block itself <]
             scratch.insert(i);
-            /* Check convergence */
-            if (scratch != curDomTree[i])
+            //[> Check convergence <]
+            if (scratch != curdomTree[i])
                 converge = false;
-            /* Update */
-            curDomTree[i] = scratch;
+            //[> Update <]
+            curdomTree[i] = scratch;
         }
     } while (!converge);
 
     set<BlockID> dominators;
     for (int i = 0; i < size; i++) {
         BasicBlock &bb = ControlFlowGraph::blocks[i];
-        curDomTree[i].toSTLSet(dominators);
+        curdomTree[i].toSTLSet(dominators);
         for (BlockID d : dominators) {
             /* If the number of dominators of BB d is 1 less than the dominators
              * of BB i, Then it means the immediate dominator of i is d */
-            if (curDomTree[d].size() + 1 == dominators.size()) {
-                bb.idom = &(ControlFlowGraph::blocks[d]);
+            if (curdomTree[d].size() + 1 == dominators.size()) {
+                bb.idom = &ControlFlowGraph::blocks[d];
                 break;
             }
         }
         dominators.clear();
     }
-
-    buildDominanceFrontiers();
-    copyToFunction();
 }
 
 template <std::derived_from<ControlFlowGraph> PCFG>
@@ -390,29 +380,22 @@ void DominanceAnalysis<PCFG>::buildDominanceFrontiers()
 }
 
 template <std::derived_from<ControlFlowGraph> PCFG>
-void DominanceAnalysis<PCFG>::copyToFunction()
+PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
+    : PCFG(pcfg)
 {
-    ControlFlowGraph::func.domTree = domTree.get();
+    buildPostDominanceTree();
+    buildPostDominanceFrontiers();
+    ControlFlowGraph::func.pdomTree = pdomTree;
 }
 
 template <std::derived_from<ControlFlowGraph> PCFG>
-PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
-    : PCFG(std::move(pcfg))
+void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
 {
     uint32_t size = ControlFlowGraph::numBlocks;
-    if (!size) {
-        // TODO: cleanup this bit
-        buildPostDominanceFrontiers();
-        copyToFunction();
+    if (!size)
         return;
-    }
-
-    if (!ControlFlowGraph::terminations.size()) {
-        // TODO: cleanup this bit
-        buildPostDominanceFrontiers();
-        copyToFunction();
+    if (!ControlFlowGraph::terminations.size())
         return;
-    }
 
     BlockID termID = 0;
     bool multiExit = false;
@@ -429,14 +412,14 @@ PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
             termID = t;
     }
 
-    /* construct a two dimensional post dominance tree */
+    // [> construct a two dimensional post dominance tree <]
     pdomTree =
         make_shared<vector<BitVector>>(size, BitVector(size, uint32_t(-1)));
-    vector<BitVector> &pdomTreeDref = *pdomTree;
+    vector<BitVector> &curpdomTree = *pdomTree;
 
-    /* initialisation from the terminator node */
-    pdomTreeDref[termID].clear();
-    pdomTreeDref[termID].insert(termID);
+    //[> initialisation from the terminator node < ]
+    curpdomTree[termID].clear();
+    curpdomTree[termID].insert(termID);
 
     bool converge;
     BitVector scratch(size);
@@ -445,63 +428,54 @@ PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
         converge = true;
         for (int i = size - 1; i >= 0; i--) {
             if (i == termID) {
-                pdomTreeDref[i].clear();
-                pdomTreeDref[i].insert(i);
+                curpdomTree[i].clear();
+                curpdomTree[i].insert(i);
                 continue;
             }
 
             if (multiExit && ControlFlowGraph::terminations.contains(i)) {
-                pdomTreeDref[i].clear();
-                pdomTreeDref[i].insert(i);
-                pdomTreeDref[i].insert(termID);
+                curpdomTree[i].clear();
+                curpdomTree[i].insert(i);
+                curpdomTree[i].insert(termID);
                 continue;
             }
 
             // normal case
-            BasicBlock &bb = ControlFlowGraph::blocks[i];
+            BasicBlock &bb = ControlFlowGraph::entry[i];
 
-            /* create a universal set */
+            //[> create a universal set <]
             scratch.setUniversal();
 
-            /* Get intersect of all the two successor */
+            //[> Get intersect of all the two successor <]
             if (bb.succ1)
-                scratch.intersect(pdomTreeDref[bb.succ1->bid]);
+                scratch.intersect(curpdomTree[bb.succ1->bid]);
             if (bb.succ2)
-                scratch.intersect(pdomTreeDref[bb.succ2->bid]);
-            /* And also include the block itself */
+                scratch.intersect(curpdomTree[bb.succ2->bid]);
+            //[> And also include the block itself <]
             scratch.insert(i);
-            /* Check convergence */
-            if (scratch != pdomTreeDref[i])
+            //[> Check convergence <]
+            if (scratch != curpdomTree[i])
                 converge = false;
-            /* Update */
-            pdomTreeDref[i] = scratch;
+            //[> Update <]
+            curpdomTree[i] = scratch;
         }
     } while (!converge);
 
     set<BlockID> pdominators;
     for (int i = 0; i < size; i++) {
-        BasicBlock &bb = ControlFlowGraph::blocks[i];
-        pdomTreeDref[i].toSTLSet(pdominators);
+        BasicBlock &bb = ControlFlowGraph::entry[i];
+        curpdomTree[i].toSTLSet(pdominators);
         for (BlockID d : pdominators) {
             /* If the number of pdominators of BB d is 1 less than the
              * pdominators of BB i, Then it means the immediate post dominator
              * of i is d */
-            if (pdomTreeDref[d].size() + 1 == pdominators.size()) {
-                bb.ipdom = &(ControlFlowGraph::blocks[d]);
+            if (curpdomTree[d].size() + 1 == pdominators.size()) {
+                bb.ipdom = &ControlFlowGraph::entry[d];
                 break;
             }
         }
         pdominators.clear();
     }
-
-    buildPostDominanceFrontiers();
-    copyToFunction();
-}
-
-template <std::derived_from<ControlFlowGraph> PCFG>
-void PostDominanceAnalysis<PCFG>::copyToFunction()
-{
-    ControlFlowGraph::func.pdomTree = pdomTree.get();
 }
 
 /* We use a global variable to reduce the stack size in this
@@ -536,18 +510,12 @@ template <std::derived_from<ControlFlowGraph> PCFG> void traverseCFG(PCFG &pcfg)
 // Construct control flow graph for each function
 void buildCFG(Function &function)
 {
-    if (dbg)
-        cout << function.fid << ": start" << endl;
     /* step 1: construct a vector of basic blocks
      * and link them together */
     // auto &cfg = function.getCFG();
     auto cfg = function.getCFG();
-    if (dbg)
-        cout << function.fid << ": cfg built" << endl;
 
     if (cfg.numBlocks <= 1) {
-        if (dbg)
-            cout << function.fid << ": early exit" << endl;
         return;
     }
 
@@ -556,13 +524,9 @@ void buildCFG(Function &function)
     /* step 4: analyse the CFG and build post-dominance tree */
     /* step 5: analyse the CFG and build post dominance frontiers */
     auto dcfg = PostDominanceAnalysis(DominanceAnalysis(cfg));
-    if (dbg)
-        cout << function.fid << ": dcfg built" << endl;
 
     /* step 6: traverse the CFG */
     traverseCFG(dcfg);
-    if (dbg)
-        cout << function.fid << ": dcfg traversed" << endl;
 }
 
 // Construct control dependence graph for each function
