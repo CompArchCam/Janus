@@ -278,14 +278,9 @@ void ControlFlowGraph::buildBasicBlocks(
 
 ControlFlowGraph::ControlFlowGraph(
     Function &function, std::map<PCAddress, janus::Function *> &functionMap)
-    // clang-format off
-    : func{function}, 
-      bs{}, blocks(bs),
-      urs{}, unRecognised(urs),
-      ts{}, terminations(ts),
-      rbs{}, returnBlocks(rbs),
-      bsis{}, blockSplitInstrs(bsis)
-// clang-format on
+    : cfg(make_unique<CFG>(function)), func(cfg->func), blocks(cfg->bs),
+      unRecognised(cfg->urs), terminations(cfg->ts), returnBlocks(cfg->rbs),
+      blockSplitInstrs(cfg->bsis)
 {
     buildBasicBlocks(functionMap);
     numBlocks = static_cast<uint32_t>(blocks.size());

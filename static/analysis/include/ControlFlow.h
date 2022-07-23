@@ -21,13 +21,9 @@ void traverseCFG(janus::Function &function);
 
 void buildCallGraphs(JanusContext *gc);
 
-/** \brief Data structure representing a basic block
- *
- */
-class ControlFlowGraph
+class CFG
 {
-  private:
-    void buildBasicBlocks(std::map<PCAddress, janus::Function *> &);
+  public:
     /// Private variable for blocks
     std::vector<janus::BasicBlock> bs;
     /// Private variable for unRecognised blocks
@@ -38,8 +34,23 @@ class ControlFlowGraph
     std::set<BlockID> rbs;
     /// Private variable for blockSplitInstrs
     std::map<BlockID, std::set<InstID>> bsis;
+    /// The function the CFG is representing
+    janus::Function &func;
+    /// Constructor
+    CFG(janus::Function &f) : bs{}, urs{}, ts{}, rbs{}, bsis{}, func(f){};
+};
+
+/** \brief Data structure representing a basic block
+ *
+ */
+class ControlFlowGraph
+{
+  private:
+    void buildBasicBlocks(std::map<PCAddress, janus::Function *> &);
 
   public:
+    /// Actual storage of cfg
+    std::shared_ptr<CFG> cfg;
     /// The function the CFG is representing
     janus::Function &func;
     /// Entry block of the function CFG
