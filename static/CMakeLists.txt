@@ -266,3 +266,14 @@ add_executable(analyze main.cpp
 
 # compile rule dump tool
 add_executable(schedump ${SCHEDUMP_SOURCES})
+
+add_executable(cfg_test cfg_test.cpp
+                       ${LOADER_SOURCES}
+                       ${CS_SOURCES}
+                       ${CORE_SOURCES}
+                       ${JANUS_ARCH_SOURCES}
+                       ${ANALYSIS_SOURCES}
+                       ${SCHEDGEN_SOURCES}
+                       ${REWRITE_RULE_SOURCES}
+                       ${REWRITE_RULE_SOURCES_CPP}
+                       ${REWRITE_RULE_ARCH_SOURCES})

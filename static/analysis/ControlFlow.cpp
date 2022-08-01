@@ -491,7 +491,8 @@ static void markBlock(BasicBlock *block, bool *discovered)
     block->secondVisitStep = step++;
 }
 
-template <std::derived_from<ControlFlowGraph> PCFG> void traverseCFG(PCFG &pcfg)
+template <std::derived_from<ControlFlowGraph> PCFG>
+void traverseCFG(PCFG &pcfg)
 {
     uint32_t size = pcfg.numBlocks;
     /* Array to tag if a block has been visited */

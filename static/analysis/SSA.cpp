@@ -140,7 +140,7 @@ void linkSSANodes(Function &function)
         updatePhiNodes(function, bid, *previousDefs);
 
         // for already visited nodes, simply update phi nodes and return
-        if (visited.find(bid) != visited.end())
+        if (visited.contains(bid))
             continue;
 
         // copy definition to the current block
@@ -205,7 +205,7 @@ static VarState *getOrInitVarState(Variable var,
     VarState *vs = latestDefs[var];
     if (!vs) {
         // uninitialized variable
-        if (function.inputStates.find(var) != function.inputStates.end()) {
+        if (function.inputStates.contains(var)) {
             latestDefs[var] = function.inputStates[var];
             return function.inputStates[var];
         }
@@ -391,7 +391,7 @@ static void linkDependentNodes(Function &function)
         VarState *vs = usedQ.front();
         usedQ.pop();
 
-        if (visitedState.find(vs) != visitedState.end())
+        if (visitedState.contains(vs))
             continue;
 
         // mark the current state as used
@@ -401,7 +401,7 @@ static void linkDependentNodes(Function &function)
 
         // check its phi node
         for (auto phi : vs->pred) {
-            if (visitedState.find(phi) == visitedState.end())
+            if (!visitedState.contains(phi))
                 usedQ.push(phi);
         }
     }
@@ -417,7 +417,7 @@ void buildDominanceFrontierClosure(Function &function, Variable var,
 
     // Find all basic blocks that contain definitions of variable var
     for (auto &bb : function.getCFG().blocks) {
-        if (bb.lastStates.find(var) != bb.lastStates.end()) {
+        if (bb.lastStates.contains(var)) {
             bbs.insert(&bb);
             q.push(&bb);
         }
@@ -430,7 +430,7 @@ void buildDominanceFrontierClosure(Function &function, Variable var,
         // insert phi node at the dominance frontier of the definition
         for (BasicBlock *cc : bb->dominanceFrontier) {
             phiblocks.insert(cc);
-            if (bbs.find(cc) != bbs.end())
+            if (bbs.contains(cc))
                 continue;
             q.push(cc);
             bbs.insert(cc);
@@ -460,7 +460,7 @@ void insertPhiNodes(Function &function, Variable var)
         // record the variable state in the function's global state buffer.
         function.allStates.insert(vs);
         // update last state in this phi block
-        if (bb->lastStates.find(var) == bb->lastStates.end())
+        if (!bb->lastStates.contains(var))
             bb->lastStates[var] = vs;
         // insert phi node
         bb->phiNodes.push_back(vs);
