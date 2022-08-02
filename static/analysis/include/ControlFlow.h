@@ -4,6 +4,7 @@
 // Control flow related analysis
 
 #include <memory>
+#include <unordered_map>
 
 #include "BasicBlock.h"
 #include "MachineInstruction.h"
@@ -85,18 +86,18 @@ class DominanceAnalysis : public ProcessedCFG
     // X.dominanceFrontier.contains(Y) iff X
     //! strictly_dominates Y
     // and exists Z in Y.pred, s.t. X dominates Z
-    static void updateDominanceFrontier(janus::BasicBlock *Y)
+    void updateDominanceFrontier(janus::BasicBlock *Y)
     {
         for (janus::BasicBlock *Z : Y->pred) {
             janus::BasicBlock *X = Z;
-            while (X &&
+            while (X && idoms.contains(X) &&
                    // guard to entry
-                   (X->idom != X) &&
+                   (idoms[X] != X) && idoms.contains(Y) &&
                    // stop when you reach the idom of Y
-                   (X != Y->idom)) {
-                X->dominanceFrontier.insert(Y);
+                   (X != idoms[Y])) {
+                dominanceFrontiers[X].insert(Y);
                 // traverse upwards till entry or idom of Y (loop)
-                X = X->idom;
+                X = idoms[X];
             }
         }
     }
@@ -116,6 +117,18 @@ class DominanceAnalysis : public ProcessedCFG
     /// The root of the dominator tree (indexed by blockID) for the CFG in this
     /// function
     std::shared_ptr<std::vector<janus::BitVector>> domTree;
+
+    /// (Hash)Map storing the immediate dominators of each basic blocks;
+    /// replaces the *janus::BasicBlock::idom* field
+    /// TODO: rename required
+    std::unordered_map<janus::BasicBlock *, janus::BasicBlock *> idoms;
+
+    /// (Hash)Map storing the dominance frontier of each basic block; replaces
+    /// the *janus::BasicBlock::dominanceFrontier* in the original
+    /// implementation
+    /// TODO: rename required
+    std::unordered_map<janus::BasicBlock *, std::set<janus::BasicBlock *>>
+        dominanceFrontiers;
 };
 
 template <std::derived_from<ControlFlowGraph> PCFG>

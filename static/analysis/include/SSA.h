@@ -47,4 +47,15 @@ void buildDominanceFrontierClosure(janus::Function &function,
                                    janus::Variable var,
                                    std::set<janus::BasicBlock *> &bbs,
                                    std::set<janus::BasicBlock *> &phiblocks);
+
+template <template <typename> class DomAnalysedCFG, typename T, typename U>
+requires std::derived_from<DomAnalysedCFG<T>, DominanceAnalysis<T>> ||
+    (std::derived_from<T, DominanceAnalysis<U>>
+         &&std::derived_from<DomAnalysedCFG<T>, T>)class SSA
+    : public DomAnalysedCFG<T>
+{
+  public:
+    SSA(const DomAnalysedCFG<T> &cfg) : DomAnalysedCFG<T>(cfg){};
+};
+
 #endif

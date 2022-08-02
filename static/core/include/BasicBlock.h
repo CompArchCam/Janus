@@ -74,8 +74,6 @@ class BasicBlock
     std::set<Variable> inputs;
     /** \brief Contains all phi nodes in this block. */
     std::vector<VarState *> phiNodes;
-    /** \brief Immediate dominator of the current basic block. */
-    BasicBlock *idom;
     /** \brief Immediate post-dominator of the current basic block. */
     BasicBlock *ipdom;
     /** \brief Basic blocks in the dominance frontier of this one.
@@ -83,7 +81,7 @@ class BasicBlock
      * Set of blocks b, such that this block dominates an immediate predecessor
      * of b, but does not strictly dominate b.
      */
-    std::set<BasicBlock *> dominanceFrontier;
+    // std::set<BasicBlock *> dominanceFrontier;
     /** \brief Basic blocks in the post dominance frontier of this one.
      *
      * Set of blocks b, such that this block dominates an immediate predecessor

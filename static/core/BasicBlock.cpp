@@ -27,7 +27,7 @@ BasicBlock::BasicBlock(Function *func, BlockID bid, InstID startInstID,
 
     instrs = (parentFunction->instrs.data()) + startInstID;
 
-    idom = NULL;
+    // idom = NULL;
     ipdom = NULL;
     succ1 = NULL;
     succ2 = NULL;

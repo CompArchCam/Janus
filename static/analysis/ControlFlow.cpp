@@ -329,7 +329,8 @@ void DominanceAnalysis<PCFG>::buildDominanceTree()
                 curdomTree[i].clear();
                 if (bb.bid == 0) {
                     curdomTree[i].insert(i);
-                    bb.idom = &bb;
+                    // bb.idom = &bb;
+                    idoms[&bb] = &bb;
                 }
                 continue;
             }
@@ -358,7 +359,7 @@ void DominanceAnalysis<PCFG>::buildDominanceTree()
             /* If the number of dominators of BB d is 1 less than the dominators
              * of BB i, Then it means the immediate dominator of i is d */
             if (curdomTree[d].size() + 1 == dominators.size()) {
-                bb.idom = &ControlFlowGraph::blocks[d];
+                idoms[&bb] = &ControlFlowGraph::blocks[d];
                 break;
             }
         }

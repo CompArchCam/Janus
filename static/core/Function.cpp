@@ -285,11 +285,12 @@ void Function::visualize(void *outputStream)
     }
 
     // print the dom edge
+    // TODO: fix this somehow afterwards
     os << dec;
-    for (auto &bb : getCFG().blocks) {
-        if (bb.idom && bb.idom->bid != bb.bid)
-            os << "\tBB" << bb.idom->bid << " -> BB" << bb.bid << ";" << endl;
-    }
+    // for (auto &bb : getCFG().blocks) {
+    // if (bb.idom && bb.idom->bid != bb.bid)
+    // os << "\tBB" << bb.idom->bid << " -> BB" << bb.bid << ";" << endl;
+    //}
 
     os << "} " << endl;
 

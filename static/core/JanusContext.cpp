@@ -36,6 +36,8 @@ void JanusContext::buildProgramDependenceGraph()
         if (func.isExecutable) {
             buildCFG(func);
             numBlocks += func.getCFG().blocks.size();
+            auto dom = PostDominanceAnalysis{DominanceAnalysis{func.getCFG()}};
+            auto ssa = SSA{dom};
         }
     }
     GSTEPCONT(numBlocks << " blocks" << endl);
