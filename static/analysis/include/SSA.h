@@ -48,14 +48,29 @@ void buildDominanceFrontierClosure(janus::Function &function,
                                    std::set<janus::BasicBlock *> &bbs,
                                    std::set<janus::BasicBlock *> &phiblocks);
 
-template <template <typename> class DomAnalysedCFG, typename T, typename U>
-requires std::derived_from<DomAnalysedCFG<T>, DominanceAnalysis<T>> ||
-    (std::derived_from<T, DominanceAnalysis<U>>
-         &&std::derived_from<DomAnalysedCFG<T>, T>)class SSA
-    : public DomAnalysedCFG<T>
+template <typename T>
+concept providesDominanceTree = requires(T cfg)
+{
+    typename T;
+    // clang-format off
+    // Checks for content of the class
+    requires requires {
+        cfg.idoms;
+        // Note that we can make this requirement more generic as well
+        { cfg.idoms } -> std::convertible_to<std::unordered_map<janus::BasicBlock *, janus::BasicBlock *>>;
+        cfg.dominanceFrontiers;
+        { cfg.dominanceFrontiers } -> std::convertible_to<std::unordered_map<janus::BasicBlock *, std::set<janus::BasicBlock *>>>;
+        cfg.domTree;
+    };
+    // clang-format on
+};
+
+template <providesDominanceTree pDomCFG>
+requires std::derived_from<pDomCFG, ControlFlowGraph>
+class SSA : public pDomCFG
 {
   public:
-    SSA(const DomAnalysedCFG<T> &cfg) : DomAnalysedCFG<T>(cfg){};
+    SSA(const pDomCFG &t) : pDomCFG(t){};
 };
 
 #endif
