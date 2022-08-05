@@ -1,12 +1,11 @@
 #include "SSA.h"
 #include "Arch.h"
-#include "BasicBlock.h"
 #include "ControlFlow.h"
-#include "Function.h"
 #include "JanusContext.h"
 #include "Operand.h"
 #include "Utility.h"
 
+#include <concepts>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -17,41 +16,12 @@
 using namespace std;
 using namespace janus;
 
-void linkSSANodes(Function &function);
-
-static void insertPhiNodes(Function &function, Variable var);
-static void updatePhiNodes(Function &function, BlockID bid,
-                           map<Variable, VarState *> &previousDefs);
-
-static void updateSSANodes(Function &function, BlockID bid,
-                           map<Variable, VarState *> &latestDefs);
-
-/* Look up the variable state from the latest definitions, if miss, create a new
- * variable state */
-static VarState *getOrInitVarState(Variable var,
-                                   map<Variable, VarState *> &latestDefs,
-                                   Function &function);
-
-static void linkMemoryNodes(Variable var, VarState *vs,
-                            map<Variable, VarState *> &latestDefs,
-                            Function &function);
-
-static void linkShiftedNodes(Variable var, VarState *vs,
-                             map<Variable, VarState *> &latestDefs,
-                             Function &function);
-
-static void linkDependentNodes(Function &function);
-
-static void guessCallArgument(Instruction &instr,
-                              map<Variable, VarState *> &latestDefs,
-                              Function &function);
-
-static void createSuccFromPred(Function &function);
-
-void buildSSAGraph(Function &function)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::buildSSAGraph()
 {
     /* Step 1: collect variable inputs and outputs for each basic block */
-    for (auto &bb : function.getCFG().blocks) {
+    for (auto &bb : DomCFG::blocks) {
         bb.lastStates.clear();
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
@@ -62,21 +32,21 @@ void buildSSAGraph(Function &function)
     }
 
     /* Step 2: Insert Phi node */
-    for (auto var : function.allVars)
-        insertPhiNodes(function, var);
+    for (auto var : DomCFG::func.allVars)
+        insertPhiNodes(var);
 
     /* Step 3: Link all instruction's input to Phi and outputs */
-    linkSSANodes(function);
+    linkSSANodes();
 
     /* Step 3.1: From the pred computed in the previous step, create the succ
      * for each varstate */
-    createSuccFromPred(function);
+    createSuccFromPred();
 
     /* Step 4: Assign an id/version for each variable state
      * Used for human readable SSA */
     int id = 0;
     map<Variable, int> versions;
-    for (auto vs : function.allStates) {
+    for (auto vs : DomCFG::func.allStates) {
         vs->id = id++;
         Variable var = (Variable)(*vs);
         int version = versions[var];
@@ -85,12 +55,14 @@ void buildSSAGraph(Function &function)
     }
 
     /* Step 5: Link dependants and mark unused variables */
-    linkDependentNodes(function);
+    linkDependentNodes();
 }
 
 /* Copy all the variable definitions from block orig to dest */
-static void copyDefinitions(map<Variable, VarState *> *previousDefs,
-                            map<Variable, VarState *> *currentDefs)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::copyDefinitions(map<Variable, VarState *> *previousDefs,
+                                       map<Variable, VarState *> *currentDefs)
 {
     // copy
     for (auto &item : *previousDefs) {
@@ -100,14 +72,16 @@ static void copyDefinitions(map<Variable, VarState *> *previousDefs,
     }
 }
 
-void linkSSANodes(Function &function)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::linkSSANodes()
 {
     // A record that keeps track of the latest definition of variable states
     map<Variable, VarState *> latestStates;
     // A distinct record for each basic block
     map<BlockID, map<Variable, VarState *> *> globalDefs;
 
-    BasicBlock *entry = function.getCFG().entry;
+    BasicBlock *entry = DomCFG::entry;
 
     // We use the order BFS to link all the inputs and outputs
     queue<pair<BlockID, BlockID>> q;
@@ -137,7 +111,7 @@ void linkSSANodes(Function &function)
         }
 
         // update Phi nodes for this block from previous block
-        updatePhiNodes(function, bid, *previousDefs);
+        updatePhiNodes(bid, *previousDefs);
 
         // for already visited nodes, simply update phi nodes and return
         if (visited.contains(bid))
@@ -147,7 +121,7 @@ void linkSSANodes(Function &function)
         copyDefinitions(previousDefs, currentDefs);
 
         // update SSA nodes for this block
-        updateSSANodes(function, bid, *currentDefs);
+        updateSSANodes(bid, *currentDefs);
 
         // mark the block as visited
         visited.insert(bid);
@@ -166,7 +140,7 @@ void linkSSANodes(Function &function)
     // after the initial definitions linked, additional modifications on the SSA
     // graph might be required the additional linking could be architecture
     // specific
-    linkArchSpecSSANodes(function, globalDefs);
+    linkArchSpecSSANodes(DomCFG::func, globalDefs);
 
     // clear global record
     for (auto record : globalDefs) {
@@ -175,68 +149,75 @@ void linkSSANodes(Function &function)
     }
 }
 
-static VarState *getOrInitVarState(Variable var,
-                                   map<Variable, VarState *> &latestDefs,
-                                   Function &function)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+    // clang-format off
+VarState *SSAGraph<DomCFG>::getOrInitVarState(Variable var,
+                                         map<Variable, VarState *> &latestDefs)
+// clang-format on
 {
     // for constant immediate, there is no need to query, simply create a new
     // state
     if (var.type == JVAR_CONSTANT) {
-        VarState *vs = new VarState(var, function.getCFG().entry, false);
-        function.allStates.insert(vs);
+        VarState *vs = new VarState(var, DomCFG::entry, false);
+        DomCFG::func.allStates.insert(vs);
         return vs;
     }
 
     // we currently assume all memory variables are different
     if (var.type == JVAR_MEMORY || var.type == JVAR_POLYNOMIAL) {
-        VarState *vs = new VarState(var, function.getCFG().entry, false);
-        function.allStates.insert(vs);
-        linkMemoryNodes(var, vs, latestDefs, function);
+        VarState *vs = new VarState(var, DomCFG::entry, false);
+        DomCFG::func.allStates.insert(vs);
+        linkMemoryNodes(var, vs, latestDefs);
         return vs;
     }
 
     if (var.type == JVAR_SHIFTEDCONST || var.type == JVAR_SHIFTEDREG) {
-        VarState *vs = new VarState(var, function.getCFG().entry, false);
-        function.allStates.insert(vs);
-        linkShiftedNodes(var, vs, latestDefs, function);
+        VarState *vs = new VarState(var, DomCFG::entry, false);
+        DomCFG::func.allStates.insert(vs);
+        linkShiftedNodes(var, vs, latestDefs);
         return vs;
     }
     // for the rest of variables, get latest def
     VarState *vs = latestDefs[var];
     if (!vs) {
         // uninitialized variable
-        if (function.inputStates.contains(var)) {
-            latestDefs[var] = function.inputStates[var];
-            return function.inputStates[var];
+        if (DomCFG::func.inputStates.contains(var)) {
+            latestDefs[var] = DomCFG::func.inputStates[var];
+            return DomCFG::func.inputStates[var];
         }
 
         // not constructed yet
-        vs = new VarState(var, function.getCFG().entry, false);
-        function.allStates.insert(vs);
+        vs = new VarState(var, DomCFG::entry, false);
+        DomCFG::func.allStates.insert(vs);
         latestDefs[var] = vs;
-        function.inputStates[var] = vs;
+        DomCFG::func.inputStates[var] = vs;
     }
     return vs;
 }
 
-static void createSuccFromPred(Function &function)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::createSuccFromPred()
 {
-    for (VarState *vs : function.allStates) {
+    for (VarState *vs : DomCFG::func.allStates) {
         for (VarState *vsPred : vs->pred) {
             vsPred->succ.insert(vs);
         }
     }
 }
 
-static void updatePhiNodes(Function &function, BlockID bid,
-                           map<Variable, VarState *> &previousDefs)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::updatePhiNodes(BlockID bid,
+                                      map<Variable, VarState *> &previousDefs)
 {
-    BasicBlock &bb = function.getCFG().entry[bid];
+    BasicBlock &bb = DomCFG::entry[bid];
 
     // Link phi node for this block
     for (auto phi : bb.phiNodes) {
         Variable var = (Variable)(*phi);
-        VarState *vs = getOrInitVarState(var, previousDefs, function);
+        VarState *vs = getOrInitVarState(var, previousDefs);
         // link phi node with previous definition of var
         // prevent self referencing
         if (phi != vs)
@@ -244,10 +225,12 @@ static void updatePhiNodes(Function &function, BlockID bid,
     }
 }
 
-static void updateSSANodes(Function &function, BlockID bid,
-                           map<Variable, VarState *> &latestDefs)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::updateSSANodes(BlockID bid,
+                                      map<Variable, VarState *> &latestDefs)
 {
-    BasicBlock &bb = function.getCFG().entry[bid];
+    BasicBlock &bb = DomCFG::entry[bid];
     vector<Variable> inputs;
 
     // Register phi nodes in the definitions
@@ -262,7 +245,7 @@ static void updateSSANodes(Function &function, BlockID bid,
         instr.getInputs(inputs);
 
         for (Variable var : inputs) {
-            VarState *vs = getOrInitVarState(var, latestDefs, function);
+            VarState *vs = getOrInitVarState(var, latestDefs);
             instr.inputs.push_back(vs);
             latestDefs[var] = vs;
         }
@@ -274,20 +257,21 @@ static void updateSSANodes(Function &function, BlockID bid,
             latestDefs[var] = vs;
             // for memory output, link the base, offset and disp too
             if (var.type == JVAR_MEMORY)
-                linkMemoryNodes(var, vs, latestDefs, function);
+                linkMemoryNodes(var, vs, latestDefs);
         }
 
         // corner case, guess call argument
         if (instr.opcode == Instruction::Call) {
-            guessCallArgument(instr, latestDefs, function);
+            guessCallArgument(instr, latestDefs);
             continue;
         }
     }
 }
 
-static void guessCallArgument(Instruction &instr,
-                              map<Variable, VarState *> &latestDefs,
-                              Function &function)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::guessCallArgument(Instruction &instr,
+                                         map<Variable, VarState *> &latestDefs)
 {
     vector<Variable> arguments;
     getInputCallConvention(arguments);
@@ -301,63 +285,65 @@ static void guessCallArgument(Instruction &instr,
     }
 }
 
-static void linkMemoryNodes(Variable var, VarState *vs,
-                            map<Variable, VarState *> &latestDefs,
-                            Function &function)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::linkMemoryNodes(Variable var, VarState *vs,
+                                       map<Variable, VarState *> &latestDefs)
 {
     if ((int)var.base) {
-        VarState *baseState = getOrInitVarState(Variable((uint32_t)var.base),
-                                                latestDefs, function);
+        VarState *baseState =
+            getOrInitVarState(Variable((uint32_t)var.base), latestDefs);
         vs->pred.insert(baseState);
     }
     if ((int)var.index) {
-        VarState *indexState = getOrInitVarState(Variable((uint32_t)var.index),
-                                                 latestDefs, function);
+        VarState *indexState =
+            getOrInitVarState(Variable((uint32_t)var.index), latestDefs);
         vs->pred.insert(indexState);
     }
     if (var.value) {
         Variable ivar;
         ivar.type = JVAR_CONSTANT;
         ivar.value = var.value;
-        VarState *ivs = new VarState(ivar, function.getCFG().entry, false);
-        function.allStates.insert(ivs);
+        VarState *ivs = new VarState(ivar, DomCFG::entry, false);
+        DomCFG::func.allStates.insert(ivs);
         vs->pred.insert(ivs);
     }
 }
 
-static void linkShiftedNodes(Variable var, VarState *vs,
-                             map<Variable, VarState *> &latestDefs,
-                             Function &function)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::linkShiftedNodes(Variable var, VarState *vs,
+                                        map<Variable, VarState *> &latestDefs)
 {
     Variable immedShift;
     immedShift.type = JVAR_CONSTANT;
     immedShift.value = var.shift_value;
-    VarState *shiftvs =
-        new VarState(immedShift, function.getCFG().entry, false);
-    function.allStates.insert(shiftvs);
+    VarState *shiftvs = new VarState(immedShift, DomCFG::entry, false);
+    DomCFG::func.allStates.insert(shiftvs);
     vs->pred.insert(shiftvs);
 
     if (var.type == JVAR_SHIFTEDCONST) {
         Variable immedVal;
         immedVal.type = JVAR_CONSTANT;
         immedVal.value = var.value;
-        VarState *immedvs =
-            new VarState(immedVal, function.getCFG().entry, false);
-        function.allStates.insert(immedvs);
+        VarState *immedvs = new VarState(immedVal, DomCFG::entry, false);
+        DomCFG::func.allStates.insert(immedvs);
         vs->pred.insert(immedvs);
     } else if (var.type == JVAR_SHIFTEDREG) {
-        VarState *regState = getOrInitVarState(Variable((uint32_t)var.value),
-                                               latestDefs, function);
+        VarState *regState =
+            getOrInitVarState(Variable((uint32_t)var.value), latestDefs);
         vs->pred.insert(regState);
     }
 }
 
-static void linkDependentNodes(Function &function)
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::linkDependentNodes()
 {
     queue<VarState *> usedQ;
     set<VarState *> initInputs;
     set<Variable *> visitedState;
-    for (auto &bb : function.getCFG().blocks) {
+    for (auto &bb : DomCFG::blocks) {
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
             for (auto vs : instr.inputs) {
@@ -409,14 +395,15 @@ static void linkDependentNodes(Function &function)
 
 // Add all necessary phi nodes for the given variable by calculating the
 // dominance frontier
-void buildDominanceFrontierClosure(Function &function, Variable var,
-                                   set<BasicBlock *> &bbs /*OUT*/,
-                                   set<BasicBlock *> &phiblocks) /*OUT*/
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+void SSAGraph<DomCFG>::buildDominanceFrontierClosure(
+    Variable var, set<BasicBlock *> &bbs, set<BasicBlock *> &phiblocks)
 {
     queue<BasicBlock *> q;
 
     // Find all basic blocks that contain definitions of variable var
-    for (auto &bb : function.getCFG().blocks) {
+    for (auto &bb : DomCFG::func.getCFG().blocks) {
         if (bb.lastStates.contains(var)) {
             bbs.insert(&bb);
             q.push(&bb);
@@ -428,7 +415,7 @@ void buildDominanceFrontierClosure(Function &function, Variable var,
         BasicBlock *bb = q.front();
         q.pop();
         // insert phi node at the dominance frontier of the definition
-        for (BasicBlock *cc : bb->dominanceFrontier) {
+        for (BasicBlock *cc : DomCFG::dominanceFrontiers[bb]) {
             phiblocks.insert(cc);
             if (bbs.contains(cc))
                 continue;
@@ -438,8 +425,10 @@ void buildDominanceFrontierClosure(Function &function, Variable var,
     }
 }
 
+template <ProvidesDominanceTree DomCFG>
+requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
 /* Insert phi node for each of the identified variable in function */
-void insertPhiNodes(Function &function, Variable var)
+void SSAGraph<DomCFG>::insertPhiNodes(Variable var)
 {
     // skip memory and constant variables
     // memory variables are constructed later in the memory SSA graph
@@ -451,14 +440,14 @@ void insertPhiNodes(Function &function, Variable var)
     set<BasicBlock *> phiblocks;
 
     // step 1: build DF+ of the variable
-    buildDominanceFrontierClosure(function, var, bbs, phiblocks);
+    buildDominanceFrontierClosure(var, bbs, phiblocks);
 
     // step 2: insert phi nodes
     for (auto bb : phiblocks) {
         // create a variable state at each phi block for this variable
         VarState *vs = new VarState(var, bb, true);
         // record the variable state in the function's global state buffer.
-        function.allStates.insert(vs);
+        DomCFG::func.allStates.insert(vs);
         // update last state in this phi block
         if (!bb->lastStates.contains(var))
             bb->lastStates[var] = vs;

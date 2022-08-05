@@ -36,8 +36,13 @@ void JanusContext::buildProgramDependenceGraph()
         if (func.isExecutable) {
             buildCFG(func);
             numBlocks += func.getCFG().blocks.size();
-            auto dom = PostDominanceAnalysis{DominanceAnalysis{func.getCFG()}};
-            auto ssa = SSA{dom};
+            auto cfg = func.getCFG();
+            if (cfg.numBlocks <= 1)
+                continue;
+            func.pcfg = make_unique< // XXX: This is very bad
+                PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>(
+                PostDominanceAnalysis(DominanceAnalysis(cfg)));
+            traverseCFG(*func.pcfg);
         }
     }
     GSTEPCONT(numBlocks << " blocks" << endl);
@@ -52,11 +57,10 @@ void JanusContext::buildProgramDependenceGraph()
     }
     GSTEPCONT(numInstrs << " instructions lifted" << endl);
 
-    /* Step 3: construct SSA graph */
-    GSTEP("Building SSA graphs" << endl);
+    // Step 3 : construct SSA graph GSTEP("Building SSA graphs" << endl);
     for (auto &func : functions) {
         if (func.isExecutable && func.getCFG().blocks.size()) {
-            buildSSAGraph(func);
+            auto x = SSAGraph(*(func.pcfg));
         }
     }
 

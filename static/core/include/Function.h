@@ -97,6 +97,9 @@ class Function
     std::map<Variable, VarState *> inputStates;
     /// Unique pointer to the control flow graph
     std::unique_ptr<ControlFlowGraph> cfg;
+    /// Unique pointer to processed cfg; very bad indeed
+    std::unique_ptr<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>
+        pcfg;
 
     /* --------------------------------------------------------------
      *                Architecture specific information

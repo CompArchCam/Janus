@@ -18,8 +18,6 @@ void buildCFG(janus::Function &function);
 /** \brief build the control dependence graph (Better to be called after SSA).*/
 void buildCDG(janus::Function &function);
 
-void traverseCFG(janus::Function &function);
-
 void buildCallGraphs(JanusContext *gc);
 
 class CFG
@@ -187,4 +185,8 @@ class PostDominanceAnalysis : public PCFG
     /// this function
     std::shared_ptr<std::vector<janus::BitVector>> pdomTree;
 };
+
+template <std::derived_from<ControlFlowGraph> PCFG>
+void traverseCFG(PCFG &pcfg);
+
 #endif
