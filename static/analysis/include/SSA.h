@@ -8,12 +8,6 @@
 #ifndef _Janus_SSA_
 #define _Janus_SSA_
 
-#include "Arch.h"
-#include "ControlFlow.h"
-#include "JanusContext.h"
-#include "Operand.h"
-#include "Utility.h"
-
 #include <concepts>
 #include <cstdlib>
 #include <cstring>
@@ -22,52 +16,25 @@
 #include <queue>
 #include <utility>
 
+#include "Concepts.h"
 #include "Function.h"
-#include "Loop.h"
 #include "janus.h"
 
-/** \brief After analysis is done, this function fills the functions
- *         [equalgroup](@ref janus::Function::equalgroup) field.
- */
-void saveEqualGroups(janus::Function *function);
-
 template <typename T>
-concept ProvidesDominanceTree = requires(T cfg)
+concept SSARequirement = requires
 {
-    typename T;
-    // clang-format off
-    // Checks for content of the class
-    // Note that we can check other properties of all classes
-    { cfg.idoms } -> std::convertible_to<std::unordered_map<janus::BasicBlock *, janus::BasicBlock *>>;
-    { cfg.dominanceFrontiers } -> std::convertible_to<std::unordered_map<janus::BasicBlock *, std::set<janus::BasicBlock *>>>;
-    { cfg.domTree } -> std::convertible_to<std::shared_ptr<std::vector<janus::BitVector>>>;
-    // clang-format on
+    requires ProvidesDominanceFrontier<T>;
+    requires ProvidesBasicCFG<T>;
+    requires ProvidesFunctionReference<T>;
+    requires std::copy_constructible<T>;
 };
 
-template <typename T>
-concept ProvidesBasicCFG = requires(T cfg)
-{
-    typename T;
-
-    // clang-format off
-    { cfg.blocks } -> std::convertible_to<std::vector<janus::BasicBlock>&>;
-    { *(cfg.entry) } -> std::convertible_to<janus::BasicBlock>;
-    // clang-format on
-};
-
-template <typename T>
-concept ProvidesFunctionReference = requires(T cfg)
-{
-    typename T;
-    // clang-format off
-    { cfg.func } -> std::convertible_to<janus::Function&>;
-    // clang-format on
-};
-
-template <ProvidesDominanceTree DomCFG>
-requires ProvidesBasicCFG<DomCFG> && ProvidesFunctionReference<DomCFG>
+template <SSARequirement DomCFG>
 class SSAGraph : public DomCFG
 {
+  public:
+    SSAGraph(const DomCFG &);
+
   private:
     void copyDefinitions(std::map<janus::Variable, janus::VarState *> *,
                          std::map<janus::Variable, janus::VarState *> *);
@@ -127,9 +94,11 @@ class SSAGraph : public DomCFG
     void buildDominanceFrontierClosure(
         janus::Variable var, std::set<janus::BasicBlock *> &bbs /*OUT*/,
         std::set<janus::BasicBlock *> &phiblocks); /*OUT*/
-
-  public:
-    SSAGraph(const DomCFG &cfg) : DomCFG(cfg) { buildSSAGraph(); }
 };
+
+/** \brief After analysis is done, this function fills the functions
+ *         [equalgroup](@ref janus::Function::equalgroup) field.
+ */
+void saveEqualGroups(janus::Function *function);
 
 #endif

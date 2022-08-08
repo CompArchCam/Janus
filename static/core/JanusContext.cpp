@@ -1,4 +1,5 @@
 #include "JanusContext.h"
+#include "Concepts.h"
 #include "ControlFlow.h"
 #include "Disassemble.h"
 #include "Loop.h"
@@ -39,10 +40,10 @@ void JanusContext::buildProgramDependenceGraph()
             auto cfg = func.getCFG();
             if (cfg.numBlocks <= 1)
                 continue;
-            func.pcfg = make_unique< // XXX: This is very bad
-                PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>(
-                PostDominanceAnalysis(DominanceAnalysis(cfg)));
-            traverseCFG(*func.pcfg);
+            auto pcfg = PostDominanceAnalysis(DominanceAnalysis(func.getCFG()));
+            traverseCFG(pcfg);
+            auto ssa = SSAGraph(pcfg);
+            cout << "new version" << endl;
         }
     }
     GSTEPCONT(numBlocks << " blocks" << endl);
@@ -51,7 +52,7 @@ void JanusContext::buildProgramDependenceGraph()
     GSTEP("Lifting disassembly to IR: ");
     uint32_t numInstrs = 0;
     for (auto &func : functions) {
-        if (func.isExecutable && func.getCFG().blocks.size()) {
+        if (func.isExecutable && !func.getCFG().blocks.empty()) {
             numInstrs += liftInstructions(&func);
         }
     }
@@ -59,7 +60,7 @@ void JanusContext::buildProgramDependenceGraph()
 
     // Step 3 : construct SSA graph GSTEP("Building SSA graphs" << endl);
     for (auto &func : functions) {
-        if (func.isExecutable && func.getCFG().blocks.size()) {
+        if (func.isExecutable && !func.getCFG().blocks.empty()) {
             auto x = SSAGraph(*(func.pcfg));
         }
     }
@@ -67,7 +68,7 @@ void JanusContext::buildProgramDependenceGraph()
     /* Step 4: construct Control Dependence Graph */
     GSTEP("Building control dependence graphs" << endl);
     for (auto &func : functions) {
-        if (func.isExecutable && func.getCFG().blocks.size()) {
+        if (func.isExecutable && !func.getCFG().blocks.empty()) {
             buildCDG(func);
         }
     }
