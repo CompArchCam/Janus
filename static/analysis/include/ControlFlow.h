@@ -147,7 +147,7 @@ class PostDominanceAnalysis : public PCFG
             if (X == Y->ipdom)
                 break;
             // stop if we hit the exit
-            if (X->succ1 == NULL && X->succ2 == NULL)
+            if (X->succ1 == nullptr && X->succ2 == nullptr)
                 break;
             // add to pdom frontier
             X->postDominanceFrontier.insert(Y);
@@ -161,7 +161,7 @@ class PostDominanceAnalysis : public PCFG
             if (X == Y->ipdom)
                 break;
             // stop if we hit the exit
-            if (X->succ1 == NULL && X->succ2 == NULL)
+            if (X->succ1 == nullptr && X->succ2 == nullptr)
                 break;
             // add to pdom frontier
             X->postDominanceFrontier.insert(Y);

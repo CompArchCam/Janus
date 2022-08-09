@@ -30,6 +30,9 @@ JanusContext::JanusContext(const char *name, JMode mode)
 
 void JanusContext::buildProgramDependenceGraph()
 {
+    std::map<FuncID, std::unique_ptr<PostDominanceAnalysis<
+                         DominanceAnalysis<ControlFlowGraph>>>>
+        store;
     GSTEP("Building basic blocks: ");
     uint32_t numBlocks = 0;
     /* Step 1: build CFG for each function */
@@ -38,14 +41,17 @@ void JanusContext::buildProgramDependenceGraph()
             buildCFG(func);
             numBlocks += func.getCFG().blocks.size();
             auto cfg = func.getCFG();
-            if (cfg.numBlocks <= 1)
+            if (cfg.numBlocks <= 1) {
                 continue;
+            }
             auto pcfg = PostDominanceAnalysis(DominanceAnalysis(func.getCFG()));
             traverseCFG(pcfg);
-            auto ssa = SSAGraph(pcfg);
-            cout << "new version" << endl;
+            // this is some very bad syntax; the better solution would be to
+            // provide a deduction guide for
+            store[func.fid] = make_unique<decltype(pcfg)>(std::move(pcfg));
         }
     }
+    cout << "Completed CFG" << endl;
     GSTEPCONT(numBlocks << " blocks" << endl);
 
     /* Step 2: lift the disassembly to IR (the CFG must be ready) */
@@ -57,13 +63,19 @@ void JanusContext::buildProgramDependenceGraph()
         }
     }
     GSTEPCONT(numInstrs << " instructions lifted" << endl);
+    cout << "Completed Lifting" << endl;
 
     // Step 3 : construct SSA graph GSTEP("Building SSA graphs" << endl);
     for (auto &func : functions) {
         if (func.isExecutable && !func.getCFG().blocks.empty()) {
-            auto x = SSAGraph(*(func.pcfg));
+            // The external storage need to handle this explicitly
+            if (store.contains(func.fid)) {
+                cout << "\t" << func.fid << endl;
+                auto x = SSAGraph(*store[func.fid]);
+            }
         }
     }
+    cout << "Completed SSA" << endl;
 
     /* Step 4: construct Control Dependence Graph */
     GSTEP("Building control dependence graphs" << endl);

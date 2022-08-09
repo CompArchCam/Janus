@@ -17,6 +17,7 @@
 #include "Instruction.h"
 #include "Iterator.h"
 #include "MachineInstruction.h"
+#include "SSA.h"
 #include "Utility.h"
 #include "Variable.h"
 #include "janus.h"
@@ -99,6 +100,10 @@ class Function
     std::unique_ptr<ControlFlowGraph> cfg;
     /// Unique pointer to processed cfg; very bad indeed
     PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>> *pcfg;
+    /// Check
+    std::unique_ptr<
+        SSAGraph<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>>
+        ssa;
 
     /* --------------------------------------------------------------
      *                Architecture specific information

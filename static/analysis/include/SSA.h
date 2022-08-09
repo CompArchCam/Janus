@@ -17,7 +17,6 @@
 #include <utility>
 
 #include "Concepts.h"
-#include "Function.h"
 #include "janus.h"
 
 template <typename T>
