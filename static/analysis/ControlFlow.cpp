@@ -439,20 +439,20 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
             // normal case
             BasicBlock &bb = PCFG::blocks[i];
 
-            //[> create a universal set <]
+            // create a universal set
             scratch.setUniversal();
 
-            //[> Get intersect of all the two successor <]
+            // Get intersect of all the two successor
             if (bb.succ1)
                 scratch.intersect(curpdomTree[bb.succ1->bid]);
             if (bb.succ2)
                 scratch.intersect(curpdomTree[bb.succ2->bid]);
-            //[> And also include the block itself <]
+            // And also include the block itself
             scratch.insert(i);
-            //[> Check convergence <]
+            // Check convergence
             if (scratch != curpdomTree[i])
                 converge = false;
-            //[> Update <]
+            // Update
             curpdomTree[i] = scratch;
         }
     } while (!converge);
@@ -466,8 +466,16 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
              * pdominators of BB i, Then it means the immediate post dominator
              * of i is d
              */
+            // TODO: The original code in master is relying on undefined
+            // behaviour
             if (curpdomTree[d].size() + 1 == pdominators.size()) {
-                ipdoms[&bb] = &(PCFG::blocks[d]);
+                if (d >= PCFG::blocks.size()) {
+                    cout << "ControlFlow.cpp: "
+                            "PostDominanceAnalysis::PostDominanceAnalysis:"
+                         << d << "is out of scope" << endl;
+                } else {
+                    ipdoms[&bb] = &(PCFG::entry[d]);
+                }
                 break;
             }
         }
