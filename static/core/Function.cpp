@@ -287,10 +287,13 @@ void Function::visualize(void *outputStream)
     // print the dom edge
     // TODO: fix this somehow afterwards
     os << dec;
-    // for (auto &bb : getCFG().blocks) {
-    // if (bb.idom && bb.idom->bid != bb.bid)
-    // os << "\tBB" << bb.idom->bid << " -> BB" << bb.bid << ";" << endl;
-    //}
+    for (auto &bb : getCFG().blocks) {
+        if (pcfg != nullptr && !pcfg->idoms.empty() &&
+            pcfg->idoms.contains(&bb) && pcfg->idoms[&bb]->bid != bb.bid) {
+            os << "\tBB" << pcfg->idoms[&bb]->bid << " -> BB" << bb.bid << ";"
+               << endl;
+        }
+    }
 
     os << "} " << endl;
 
@@ -313,10 +316,13 @@ void Function::visualize(void *outputStream)
 
     // print the dom edge
     os << dec;
-    // for (auto &bb : getCFG().blocks) {
-    // if (bb.ipdom)
-    // os << "\tBB" << bb.ipdom->bid << " -> BB" << bb.bid << ";" << endl;
-    //}
+    for (auto &bb : getCFG().blocks) {
+        if (pcfg != nullptr && !pcfg->ipdoms.empty() &&
+            pcfg->ipdoms.contains(&bb)) {
+            os << "\tBB" << pcfg->ipdoms[&bb]->bid << " -> BB" << bb.bid << ";"
+               << endl;
+        }
+    }
 
     os << "} " << endl;
 }

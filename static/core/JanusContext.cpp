@@ -29,7 +29,7 @@ JanusContext::JanusContext(const char *name, JMode mode)
 
 void JanusContext::buildProgramDependenceGraph()
 {
-    std::map<FuncID, std::unique_ptr<PostDominanceAnalysis<
+    std::map<FuncID, std::shared_ptr<PostDominanceAnalysis<
                          DominanceAnalysis<ControlFlowGraph>>>>
         store;
     GSTEP("Building basic blocks: ");
@@ -41,11 +41,15 @@ void JanusContext::buildProgramDependenceGraph()
             if (func.getCFG().numBlocks <= 1) {
                 continue;
             }
-            auto pcfg = PostDominanceAnalysis(DominanceAnalysis(func.getCFG()));
-            traverseCFG(pcfg);
+            auto pcfg = make_shared<
+                PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>(
+                PostDominanceAnalysis(DominanceAnalysis(func.getCFG())));
+            func.pcfg = pcfg;
+
+            traverseCFG(*pcfg);
             // this is some very bad syntax; the better solution would be to
             // provide a deduction guide for
-            store[func.fid] = make_unique<decltype(pcfg)>(std::move(pcfg));
+            store[func.fid] = pcfg;
         }
     }
     GSTEPCONT(numBlocks << " blocks" << endl);
@@ -68,6 +72,7 @@ void JanusContext::buildProgramDependenceGraph()
             // on the caller
             if (store.contains(func.fid)) {
                 auto x = SSAGraph(*store[func.fid]);
+                func.ssa = make_shared<decltype(x)>(x);
             }
         }
     }

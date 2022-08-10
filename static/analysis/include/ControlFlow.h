@@ -43,10 +43,10 @@ class ControlFlowGraph
 {
   private:
     void buildBasicBlocks(std::map<PCAddress, janus::Function *> &);
-
-  public:
     /// Actual storage of cfg
     std::shared_ptr<CFG> cfg;
+
+  public:
     /// The function the CFG is representing
     janus::Function &func;
     /// Entry block of the function CFG
@@ -150,28 +150,30 @@ class PostDominanceAnalysis : public PCFG
     // then X's post dominance frontier is Y
     void updatePostDominanceFrontier(janus::BasicBlock *Y)
     {
-        auto updateDomFrontier = [this](auto *x, auto *xSucc) {
-            while (x) {
+        auto updateDomFrontier = [this](auto *X, auto *Y) {
+            while (X) {
                 // stop when we hit the post dominator of Y
-                if (x == ipdoms[xSucc])
+                if (ipdoms.contains(Y) && X == ipdoms.at(Y))
                     break;
                 // stop if we hit the exit
-                if (x->succ1 == nullptr && x->succ2 == nullptr)
+                if (X->succ1 == nullptr && X->succ2 == nullptr)
                     break;
                 // add to pdom frontier
-                postDominanceFrontiers[x].insert(xSucc);
+                postDominanceFrontiers[X].insert(Y);
                 // traverse upwards towards pdom tree
-                x = ipdoms[x];
+                if (ipdoms.contains(X))
+                    X = ipdoms.at(X);
+                else
+                    break;
             }
         };
-
         updateDomFrontier(Y->succ1, Y);
         updateDomFrontier(Y->succ2, Y);
     }
 
     void buildPostDominanceFrontiers()
     {
-        for (janus::BasicBlock &bb : ControlFlowGraph::blocks) {
+        for (janus::BasicBlock &bb : PCFG::blocks) {
             updatePostDominanceFrontier(&bb);
         }
     }

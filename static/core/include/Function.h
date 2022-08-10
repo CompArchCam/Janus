@@ -99,9 +99,10 @@ class Function
     /// Unique pointer to the control flow graph
     std::unique_ptr<ControlFlowGraph> cfg;
     /// Unique pointer to processed cfg; very bad indeed
-    PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>> *pcfg;
+    std::shared_ptr<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>
+        pcfg;
     /// Check
-    std::unique_ptr<
+    std::shared_ptr<
         SSAGraph<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>>
         ssa;
 

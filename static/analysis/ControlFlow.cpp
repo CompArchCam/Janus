@@ -307,7 +307,7 @@ void DominanceAnalysis<PCFG>::buildDominanceTree()
     if (!size)
         return;
 
-    //[> construct a two dimensional dominator tree <]
+    // construct a two dimensional dominator tree
     domTree =
         make_shared<vector<BitVector>>(size, BitVector(size, uint32_t(-1)));
     vector<BitVector> &curdomTree = *domTree;
@@ -334,19 +334,19 @@ void DominanceAnalysis<PCFG>::buildDominanceTree()
                 }
                 continue;
             }
-            //[> create a universal set <]
+            // create a universal set
             scratch.setUniversal();
 
-            //[> Get intersect of all its predecessors <]
+            // Get intersect of all its predecessors
             for (auto predecessor : bb.pred) {
                 scratch.intersect(curdomTree[predecessor->bid]);
             }
-            //[> And also include the block itself <]
+            // And also include the block itself
             scratch.insert(i);
-            //[> Check convergence <]
+            // Check convergence
             if (scratch != curdomTree[i])
                 converge = false;
-            //[> Update <]
+            // Update
             curdomTree[i] = scratch;
         }
     } while (!converge);
@@ -390,7 +390,7 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
     uint32_t size = PCFG::blocks.size();
     if (!size)
         return;
-    if (!PCFG::terminations.size())
+    if (PCFG::terminations.empty())
         return;
 
     BlockID termID = 0;
@@ -408,12 +408,12 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
             termID = t;
     }
 
-    // [> construct a two dimensional post dominance tree <]
+    // construct a two dimensional post dominance tree
     pdomTree =
         make_shared<vector<BitVector>>(size, BitVector(size, uint32_t(-1)));
     vector<BitVector> &curpdomTree = *pdomTree;
 
-    //[> initialisation from the terminator node < ]
+    // initialisation from the terminator node
     curpdomTree[termID].clear();
     curpdomTree[termID].insert(termID);
 
@@ -467,7 +467,7 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
              * of i is d
              */
             if (curpdomTree[d].size() + 1 == pdominators.size()) {
-                ipdoms[&bb] = &PCFG::blocks[d];
+                ipdoms[&bb] = &(PCFG::blocks[d]);
                 break;
             }
         }
