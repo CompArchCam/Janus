@@ -5,7 +5,6 @@
 
 #include "Utility.h"
 #include "Variable.h"
-#include "janus.h"
 #include <iostream>
 #include <vector>
 
@@ -13,7 +12,7 @@ namespace janus
 {
 
 class MachineInstruction;
-class VarState;
+struct VarState;
 class BasicBlock;
 class Function;
 
@@ -82,7 +81,7 @@ class Instruction
     /// Set of output variables in SSA form.
     std::vector<VarState *> outputs;
     /// Immediate control dependent instruction
-    std::vector<Instruction *> controlDep;
+    // std::vector<Instruction *> controlDep;
     /// Pointer to the belonging basic block
     BasicBlock *block;
     /// Register bitset of all the register it reads (implicitly and explicitly)
@@ -109,10 +108,10 @@ class Instruction
     bool isVectorInstruction();
     /// Return the target instruction ID from the current instruction, this must
     /// be a branch within the same function, return -1 if not found
-    int getTargetInstID();
+    auto getTargetInstID() -> int;
     /// Return the pointer to the function based on the jump/call target of this
     /// instruction
-    Function *getTargetFunction();
+    auto getTargetFunction() -> Function *;
     /// Print the instruction into dot format
     void printDot(void *outputStream);
 };

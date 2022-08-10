@@ -292,18 +292,18 @@ ControlFlowGraph::ControlFlowGraph(
     Function *function, std::map<PCAddress, janus::Function *> &functionMap)
     : ControlFlowGraph(*function, functionMap){};
 
-template <std::derived_from<ControlFlowGraph> PCFG>
+template <DomInput PCFG>
 DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg) : PCFG(cfg)
 {
     buildDominanceTree();
     buildDominanceFrontiers();
-    ControlFlowGraph::func.domTree = domTree;
+    PCFG::func.domTree = domTree;
 }
 
-template <std::derived_from<ControlFlowGraph> PCFG>
+template <DomInput PCFG>
 void DominanceAnalysis<PCFG>::buildDominanceTree()
 {
-    uint32_t size = ControlFlowGraph::numBlocks;
+    uint32_t size = PCFG::numBlocks;
     if (!size)
         return;
 
@@ -322,7 +322,7 @@ void DominanceAnalysis<PCFG>::buildDominanceTree()
     do {
         converge = true;
         for (int i = 0; i < size; i++) {
-            BasicBlock &bb = ControlFlowGraph::blocks[i];
+            BasicBlock &bb = PCFG::blocks[i];
             /* If no predecessor, set itself as its dominator (for entry block)
              */
             if (bb.pred.size() == 0) {
@@ -353,13 +353,13 @@ void DominanceAnalysis<PCFG>::buildDominanceTree()
 
     set<BlockID> dominators;
     for (int i = 0; i < size; i++) {
-        BasicBlock &bb = ControlFlowGraph::blocks[i];
+        BasicBlock &bb = PCFG::blocks[i];
         curdomTree[i].toSTLSet(dominators);
         for (BlockID d : dominators) {
             /* If the number of dominators of BB d is 1 less than the dominators
              * of BB i, Then it means the immediate dominator of i is d */
             if (curdomTree[d].size() + 1 == dominators.size()) {
-                idoms[&bb] = &ControlFlowGraph::blocks[d];
+                idoms[&bb] = &PCFG::blocks[d];
                 break;
             }
         }
@@ -367,44 +367,44 @@ void DominanceAnalysis<PCFG>::buildDominanceTree()
     }
 }
 
-template <std::derived_from<ControlFlowGraph> PCFG>
+template <DomInput PCFG>
 void DominanceAnalysis<PCFG>::buildDominanceFrontiers()
 {
-    for (BasicBlock &bb : ControlFlowGraph::blocks) {
+    for (BasicBlock &bb : PCFG::blocks) {
         updateDominanceFrontier(&bb);
     }
 }
 
-template <std::derived_from<ControlFlowGraph> PCFG>
+template <PostDomInput PCFG>
 PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
     : PCFG(pcfg)
 {
     buildPostDominanceTree();
     buildPostDominanceFrontiers();
-    ControlFlowGraph::func.pdomTree = pdomTree;
+    PCFG::func.pdomTree = pdomTree;
 }
 
-template <std::derived_from<ControlFlowGraph> PCFG>
+template <PostDomInput PCFG>
 void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
 {
-    uint32_t size = ControlFlowGraph::numBlocks;
+    uint32_t size = PCFG::blocks.size();
     if (!size)
         return;
-    if (!ControlFlowGraph::terminations.size())
+    if (!PCFG::terminations.size())
         return;
 
     BlockID termID = 0;
     bool multiExit = false;
 
-    if (ControlFlowGraph::terminations.size() > 1) {
+    if (PCFG::terminations.size() > 1) {
         /* For function with multiple exit, we create an additional fake basic
          * block So that all terminating basic block lead to this exit */
-        termID = ControlFlowGraph::blocks.size();
+        termID = PCFG::blocks.size();
         // create a fake node
         size++;
         multiExit = true;
     } else {
-        for (auto t : ControlFlowGraph::terminations)
+        for (auto t : PCFG::terminations)
             termID = t;
     }
 
@@ -429,7 +429,7 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
                 continue;
             }
 
-            if (multiExit && ControlFlowGraph::terminations.contains(i)) {
+            if (multiExit && PCFG::terminations.contains(i)) {
                 curpdomTree[i].clear();
                 curpdomTree[i].insert(i);
                 curpdomTree[i].insert(termID);
@@ -437,7 +437,7 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
             }
 
             // normal case
-            BasicBlock &bb = ControlFlowGraph::entry[i];
+            BasicBlock &bb = PCFG::blocks[i];
 
             //[> create a universal set <]
             scratch.setUniversal();
@@ -459,14 +459,15 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
 
     set<BlockID> pdominators;
     for (int i = 0; i < size; i++) {
-        BasicBlock &bb = ControlFlowGraph::entry[i];
+        BasicBlock &bb = PCFG::blocks[i];
         curpdomTree[i].toSTLSet(pdominators);
         for (BlockID d : pdominators) {
             /* If the number of pdominators of BB d is 1 less than the
              * pdominators of BB i, Then it means the immediate post dominator
-             * of i is d */
+             * of i is d
+             */
             if (curpdomTree[d].size() + 1 == pdominators.size()) {
-                bb.ipdom = &ControlFlowGraph::entry[d];
+                ipdoms[&bb] = &PCFG::blocks[d];
                 break;
             }
         }
@@ -526,18 +527,20 @@ void buildCFG(Function &function)
     traverseCFG(dcfg);
 }
 
-// Construct control dependence graph for each function
-void buildCDG(Function &function)
+template <CDGInput PCFG>
+InstructionControlDependence<PCFG>::InstructionControlDependence(
+    const PCFG &pcfg)
+    : PCFG(pcfg)
 {
     /* All of the instructions within a basic block are
      * immediately control dependent on the branches
      * in the post dominance frontier of the block. */
-    for (auto &bb : function.getCFG().blocks) {
+    for (auto &bb : PCFG::blocks) {
         for (int i = 0; i < bb.size; i++) {
-            Instruction &instr = bb.instrs[i];
-            for (auto cb : bb.postDominanceFrontier) {
+            auto instr = &bb.instrs[i];
+            for (auto cb : PCFG::postDominanceFrontiers[&bb]) {
                 Instruction *ci = cb->lastInstr();
-                instr.controlDep.push_back(ci);
+                controlDeps[instr].push_back(ci);
             }
         }
     }
@@ -585,3 +588,7 @@ void buildCallGraphs(JanusContext *gc)
 
     delete[] callGraph;
 }
+
+// TODO: fix this explicit instantiation
+template class InstructionControlDependence<
+    PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>;

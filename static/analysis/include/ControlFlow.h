@@ -8,16 +8,12 @@
 #include <unordered_map>
 
 #include "BasicBlock.h"
-#include "MachineInstruction.h"
-#include "janus.h"
+#include "Concepts.h"
 
 class JanusContext;
 
 /** \brief build the control flow graph*/
 void buildCFG(janus::Function &function);
-
-/** \brief build the control dependence graph (Better to be called after SSA).*/
-void buildCDG(janus::Function &function);
 
 void buildCallGraphs(JanusContext *gc);
 
@@ -77,7 +73,15 @@ class ControlFlowGraph
                      std::map<PCAddress, janus::Function *> &);
 };
 
-template <std::derived_from<ControlFlowGraph> ProcessedCFG>
+template <typename T>
+concept DomInput = requires(T cfg)
+{
+    requires ProvidesBasicCFG<T>;
+    requires ProvidesTerminationBlocks<T>;
+    requires ProvidesFunctionReference<T>;
+};
+
+template <DomInput ProcessedCFG>
 class DominanceAnalysis : public ProcessedCFG
 {
   private:
@@ -110,9 +114,6 @@ class DominanceAnalysis : public ProcessedCFG
     /// Constructor
     DominanceAnalysis(const ProcessedCFG &);
 
-    /// Constructor with a bit of conversion
-    // DominanceAnalysis(const ProcessedCFG &);
-
     /// The root of the dominator tree (indexed by blockID) for the CFG in this
     /// function
     std::shared_ptr<std::vector<janus::BitVector>> domTree;
@@ -130,7 +131,15 @@ class DominanceAnalysis : public ProcessedCFG
         dominanceFrontiers;
 };
 
-template <std::derived_from<ControlFlowGraph> PCFG>
+template <typename T>
+concept PostDomInput = requires(T cfg)
+{
+    requires ProvidesBasicCFG<T>;
+    requires ProvidesTerminationBlocks<T>;
+    requires ProvidesFunctionReference<T>;
+};
+
+template <PostDomInput PCFG>
 class PostDominanceAnalysis : public PCFG
 {
   private:
@@ -139,35 +148,25 @@ class PostDominanceAnalysis : public PCFG
     // For X in all successors of Y
     // if X does not post dominate Y
     // then X's post dominance frontier is Y
-    static void updatePostDominanceFrontier(janus::BasicBlock *Y)
+    void updatePostDominanceFrontier(janus::BasicBlock *Y)
     {
-        janus::BasicBlock *X = Y->succ1;
-        while (X) {
-            // stop when we hit the post dominator of Y
-            if (X == Y->ipdom)
-                break;
-            // stop if we hit the exit
-            if (X->succ1 == nullptr && X->succ2 == nullptr)
-                break;
-            // add to pdom frontier
-            X->postDominanceFrontier.insert(Y);
-            // traverse upwards towards pdom tree
-            X = X->ipdom;
-        }
+        auto updateDomFrontier = [this](auto *x, auto *xSucc) {
+            while (x) {
+                // stop when we hit the post dominator of Y
+                if (x == ipdoms[xSucc])
+                    break;
+                // stop if we hit the exit
+                if (x->succ1 == nullptr && x->succ2 == nullptr)
+                    break;
+                // add to pdom frontier
+                postDominanceFrontiers[x].insert(xSucc);
+                // traverse upwards towards pdom tree
+                x = ipdoms[x];
+            }
+        };
 
-        X = Y->succ2;
-        while (X) {
-            // stop when we hit the post dominator of Y
-            if (X == Y->ipdom)
-                break;
-            // stop if we hit the exit
-            if (X->succ1 == nullptr && X->succ2 == nullptr)
-                break;
-            // add to pdom frontier
-            X->postDominanceFrontier.insert(Y);
-            // traverse upwards towards pdom tree
-            X = X->ipdom;
-        }
+        updateDomFrontier(Y->succ1, Y);
+        updateDomFrontier(Y->succ2, Y);
     }
 
     void buildPostDominanceFrontiers()
@@ -182,9 +181,38 @@ class PostDominanceAnalysis : public PCFG
   public:
     PostDominanceAnalysis(const PCFG &);
 
+    /// (Hash)Map storing the immediate dominators of each basic blocks;
+    /// replaces the *janus::BasicBlock::idom* field
+    /// TODO: rename required
+    std::unordered_map<janus::BasicBlock *, janus::BasicBlock *> ipdoms;
+
+    /// (Hash)Map storing the dominance frontier of each basic block; replaces
+    /// the *janus::BasicBlock::dominanceFrontier* in the original
+    /// implementation
+    /// TODO: rename required
+    std::unordered_map<janus::BasicBlock *, std::set<janus::BasicBlock *>>
+        postDominanceFrontiers;
+
     /// The root of the post dominator tree (indexed by blockID) for the CFG in
     /// this function
     std::shared_ptr<std::vector<janus::BitVector>> pdomTree;
+};
+
+template <typename T>
+concept CDGInput = requires
+{
+    requires ProvidesBasicCFG<T>;
+    requires ProvidesPostDominanceFrontier<T>;
+};
+
+template <CDGInput PCFG>
+class InstructionControlDependence : PCFG
+{
+  public:
+    std::unordered_map<janus::Instruction *, std::vector<janus::Instruction *>>
+        controlDeps;
+
+    InstructionControlDependence(const PCFG &);
 };
 
 template <std::derived_from<ControlFlowGraph> PCFG>

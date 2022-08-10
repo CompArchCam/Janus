@@ -313,10 +313,10 @@ void Function::visualize(void *outputStream)
 
     // print the dom edge
     os << dec;
-    for (auto &bb : getCFG().blocks) {
-        if (bb.ipdom)
-            os << "\tBB" << bb.ipdom->bid << " -> BB" << bb.bid << ";" << endl;
-    }
+    // for (auto &bb : getCFG().blocks) {
+    // if (bb.ipdom)
+    // os << "\tBB" << bb.ipdom->bid << " -> BB" << bb.bid << ";" << endl;
+    //}
 
     os << "} " << endl;
 }

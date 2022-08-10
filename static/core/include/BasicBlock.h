@@ -75,7 +75,7 @@ class BasicBlock
     /** \brief Contains all phi nodes in this block. */
     std::vector<VarState *> phiNodes;
     /** \brief Immediate post-dominator of the current basic block. */
-    BasicBlock *ipdom;
+    // BasicBlock *ipdom;
     /** \brief Basic blocks in the dominance frontier of this one.
      *
      * Set of blocks b, such that this block dominates an immediate predecessor
@@ -87,7 +87,7 @@ class BasicBlock
      * Set of blocks b, such that this block dominates an immediate predecessor
      * of b, but does not strictly dominate b.
      */
-    std::set<BasicBlock *> postDominanceFrontier;
+    // std::set<BasicBlock *> postDominanceFrontier;
     /// The parent function of the basic block
     Function *parentFunction;
     /** \brief Pointer to the innermost loop containing this block in its body

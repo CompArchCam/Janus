@@ -18,8 +18,6 @@ SSAGraph<DomCFG>::SSAGraph(const DomCFG &domcfg) : DomCFG(domcfg)
 template <SSARequirement DomCFG>
 void SSAGraph<DomCFG>::buildSSAGraph()
 {
-    cout << "\t\t"
-         << "bp1" << endl;
     /* Step 1: collect variable inputs and outputs for each basic block */
     for (auto &bb : DomCFG::blocks) {
         bb.lastStates.clear();
@@ -30,26 +28,17 @@ void SSAGraph<DomCFG>::buildSSAGraph()
             }
         }
     }
-    cout << "\t\t"
-         << "bp2" << endl;
 
     /* Step 2: Insert Phi node */
     for (auto var : DomCFG::func.allVars)
         insertPhiNodes(var);
 
-    cout << "\t\t"
-         << "bp3" << endl;
-
     /* Step 3: Link all instruction's input to Phi and outputs */
     linkSSANodes();
-    cout << "\t\t"
-         << "bp4" << endl;
 
     /* Step 3.1: From the pred computed in the previous step, create the succ
      * for each varstate */
     createSuccFromPred();
-    cout << "\t\t"
-         << "bp5" << endl;
 
     /* Step 4: Assign an id/version for each variable state
      * Used for human-readable SSA */
@@ -62,13 +51,9 @@ void SSAGraph<DomCFG>::buildSSAGraph()
         vs->version = version;
         versions[var] = version + 1;
     }
-    cout << "\t\t"
-         << "bp6" << endl;
 
     /* Step 5: Link dependants and mark unused variables */
     linkDependentNodes();
-    cout << "\t\t"
-         << "bp7" << endl;
 }
 
 /* Copy all the variable definitions from block orig to dest */
@@ -457,5 +442,6 @@ void SSAGraph<DomCFG>::insertPhiNodes(Variable var)
     }
 }
 
+// TODO: fix this by either moving the implementations to header
 template class SSAGraph<
     PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>;

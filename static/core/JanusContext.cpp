@@ -1,5 +1,4 @@
 #include "JanusContext.h"
-#include "Concepts.h"
 #include "ControlFlow.h"
 #include "Disassemble.h"
 #include "Loop.h"
@@ -38,10 +37,8 @@ void JanusContext::buildProgramDependenceGraph()
     /* Step 1: build CFG for each function */
     for (auto &func : functions) {
         if (func.isExecutable) {
-            buildCFG(func);
             numBlocks += func.getCFG().blocks.size();
-            auto cfg = func.getCFG();
-            if (cfg.numBlocks <= 1) {
+            if (func.getCFG().numBlocks <= 1) {
                 continue;
             }
             auto pcfg = PostDominanceAnalysis(DominanceAnalysis(func.getCFG()));
@@ -51,7 +48,6 @@ void JanusContext::buildProgramDependenceGraph()
             store[func.fid] = make_unique<decltype(pcfg)>(std::move(pcfg));
         }
     }
-    cout << "Completed CFG" << endl;
     GSTEPCONT(numBlocks << " blocks" << endl);
 
     /* Step 2: lift the disassembly to IR (the CFG must be ready) */
@@ -63,25 +59,26 @@ void JanusContext::buildProgramDependenceGraph()
         }
     }
     GSTEPCONT(numInstrs << " instructions lifted" << endl);
-    cout << "Completed Lifting" << endl;
 
     // Step 3 : construct SSA graph GSTEP("Building SSA graphs" << endl);
     for (auto &func : functions) {
         if (func.isExecutable && !func.getCFG().blocks.empty()) {
             // The external storage need to handle this explicitly
+            // XXX: note that the responsiblity to check the file exist is now
+            // on the caller
             if (store.contains(func.fid)) {
-                cout << "\t" << func.fid << endl;
                 auto x = SSAGraph(*store[func.fid]);
             }
         }
     }
-    cout << "Completed SSA" << endl;
 
     /* Step 4: construct Control Dependence Graph */
     GSTEP("Building control dependence graphs" << endl);
     for (auto &func : functions) {
         if (func.isExecutable && !func.getCFG().blocks.empty()) {
-            buildCDG(func);
+            if (store.contains(func.fid)) {
+                auto x = InstructionControlDependence(*store[func.fid]);
+            }
         }
     }
 }

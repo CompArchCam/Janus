@@ -17,7 +17,6 @@
 #include <utility>
 
 #include "Concepts.h"
-#include "janus.h"
 
 template <typename T>
 concept SSARequirement = requires
@@ -50,9 +49,10 @@ class SSAGraph : public DomCFG
     updateSSANodes(BlockID bid,
                    std::map<janus::Variable, janus::VarState *> &latestDefs);
 
-    janus::VarState *
+    auto
     getOrInitVarState(janus::Variable var,
-                      std::map<janus::Variable, janus::VarState *> &latestDefs);
+                      std::map<janus::Variable, janus::VarState *> &latestDefs)
+        -> janus::VarState *;
 
     void
     linkMemoryNodes(janus::Variable var, janus::VarState *vs,
