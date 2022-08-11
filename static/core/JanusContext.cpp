@@ -45,8 +45,6 @@ void JanusContext::buildProgramDependenceGraph()
                 PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>(
                 PostDominanceAnalysis(DominanceAnalysis(func.getCFG())));
             func.pcfg = pcfg;
-
-            traverseCFG(*pcfg);
             // this is some very bad syntax; the better solution would be to
             // provide a deduction guide for
             store[func.fid] = pcfg;

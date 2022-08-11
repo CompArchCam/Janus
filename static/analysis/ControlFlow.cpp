@@ -285,6 +285,9 @@ ControlFlowGraph::ControlFlowGraph(
     buildBasicBlocks(functionMap);
     numBlocks = static_cast<uint32_t>(blocks.size());
     entry = blocks.data();
+    if (numBlocks >= 2) {
+        traverseCFG();
+    }
     // copyToFunction();
 }
 
@@ -472,7 +475,7 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
                 if (d >= PCFG::blocks.size()) {
                     cout << "ControlFlow.cpp: "
                             "PostDominanceAnalysis::PostDominanceAnalysis:"
-                         << d << "is out of scope" << endl;
+                         << d << " is out of scope" << endl;
                 } else {
                     ipdoms[&bb] = &(PCFG::entry[d]);
                 }
@@ -481,58 +484,6 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
         }
         pdominators.clear();
     }
-}
-
-/* We use a global variable to reduce the stack size in this
- * recursive function */
-static uint32_t step = 0;
-static void markBlock(BasicBlock *block, bool *discovered)
-{
-    discovered[block->bid] = true;
-    block->firstVisitStep = step++;
-    if (block->succ1) {
-        if (!discovered[block->succ1->bid])
-            markBlock(block->succ1, discovered);
-    }
-    if (block->succ2) {
-        if (!discovered[block->succ2->bid])
-            markBlock(block->succ2, discovered);
-    }
-    block->secondVisitStep = step++;
-}
-
-template <std::derived_from<ControlFlowGraph> PCFG>
-void traverseCFG(PCFG &pcfg)
-{
-    uint32_t size = pcfg.numBlocks;
-    /* Array to tag if a block has been visited */
-    bool *discovered = new bool[size];
-    memset(discovered, 0, size * sizeof(bool));
-    /* Start marking from entry */
-    markBlock(pcfg.entry, discovered);
-    delete[] discovered;
-}
-
-// Construct control flow graph for each function
-void buildCFG(Function &function)
-{
-    /* step 1: construct a vector of basic blocks
-     * and link them together */
-    // auto &cfg = function.getCFG();
-    auto cfg = function.getCFG();
-
-    if (cfg.numBlocks <= 1) {
-        return;
-    }
-
-    /* step 2: analyse the CFG and build dominance tree */
-    /* step 3: analyse the CFG and build dominance frontiers */
-    /* step 4: analyse the CFG and build post-dominance tree */
-    /* step 5: analyse the CFG and build post dominance frontiers */
-    auto dcfg = PostDominanceAnalysis(DominanceAnalysis(cfg));
-
-    /* step 6: traverse the CFG */
-    traverseCFG(dcfg);
 }
 
 template <CDGInput PCFG>
@@ -598,5 +549,7 @@ void buildCallGraphs(JanusContext *gc)
 }
 
 // TODO: fix this explicit instantiation
+template class DominanceAnalysis<ControlFlowGraph>;
+template class PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>;
 template class InstructionControlDependence<
     PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>;

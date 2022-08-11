@@ -12,9 +12,6 @@
 
 class JanusContext;
 
-/** \brief build the control flow graph*/
-void buildCFG(janus::Function &function);
-
 void buildCallGraphs(JanusContext *gc);
 
 class CFG
@@ -45,6 +42,33 @@ class ControlFlowGraph
     void buildBasicBlocks(std::map<PCAddress, janus::Function *> &);
     /// Actual storage of cfg
     std::shared_ptr<CFG> cfg;
+    /* We use a global variable to reduce the stack size in this
+     * recursive function */
+    uint32_t step = 0;
+
+    void traverseCFG()
+    {
+        uint32_t size = numBlocks;
+        /* Array to tag if a block has been visited */
+        auto discovered = std::vector<bool>(size, false);
+        /* Start marking from entry */
+        markBlock(entry, discovered);
+    }
+
+    void markBlock(janus::BasicBlock *block, std::vector<bool> &discovered)
+    {
+        discovered[block->bid] = true;
+        block->firstVisitStep = step++;
+        if (block->succ1) {
+            if (!discovered[block->succ1->bid])
+                markBlock(block->succ1, discovered);
+        }
+        if (block->succ2) {
+            if (!discovered[block->succ2->bid])
+                markBlock(block->succ2, discovered);
+        }
+        block->secondVisitStep = step++;
+    }
 
   public:
     /// The function the CFG is representing
@@ -216,8 +240,5 @@ class InstructionControlDependence : PCFG
 
     InstructionControlDependence(const PCFG &);
 };
-
-template <std::derived_from<ControlFlowGraph> PCFG>
-void traverseCFG(PCFG &pcfg);
 
 #endif
