@@ -541,8 +541,10 @@ buildPostDominanceTree(Function &function)
             /* If the number of pdominators of BB d is 1 less than the pdominators of BB i,
              * Then it means the immediate post dominator of i is d */
             if (pdomTree[d].size() + 1 == pdominators.size()) {
-                bb.ipdom = &function.entry[d];
-                break;
+            	if (d < function.numBlocks) {
+                    bb.ipdom = &function.entry[d];
+                    break;
+                }
             }
         }
         pdominators.clear();
