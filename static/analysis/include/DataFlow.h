@@ -49,12 +49,21 @@ concept ProvidesDataFlowSpecs = requires(DataFlowSpec<DataFlowInputType> t)
     // clang-format off
 
     /// This checks that 
-    ///     DataFlowSpect(std::vector<janus::Instruction*>&, const DataFlowInput auto&) 
+    ///     DataFlowSpec(std::vector<janus::Instruction*>&, const DataFlowInput auto&) 
     /// is a valid constructor.
-    /// and that the type being checked can be destructed
-    requires std::is_constructible_v<decltype(t),
-                std::vector<janus::Instruction*>&,
-                DataFlowInputType&>;
+    /// and that DataFlowSpec is also destructible
+    requires std::constructible_from<
+                // Type to construct
+                decltype(t),
+                // Arguments {
+                    std::vector<janus::Instruction*>&,
+                    DataFlowInputType&
+                // }
+                >;
+    // NOTE: { t } -> std::constructible_from<...> would probably be better
+    // but unfortunately, { t } -> ... syntax can only check the *reference*
+    // to the type of t against concepts, and no reference can be constructed
+    // by a constructor
 
     requires std::is_destructible_v<decltype(t)>;
 
@@ -68,7 +77,7 @@ concept ProvidesDataFlowSpecs = requires(DataFlowSpec<DataFlowInputType> t)
     /// DataFlowSpec should specify an equation that takes in
     /// 1 or many bit vectors as input and produce a single processed
     /// bit vector as output
-    { t.eqn.evaluate(std::declval<std::set<janus::BitVector>>())} -> std::convertible_to<janus::BitVector>;
+    { t.eqn.evaluate(std::declval<std::set<janus::BitVector>>()) } -> std::convertible_to<janus::BitVector>;
     // clang-format on
 };
 
