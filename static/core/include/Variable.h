@@ -27,9 +27,9 @@ struct Variable : JVar {
     Variable(uint64_t val);
 };
 
-bool operator<(const Variable &a, const Variable &b);
-bool operator==(const Variable &a, const Variable &b);
-std::ostream &operator<<(std::ostream &out, const Variable &v);
+auto operator<(const Variable &a, const Variable &b) -> bool;
+auto operator==(const Variable &a, const Variable &b) -> bool;
+auto operator<<(std::ostream &out, const Variable &v) -> std::ostream &;
 
 /** \brief A single variable in SSA form, part of the SSA graph. */
 struct VarState : Variable {
@@ -117,9 +117,9 @@ struct VarState : Variable {
     VarState(Variable var, BasicBlock *block, bool isPHI);
 };
 
-std::ostream &operator<<(std::ostream &out, VarState *vs);
-std::ostream &operator<<(std::ostream &out, VarState &vs);
-std::ostream &operator<<(std::ostream &out, JVarProfile &vp);
+auto operator<<(std::ostream &out, VarState *vs) -> std::ostream &;
+auto operator<<(std::ostream &out, VarState &vs) -> std::ostream &;
+auto operator<<(std::ostream &out, JVarProfile &vp) -> std::ostream &;
 
 } // namespace janus
 

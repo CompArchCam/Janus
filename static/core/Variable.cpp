@@ -1,11 +1,6 @@
 #include "Variable.h"
-#include "Analysis.h"
-#include "Arch.h"
-#include "Disassemble.h"
-#include "Function.h"
-#include "IO.h"
 #include "Loop.h"
-#include "Operand.h"
+#include "janus_arch.h"
 #include <iostream>
 #include <set>
 #include <sstream>
