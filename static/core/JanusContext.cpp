@@ -44,6 +44,8 @@ void JanusContext::buildProgramDependenceGraph()
             auto pcfg = make_shared<
                 PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>(
                 PostDominanceAnalysis(DominanceAnalysis(func.getCFG())));
+            auto pcfg_object =
+                PostDominanceAnalysis(DominanceAnalysis(func.getCFG()));
             func.pcfg = pcfg;
             // this is some very bad syntax; the better solution would be to
             // provide a deduction guide for

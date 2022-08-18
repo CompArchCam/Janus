@@ -90,11 +90,9 @@ class ControlFlowGraph
     std::map<BlockID, std::set<InstID>> &blockSplitInstrs;
 
     /// Constructor
-    ControlFlowGraph(janus::Function &,
-                     std::map<PCAddress, janus::Function *> &);
+    ControlFlowGraph(janus::Function &);
     /// Constructor
-    ControlFlowGraph(janus::Function *,
-                     std::map<PCAddress, janus::Function *> &);
+    ControlFlowGraph(janus::Function *);
 };
 
 template <typename T>

@@ -348,7 +348,7 @@ bool Function::needSync()
 ControlFlowGraph &Function::getCFG()
 {
     if (!cfg) {
-        cfg = make_unique<ControlFlowGraph>(this, context->functionMap);
+        cfg = make_unique<ControlFlowGraph>(this);
     }
     return *cfg;
 }

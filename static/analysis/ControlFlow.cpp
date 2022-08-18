@@ -276,13 +276,12 @@ void ControlFlowGraph::buildBasicBlocks(
     }
 }
 
-ControlFlowGraph::ControlFlowGraph(
-    Function &function, std::map<PCAddress, janus::Function *> &functionMap)
+ControlFlowGraph::ControlFlowGraph(Function &function)
     : cfg(make_unique<CFG>(function)), func(cfg->func), blocks(cfg->bs),
       unRecognised(cfg->urs), terminations(cfg->ts), returnBlocks(cfg->rbs),
       blockSplitInstrs(cfg->bsis)
 {
-    buildBasicBlocks(functionMap);
+    buildBasicBlocks(function.context->functionMap);
     numBlocks = static_cast<uint32_t>(blocks.size());
     entry = blocks.data();
     if (numBlocks >= 2) {
@@ -291,9 +290,8 @@ ControlFlowGraph::ControlFlowGraph(
     // copyToFunction();
 }
 
-ControlFlowGraph::ControlFlowGraph(
-    Function *function, std::map<PCAddress, janus::Function *> &functionMap)
-    : ControlFlowGraph(*function, functionMap){};
+ControlFlowGraph::ControlFlowGraph(Function *function)
+    : ControlFlowGraph(*function){};
 
 template <DomInput PCFG>
 DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg) : PCFG(cfg)

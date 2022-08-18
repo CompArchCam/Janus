@@ -37,7 +37,8 @@ void SSAGraph<DomCFG>::buildSSAGraph()
     linkSSANodes();
 
     /* Step 3.1: From the pred computed in the previous step, create the succ
-     * for each varstate */
+     * for each varstate
+     */
     createSuccFromPred();
 
     /* Step 4: Assign an id/version for each variable state
