@@ -1083,7 +1083,7 @@ HTML_FOOTER            =
 # obsolete.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-HTML_STYLESHEET        = docs/style/doxygen-awesome.css \
+HTML_STYLESHEET        =
 
 # The HTML_EXTRA_STYLESHEET tag can be used to specify an additional user-
 # defined cascading style sheet that is included after the standard style sheets
@@ -1433,7 +1433,7 @@ FORMULA_TRANSPARENT    = YES
 # The default value is: NO.
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-USE_MATHJAX            = NO
+USE_MATHJAX            = YES
 
 # When MathJax is enabled you can set the default output format to be used for
 # the MathJax output. See the MathJax site (see:
@@ -2327,3 +2327,16 @@ GENERATE_LEGEND        = YES
 # This tag requires that the tag HAVE_DOT is set to YES.
 
 DOT_CLEANUP            = YES
+
+# If the CLANG_ASSISTED_PARSING tag is set to YES then doxygen will use the clang 
+# parser for more accurate parsing at the cost of reduced performance. This can be 
+# particularly helpful with template rich C++ code for which doxygen's built-in 
+# parser lacks the necessary type information.
+# Note
+#       The availability of this option depends on whether or not doxygen was 
+#       generated with the -Duse_libclang=ON option for CMake.
+#The default value is: NO.
+
+CLANG_ASSISTED_PARSING = YES
+
+CLANG_OPTIONS          = -resource-dir=/usr/lib/clang/14.0.6
