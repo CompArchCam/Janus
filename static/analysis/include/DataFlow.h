@@ -20,6 +20,7 @@
 
 #include "Concepts.h"
 #include "ControlFlow.h"
+#include "Expression.h"
 #include "Instruction.h"
 #include "SSA.h"
 #include "Variable.h"
@@ -28,7 +29,7 @@ template <typename T>
 concept DataFlowInput = requires
 {
     requires ProvidesBasicCFG<T>;
-    requires ProvidesSSA<T>;
+    // requires ProvidesSSA<T>;
 };
 
 namespace dataflow_test
@@ -95,7 +96,6 @@ class LiveSpecs
     // TODO: This is just a place holder, replace with implementation
     auto ordered() -> std::vector<janus::VarState>;
 };
-static_assert(ProvidesDataFlowSpecs<LiveSpecs, dataflow_test::TestDFInput>);
 
 template <DataFlowInput DfIn>
 class AvailSpecs
@@ -111,39 +111,33 @@ class AvailSpecs
     // TODO: This is just a place holder, replace with implementation
     auto ordered() -> std::vector<janus::VarState>;
 };
-static_assert(ProvidesDataFlowSpecs<AvailSpecs, dataflow_test::TestDFInput>);
 
-template <template <typename _> typename DfSpec, DataFlowInput DfIn>
-requires ProvidesDataFlowSpecs<DfSpec, DfIn>
+template <DataFlowInput DfIn, typename Property>
 class DataFlow : public DfIn // Same structure as other refactored analysis
 {
+  protected:
+    using propertySet = std::set<Property>;
+
   private:
     // Input datastructure
     DfIn &input;
-
-    using Spec = DfSpec<DfIn>;
-    using propertySet = std::set<typename Spec::Property>;
-
-    // specification object that contains all the instance method we use
-    Spec spec;
 
     // Stores the analysis result for each node/instruction
     std::unordered_map<janus::Instruction *, janus::BitVector> store;
 
     // Hash map mapping from specific property to index in BitVector
-    std::unordered_map<typename Spec::Property, uint64_t> propertyIndex;
+    std::unordered_map<Property, uint64_t> propertyIndex;
 
     // Hash map from bitvector index to property
-    std::unordered_map<typename Spec::Property, uint64_t> indexProperty;
+    std::unordered_map<uint64_t, Property> indexProperty;
 
     // Cached results for queries
-    std::unordered_map<janus::Instruction *, std::set<typename Spec::Property>>
-        cachedQueries;
+    std::unordered_map<janus::Instruction *, std::set<Property>> cachedQueries;
 
     // TODO: implement this bit
     /// First pass: identifies all possible "property" in question, map each
     /// property to an index in the bit vector
-    void findAllProperties() {}
+    void fillBitVector() {}
 
     /// Function to convert bit vector into set of properies
     auto getProperties(janus::Instruction *instr) -> propertySet
@@ -158,28 +152,57 @@ class DataFlow : public DfIn // Same structure as other refactored analysis
         return res;
     }
 
+    auto toBitVector(propertySet propSet) -> janus::BitVector
+    {
+        auto res = janus::BitVector{};
+        for (auto prop : propSet) {
+            res.insert(propertyIndex.at(prop));
+        }
+        return res;
+    }
+
     /// Actual loop to generate all the necessary results
     void generate()
     {
         // First pass: populate *store* with all the "Properties"
-        findAllProperties();
+        fillBitVector();
 
-        for (auto &instr : spec.ordered()) {
+        for (auto instr : order()) {
             // XXX: point of discussion: both inputs and evaluate
             // should logically be able to take in variable numbers of
             // arguments.
-            auto inputs = spec.inputs(&instr); // set of janus::Instruction*
-            auto inputBitVectors = std::set<janus::BitVector>{};
-            std::transform(inputs.begin(), inputs.end(),
+            auto genSet = toBitVector(generate(*instr));
+            auto killSet = toBitVector(kill(*instr));
+
+            auto inputsInstrs = inputs(&instr); // set of janus::Instruction*
+            auto inputBitVectors = std::vector<janus::BitVector>{};
+            std::transform(inputsInstrs.begin(), inputsInstrs.end(),
                            std::back_inserter(inputBitVectors),
                            [this](auto instr) { return store[instr]; });
-            store[&instr] = spec.eqn.evaluate(inputBitVectors);
+            store[&instr] = evaluate(inputBitVectors);
         }
     }
 
   public:
+    /// Pure virtual function. Returns the dependence of the instruction in
+    /// question
+    virtual auto dependence(janus::Instruction)
+        -> std::set<janus::Instruction> = 0;
+
+    /// Pure virtual function. Returns the gen set of the instruction in
+    /// question
+    virtual auto gen(janus::Instruction) -> propertySet = 0;
+
+    virtual auto kill(janus::Instruction) -> propertySet = 0;
+
+    virtual auto order() -> std::vector<janus::Instruction *> = 0;
+
+    virtual auto evaluate(janus::BitVector gen, janus::BitVector kill,
+                          std::vector<janus::BitVector> dependence)
+        -> janus::BitVector = 0;
+
     // Output: Get specific property at instruction
-    auto getAt(janus::Instruction *instr) -> std::set<typename Spec::Property>
+    auto getAt(janus::Instruction *instr) -> std::set<Property>
     {
         if (!store.contains(instr)) {
             return propertySet{};
@@ -200,15 +223,10 @@ class DataFlow : public DfIn // Same structure as other refactored analysis
     }
 
     // Output: Get "in" properties at instruction
-    auto getInAt(janus::Instruction *instr) -> std::set<typename Spec::Property>
-    {
-    }
+    auto getInAt(janus::Instruction *instr) -> std::set<Property> {}
 
     // Output: Get "out" properties at instruction
-    auto getOutAt(janus::Instruction *instr)
-        -> std::set<typename Spec::Property>
-    {
-    }
+    auto getOutAt(janus::Instruction *instr) -> std::set<Property> {}
 
     // All these get methods can also have a
     // different Version that takes in the
@@ -216,8 +234,81 @@ class DataFlow : public DfIn // Same structure as other refactored analysis
 };
 
 template <DataFlowInput DfIn>
-using Live = DataFlow<LiveSpecs, DfIn>;
+class Live : public DataFlow<DfIn, janus::VarState>
+{
+  protected:
+    using propertySet = typename DataFlow<DfIn, janus::VarState>::propertySet;
+
+  private:
+    auto topoSortWithCycleHandling();
+
+  public:
+    // NOTE: Current implementation is purely intra-procedural and does not care
+    // about inter-procedural liveness at all
+    auto dependence(janus::Instruction instr)
+        -> std::set<janus::Instruction> override
+    {
+        auto bb = instr.block;
+        if (instr.id != bb->endInstID) {
+            return {bb->instrs[(instr.id - bb->startInstID) + 1]};
+        } else {
+            if (bb->terminate) { // If current basic block is end of function
+                return {};       // Return empty set
+            } else {
+                auto res = std::set<janus::Instruction>{};
+                if (bb->succ1)
+                    res.insert(bb->succ1->instrs[0]);
+                if (bb->succ2)
+                    res.insert(bb->succ2->instrs[0]);
+                return res;
+            }
+        }
+    }
+
+    auto gen(janus::Instruction instr) -> propertySet override
+    {
+        return instr.inputs;
+    }
+
+    auto kill(janus::Instruction instr) -> propertySet override
+    {
+        return instr.outputs;
+    }
+
+    auto order() -> std::vector<janus::Instruction *> override
+    {
+        return topoSortWithCycleHandling();
+    }
+
+    /// For Live, the dataflow equation is:
+    /// \mathrm{live}(n) = ((\bigcup\limits_{i \in \mathrm{succ}(n)}
+    /// \mathrm{live}(i) \\ \mathrm{def}(n)) \cup \mathrm{ref}(n)
+    auto evaluate(janus::BitVector gen, janus::BitVector kill,
+                  std::vector<janus::BitVector> dependences)
+        -> janus::BitVector override
+    {
+        janus::BitVector res{};
+        // Step 1: Big Union live set of all dependences
+        for (auto &bv : dependences) {
+            res.merge(bv);
+        }
+        // Step 2: Subtract def set
+        res.subtract(kill);
+
+        // Step 3: Union ref set
+        res.merge(gen);
+
+        return res;
+    }
+};
 
 template <DataFlowInput DfIn>
-using Avail = DataFlow<AvailSpecs, DfIn>;
+class Avail : public DataFlow<DfIn, janus::Expr>
+{
+  protected:
+    using propertySet = typename DataFlow<DfIn, janus::VarState>::propertySet;
+
+  public:
+};
+
 #endif
