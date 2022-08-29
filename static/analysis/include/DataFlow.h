@@ -1,143 +1,74 @@
+/** @file DataFlow.h
+ *  @brief Defines a generic dataflow analysis framework, which all concrete
+ *        dataflow analysis sharing a similar form should inherit from
+ *
+ *  For further reference, check
+ *
+ * Aho, A., Ullman, J., Sethi, R., & Lam, M. (2006). Compilers: Principles,
+ * Techniques, and Tools. In 9.2 Introduction to Data-Flow Analysis & 9.3
+ * Foundations of Data-Flow Analysis (2nd ed., pp. 597–632). Addison Wesley.
+ */
+
 #ifndef _JANUS_DataFlow_
 #define _JANUS_DataFlow_
 
-/**
- * API design: Since all applications of the data flow framework are
- * calculating a property of the program on a per instruction level,
- * it makes sense to expose a few get methods (providing both the
- * final results, as well as the in/out properties) as final output
- * interface.
- *
- * On the other hand, the overhead cost to compare and store expressions
- * is quite significant. Hence I recommend the use of get methods
- * to provide flexibility on the specific data structure used to store
- * the final results.
- */
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <map>
 #include <type_traits>
 
 #include "Concepts.h"
-#include "ControlFlow.h"
-#include "Expression.h"
 #include "Instruction.h"
-#include "SSA.h"
-#include "Variable.h"
 
+/**
+ * @brief Concept defining the requires the input to a data flow analysis must
+ * fullfill
+ *
+ * The input to a data flow analysis must fullfill:
+ *  1. Must provide the BasicBlock of the function and the relations between
+ * them (implicitly or explicitly)
+ *  2. Must provide the a reference to the function (in order to retrieve the
+ * instructions).
+ *
+ * TODO: change this when we move instructions out of the function class
+ */
 template <typename T>
 concept DataFlowInput = requires
 {
     requires ProvidesBasicCFG<T>;
-    // requires ProvidesSSA<T>;
+
+    // TODO: change this when we move instructions out of the function class
+    requires ProvidesFunctionReference<T>;
 };
 
-namespace dataflow_test
-{
-using TestDFInput = SSAGraph<DominanceAnalysis<ControlFlowGraph>>;
-static_assert(DataFlowInput<TestDFInput>);
-} // namespace dataflow_test
-
-template <template <typename T> typename DataFlowSpec,
-          typename DataFlowInputType>
-concept ProvidesDataFlowSpecs = requires(DataFlowSpec<DataFlowInputType> t)
-{
-    requires DataFlowInput<DataFlowInputType>;
-
-    /// Must define the type the dataflow analysis outputs
-    typename decltype(t)::Property;
-
-    // clang-format off
-
-    /// This checks that 
-    ///     DataFlowSpec(std::vector<janus::Instruction*>&, const DataFlowInput auto&) 
-    /// is a valid constructor.
-    /// and that DataFlowSpec is also destructible
-    requires std::constructible_from<
-                // Type to construct
-                decltype(t),
-                // Arguments {
-                    std::vector<janus::Instruction*>&,
-                    DataFlowInputType&
-                // }
-                >;
-    // NOTE: { t } -> std::constructible_from<...> would probably be better
-    // but unfortunately, { t } -> ... syntax can only check the *reference*
-    // to the type of t against concepts, and no reference can be constructed
-    // by a constructor
-
-    requires std::is_destructible_v<decltype(t)>;
-
-    // *ordered()* method should produce a container that
-    // provides begin and end iterators, the iterator should at
-    // least provide read access (hence allowing access through a
-    // ranged based for loop)
-    { t.ordered().begin() } -> std::input_iterator<>;
-    { t.ordered().end() } -> std::input_iterator<>;
-
-    /// DataFlowSpec should specify an equation that takes in
-    /// 1 or many bit vectors as input and produce a single processed
-    /// bit vector as output
-    { t.eqn.evaluate(std::declval<std::set<janus::BitVector>>()) } -> std::convertible_to<janus::BitVector>;
-    // clang-format on
-};
-
-template <DataFlowInput DfIn>
-class LiveSpecs
-{
-  private:
-    DfIn &inputs;
-    std::vector<janus::Instruction *> instrs;
-
-  public:
-    using Property = janus::VarState;
-    LiveSpecs(std::vector<janus::Instruction *> &, DfIn &in)
-        : inputs(in), instrs(instrs){};
-    // TODO: This is just a place holder, replace with implementation
-    auto ordered() -> std::vector<janus::VarState>;
-};
-
-template <DataFlowInput DfIn>
-class AvailSpecs
-{
-  private:
-    DfIn &inputs;
-    std::vector<janus::Instruction *> instrs;
-
-  public:
-    using Property = janus::Expr;
-    AvailSpecs(std::vector<janus::Instruction *> &instrs, DfIn &in)
-        : inputs(in), instrs(instrs){};
-    // TODO: This is just a place holder, replace with implementation
-    auto ordered() -> std::vector<janus::VarState>;
-};
-
-template <DataFlowInput DfIn, typename Property>
+template <DataFlowInput DfIn, typename Trait>
 class DataFlow : public DfIn // Same structure as other refactored analysis
 {
   protected:
-    using propertySet = std::set<Property>;
+    using propertySet = std::set<Trait>;
+
+    auto toBitVector(propertySet propSet) -> const janus::BitVector
+    {
+        auto res = janus::BitVector{};
+        for (auto prop : propSet) {
+            res.insert(propertyIndex.at(prop));
+        }
+        return res;
+    }
 
   private:
-    // Input datastructure
-    DfIn &input;
-
     // Stores the analysis result for each node/instruction
     std::unordered_map<janus::Instruction *, janus::BitVector> store;
 
     // Hash map mapping from specific property to index in BitVector
-    std::unordered_map<Property, uint64_t> propertyIndex;
+    std::map<Trait, uint64_t> propertyIndex;
 
     // Hash map from bitvector index to property
-    std::unordered_map<uint64_t, Property> indexProperty;
+    std::unordered_map<uint64_t, Trait> indexProperty;
 
     // Cached results for queries
-    std::unordered_map<janus::Instruction *, std::set<Property>> cachedQueries;
-
-    // TODO: implement this bit
-    /// First pass: identifies all possible "property" in question, map each
-    /// property to an index in the bit vector
-    void fillBitVector() {}
+    std::unordered_map<janus::Instruction *, propertySet> cachedQueries;
 
     /// Function to convert bit vector into set of properies
     auto getProperties(janus::Instruction *instr) -> propertySet
@@ -152,57 +83,127 @@ class DataFlow : public DfIn // Same structure as other refactored analysis
         return res;
     }
 
-    auto toBitVector(propertySet propSet) -> janus::BitVector
+    /// Generate the universe set for the collection and maps bitvector index to
+    /// element
+    void generateUniverseSet()
     {
-        auto res = janus::BitVector{};
-        for (auto prop : propSet) {
-            res.insert(propertyIndex.at(prop));
+        propertySet allProperties{};
+        for (auto instr : DfIn::func.instrs) {
+            auto genset = gen(instr);
+            auto killset = kill(instr);
+            allProperties.insert(genset.begin(), genset.end());
+            allProperties.insert(killset.begin(), killset.end());
         }
-        return res;
+        int id = 0;
+        for (auto property : allProperties) {
+            propertyIndex[property] = id;
+            indexProperty[id++] = property;
+        }
     }
+
+    /* TODO: Change the structure to conform to the structure introduced by the
+     * dragon book
+     */
 
     /// Actual loop to generate all the necessary results
     void generate()
     {
-        // First pass: populate *store* with all the "Properties"
-        fillBitVector();
+        // First pass: populate *store* with all the "Properties" (all possible
+        // elements)
+        generateUniverseSet();
 
-        for (auto instr : order()) {
-            // XXX: point of discussion: both inputs and evaluate
-            // should logically be able to take in variable numbers of
-            // arguments.
-            auto genSet = toBitVector(generate(*instr));
-            auto killSet = toBitVector(kill(*instr));
+        // Second pass: Compute the properties based on the gen, kill functions
+        // provided until convergence
+        bool converged;
+        do {
+            converged = true;
+            for (janus::Instruction *instr : order()) {
+                auto genSet = toBitVector(gen(*instr));
+                auto killSet = toBitVector(kill(*instr));
 
-            auto inputsInstrs = inputs(&instr); // set of janus::Instruction*
-            auto inputBitVectors = std::vector<janus::BitVector>{};
-            std::transform(inputsInstrs.begin(), inputsInstrs.end(),
-                           std::back_inserter(inputBitVectors),
-                           [this](auto instr) { return store[instr]; });
-            store[&instr] = evaluate(inputBitVectors);
+                auto inputsInstrs =
+                    dependence(instr); // set of janus::Instruction*
+                auto inputBitVectors = std::vector<janus::BitVector>{};
+                std::transform(inputsInstrs.begin(), inputsInstrs.end(),
+                               std::back_inserter(inputBitVectors),
+                               [this](auto x) { return store[x]; });
+
+                auto res = transferFunction(*instr, inputBitVectors);
+
+                // Test convergence
+                if (converged && store.contains(instr) &&
+                    store.at(instr) == res) {
+                    continue;
+                } else {
+                    store[instr] = res;
+                    converged = false;
+                }
+            }
+        } while (!converged);
+    }
+
+    auto order() -> std::vector<janus::Instruction *>
+    {
+        std::vector<janus::Instruction> &instrs = DfIn::func.instrs;
+        std::vector<janus::Instruction *> topoOrder{};
+        std::vector<bool> visited(instrs.size(), false);
+
+        std::function<void(janus::Instruction *)> dfs = [&](auto instr) {
+            visited[instr->id] = true;
+            for (auto pred : dependants(instr)) {
+                if (!visited[pred->id]) {
+                    dfs(pred);
+                }
+            }
+            topoOrder.push_back(instr);
+        };
+
+        for (auto instr : instrs) {
+            if (!visited[instr.id])
+                dfs(&instr);
         }
+
+        std::reverse(topoOrder.begin(), topoOrder.end());
+        return topoOrder;
     }
 
   public:
     /// Pure virtual function. Returns the dependence of the instruction in
     /// question
-    virtual auto dependence(janus::Instruction)
-        -> std::set<janus::Instruction> = 0;
+    /// TODO: Rename!
+    virtual auto dependence(janus::Instruction *)
+        -> std::set<janus::Instruction *> = 0;
 
-    /// Pure virtual function. Returns the gen set of the instruction in
-    /// question
+    /// Pure virtual function. Returns the dependence
+    /// TODO: Rename!
+    virtual auto dependants(janus::Instruction *)
+        -> std::set<janus::Instruction *> = 0;
+
+    /**
+     * @brief "Meet" operator joining the set all input results
+     */
+    virtual void meet(janus::BitVector &, janus::BitVector &) = 0;
+
+    /**
+     *  @brief Produce the "gen" set of the instruction.
+     *
+     * This function is used to produce the "universe" containing all
+     * possible element generated by all instructions in a function before
+     * creating a map between each element and a bit in the bit vector
+     *
+     * @param instruction whose gen set we are calculating
+     */
     virtual auto gen(janus::Instruction) -> propertySet = 0;
 
+    /// Pure virtual function. Returns the kill set of the instruction
     virtual auto kill(janus::Instruction) -> propertySet = 0;
 
-    virtual auto order() -> std::vector<janus::Instruction *> = 0;
-
-    virtual auto evaluate(janus::BitVector gen, janus::BitVector kill,
-                          std::vector<janus::BitVector> dependence)
+    virtual auto transferFunction(janus::Instruction instr,
+                                  std::vector<janus::BitVector> dependence)
         -> janus::BitVector = 0;
 
-    // Output: Get specific property at instruction
-    auto getAt(janus::Instruction *instr) -> std::set<Property>
+    /// @brief Query interface: Get specific property at instruction
+    auto getAt(janus::Instruction *instr) -> std::set<Trait>
     {
         if (!store.contains(instr)) {
             return propertySet{};
@@ -222,93 +223,15 @@ class DataFlow : public DfIn // Same structure as other refactored analysis
         }
     }
 
-    // Output: Get "in" properties at instruction
-    auto getInAt(janus::Instruction *instr) -> std::set<Property> {}
+    /// @brief Query interface: Get "in" properties at instruction
+    auto getInAt(janus::Instruction *instr) -> propertySet {}
 
-    // Output: Get "out" properties at instruction
-    auto getOutAt(janus::Instruction *instr) -> std::set<Property> {}
+    /// @brief Query interface: Get "out" properties at instruction
+    auto getOutAt(janus::Instruction *instr) -> propertySet {}
 
-    // All these get methods can also have a
-    // different Version that takes in the
-    // InstructionID as an argument instead
-};
-
-template <DataFlowInput DfIn>
-class Live : public DataFlow<DfIn, janus::VarState>
-{
-  protected:
-    using propertySet = typename DataFlow<DfIn, janus::VarState>::propertySet;
-
-  private:
-    auto topoSortWithCycleHandling();
-
-  public:
-    // NOTE: Current implementation is purely intra-procedural and does not care
-    // about inter-procedural liveness at all
-    auto dependence(janus::Instruction instr)
-        -> std::set<janus::Instruction> override
-    {
-        auto bb = instr.block;
-        if (instr.id != bb->endInstID) {
-            return {bb->instrs[(instr.id - bb->startInstID) + 1]};
-        } else {
-            if (bb->terminate) { // If current basic block is end of function
-                return {};       // Return empty set
-            } else {
-                auto res = std::set<janus::Instruction>{};
-                if (bb->succ1)
-                    res.insert(bb->succ1->instrs[0]);
-                if (bb->succ2)
-                    res.insert(bb->succ2->instrs[0]);
-                return res;
-            }
-        }
-    }
-
-    auto gen(janus::Instruction instr) -> propertySet override
-    {
-        return instr.inputs;
-    }
-
-    auto kill(janus::Instruction instr) -> propertySet override
-    {
-        return instr.outputs;
-    }
-
-    auto order() -> std::vector<janus::Instruction *> override
-    {
-        return topoSortWithCycleHandling();
-    }
-
-    /// For Live, the dataflow equation is:
-    /// \mathrm{live}(n) = ((\bigcup\limits_{i \in \mathrm{succ}(n)}
-    /// \mathrm{live}(i) \\ \mathrm{def}(n)) \cup \mathrm{ref}(n)
-    auto evaluate(janus::BitVector gen, janus::BitVector kill,
-                  std::vector<janus::BitVector> dependences)
-        -> janus::BitVector override
-    {
-        janus::BitVector res{};
-        // Step 1: Big Union live set of all dependences
-        for (auto &bv : dependences) {
-            res.merge(bv);
-        }
-        // Step 2: Subtract def set
-        res.subtract(kill);
-
-        // Step 3: Union ref set
-        res.merge(gen);
-
-        return res;
-    }
-};
-
-template <DataFlowInput DfIn>
-class Avail : public DataFlow<DfIn, janus::Expr>
-{
-  protected:
-    using propertySet = typename DataFlow<DfIn, janus::VarState>::propertySet;
-
-  public:
+    /// @brief Constructor; once constructed all information are available for
+    /// retrieval
+    DataFlow(const DfIn &input) : DfIn(input) { generate(); }
 };
 
 #endif
