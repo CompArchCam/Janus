@@ -16,6 +16,9 @@ class Liveness : public DataFlow<DfIn, janus::VarState>
     auto dependence(janus::Instruction *instr)
         -> std::set<janus::Instruction *> override
     {
+        if (instr->block == nullptr) {
+            return {};
+        }
         auto bb = instr->block;
 
         if (instr->id != bb->endInstID) {
@@ -37,6 +40,10 @@ class Liveness : public DataFlow<DfIn, janus::VarState>
     auto dependants(janus::Instruction *instr)
         -> std::set<janus::Instruction *> override
     {
+        // XXX: Some instructions does not belong to any BB
+        if (instr->block == nullptr) {
+            return {};
+        }
         auto startID = instr->block->startInstID;
         auto parentBB = *(instr->block);
 
@@ -61,10 +68,15 @@ class Liveness : public DataFlow<DfIn, janus::VarState>
      */
     auto gen(janus::Instruction instr) -> propertySet override
     {
-        auto res = propertySet{};
+        auto temp = propertySet{};
         std::transform(instr.inputs.begin(), instr.inputs.end(),
-                       std::inserter(res, res.begin()),
+                       std::inserter(temp, temp.begin()),
                        [](auto v) { return *v; });
+        auto res = propertySet{};
+        std::remove_copy_if(temp.begin(), temp.end(),
+                            std::inserter(res, res.begin()),
+                            [](auto v) { return v.type == JVAR_CONSTANT; });
+
         return res;
     }
 
@@ -76,10 +88,14 @@ class Liveness : public DataFlow<DfIn, janus::VarState>
      */
     auto kill(janus::Instruction instr) -> propertySet override
     {
-        auto res = propertySet{};
+        auto temp = propertySet{};
         std::transform(instr.outputs.begin(), instr.outputs.end(),
-                       std::inserter(res, res.begin()),
+                       std::inserter(temp, temp.begin()),
                        [](auto v) { return *v; });
+        auto res = propertySet{};
+        std::remove_copy_if(temp.begin(), temp.end(),
+                            std::inserter(res, res.begin()),
+                            [](auto v) { return v.type == JVAR_CONSTANT; });
         return res;
     }
 
@@ -111,7 +127,7 @@ class Liveness : public DataFlow<DfIn, janus::VarState>
                           std::vector<janus::BitVector> dependences)
         -> janus::BitVector override
     {
-        janus::BitVector res{};
+        auto res = base::getEmptyBitVector();
         // Step 1: Big Union live set of all dependences
         for (auto &bv : dependences) {
             meet(res, bv);
@@ -128,7 +144,10 @@ class Liveness : public DataFlow<DfIn, janus::VarState>
         return res;
     }
 
-    Liveness(const DfIn &dfin) : DataFlow<DfIn, janus::VarState>(dfin){};
+    Liveness(const DfIn &dfin) : DataFlow<DfIn, janus::VarState>(dfin)
+    {
+        base::generate();
+    };
 };
 
 #endif

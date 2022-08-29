@@ -48,57 +48,18 @@ class DataFlow : public DfIn // Same structure as other refactored analysis
   protected:
     using propertySet = std::set<Trait>;
 
+    auto getEmptyBitVector() -> janus::BitVector
+    {
+        return janus::BitVector{universeSize, false};
+    }
+
     auto toBitVector(propertySet propSet) -> const janus::BitVector
     {
-        auto res = janus::BitVector{};
-        for (auto prop : propSet) {
+        auto res = getEmptyBitVector();
+        for (auto &prop : propSet) {
             res.insert(propertyIndex.at(prop));
         }
         return res;
-    }
-
-  private:
-    // Stores the analysis result for each node/instruction
-    std::unordered_map<janus::Instruction *, janus::BitVector> store;
-
-    // Hash map mapping from specific property to index in BitVector
-    std::map<Trait, uint64_t> propertyIndex;
-
-    // Hash map from bitvector index to property
-    std::unordered_map<uint64_t, Trait> indexProperty;
-
-    // Cached results for queries
-    std::unordered_map<janus::Instruction *, propertySet> cachedQueries;
-
-    /// Function to convert bit vector into set of properies
-    auto getProperties(janus::Instruction *instr) -> propertySet
-    {
-        auto res = propertySet{};
-        auto indexSet = std::set<uint32_t>{};
-        store[instr].toSTLSet(indexSet);
-        for (auto id : indexSet) {
-            res.insert(indexProperty[id]);
-        }
-        cachedQueries[instr] = res;
-        return res;
-    }
-
-    /// Generate the universe set for the collection and maps bitvector index to
-    /// element
-    void generateUniverseSet()
-    {
-        propertySet allProperties{};
-        for (auto instr : DfIn::func.instrs) {
-            auto genset = gen(instr);
-            auto killset = kill(instr);
-            allProperties.insert(genset.begin(), genset.end());
-            allProperties.insert(killset.begin(), killset.end());
-        }
-        int id = 0;
-        for (auto property : allProperties) {
-            propertyIndex[property] = id;
-            indexProperty[id++] = property;
-        }
     }
 
     /* TODO: Change the structure to conform to the structure introduced by the
@@ -142,28 +103,78 @@ class DataFlow : public DfIn // Same structure as other refactored analysis
         } while (!converged);
     }
 
+  private:
+    // Stores the analysis result for each node/instruction
+    std::unordered_map<janus::Instruction *, janus::BitVector> store;
+
+    // Hash map mapping from specific property to index in BitVector
+    std::map<Trait, uint64_t> propertyIndex;
+
+    // Hash map from bitvector index to property
+    std::unordered_map<uint64_t, Trait> indexProperty;
+
+    // Cached results for queries
+    std::unordered_map<janus::Instruction *, propertySet> cachedQueries;
+
+    int universeSize;
+
+    /// Function to convert bit vector into set of properies
+    auto getProperties(janus::Instruction *instr) -> propertySet
+    {
+        auto res = propertySet{};
+        auto indexSet = std::set<uint32_t>{};
+        store[instr].toSTLSet(indexSet);
+        for (auto id : indexSet) {
+            res.insert(indexProperty[id]);
+        }
+        cachedQueries[instr] = res;
+        return res;
+    }
+
+    /// Generate the universe set for the collection and maps bitvector index to
+    /// element
+    void generateUniverseSet()
+    {
+        propertySet allProperties{};
+        for (auto instr : DfIn::func.instrs) {
+            auto genset = gen(instr);
+            auto killset = kill(instr);
+            allProperties.insert(genset.begin(), genset.end());
+            allProperties.insert(killset.begin(), killset.end());
+        }
+        int id = 0;
+        for (auto property : allProperties) {
+            propertyIndex[property] = id;
+            indexProperty[id++] = property;
+        }
+        universeSize = propertyIndex.size();
+    }
+
     auto order() -> std::vector<janus::Instruction *>
     {
         std::vector<janus::Instruction> &instrs = DfIn::func.instrs;
         std::vector<janus::Instruction *> topoOrder{};
         std::vector<bool> visited(instrs.size(), false);
 
-        std::function<void(janus::Instruction *)> dfs = [&](auto instr) {
-            visited[instr->id] = true;
-            for (auto pred : dependants(instr)) {
-                if (!visited[pred->id]) {
-                    dfs(pred);
+        std::function<void(janus::Instruction *)> dfs =
+            [=, &visited, &topoOrder, &dfs, this](janus::Instruction *instr) {
+                visited[instr->id] = true;
+                for (auto pred : dependants(instr)) {
+                    if (!visited[pred->id]) {
+                        dfs(pred);
+                    }
                 }
-            }
-            topoOrder.push_back(instr);
-        };
+                topoOrder.push_back(instr);
+            };
 
-        for (auto instr : instrs) {
-            if (!visited[instr.id])
+        for (auto &instr : instrs) {
+            if (!visited[instr.id]) {
                 dfs(&instr);
+            }
         }
 
         std::reverse(topoOrder.begin(), topoOrder.end());
+
         return topoOrder;
     }
 
@@ -231,7 +242,7 @@ class DataFlow : public DfIn // Same structure as other refactored analysis
 
     /// @brief Constructor; once constructed all information are available for
     /// retrieval
-    DataFlow(const DfIn &input) : DfIn(input) { generate(); }
+    DataFlow(const DfIn &input) : DfIn(input) {}
 };
 
 #endif
