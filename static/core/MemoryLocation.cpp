@@ -1,11 +1,8 @@
 #include "MemoryLocation.h"
-#include "BasicBlock.h"
 #include "Expression.h"
 #include "Function.h"
-#include "IO.h"
 #include "Instruction.h"
 #include "Loop.h"
-#include "janus.h"
 
 #include <iostream>
 #include <sstream>
@@ -205,6 +202,7 @@ ostream &janus::operator<<(std::ostream &out, const SCEV &scev)
             << scev.iter->loop->id;
     else
         out << "{" << scev.start << ",+," << scev.stride << "}@L?";
+    return out;
 }
 
 ostream &janus::operator<<(std::ostream &out, const ExpandedSCEV &escev)
@@ -214,6 +212,7 @@ ostream &janus::operator<<(std::ostream &out, const ExpandedSCEV &escev)
         out << ",+," << s.second << "*l" << dec << s.first->loop->id;
     }
     out << "}";
+    return out;
 }
 
 // A memory variable is only equal when its base and index are equal
