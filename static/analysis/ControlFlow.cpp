@@ -470,14 +470,10 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
             // TODO: The original code in master is relying on undefined
             // behaviour
             if (curpdomTree[d].size() + 1 == pdominators.size()) {
-                if (d >= PCFG::blocks.size()) {
-                    cout << "ControlFlow.cpp: "
-                            "PostDominanceAnalysis::PostDominanceAnalysis:"
-                         << d << " is out of scope" << endl;
-                } else {
+                if (d < PCFG::blocks.size()) {
                     ipdoms[&bb] = &(PCFG::entry[d]);
+                    break;
                 }
-                break;
             }
         }
         pdominators.clear();
