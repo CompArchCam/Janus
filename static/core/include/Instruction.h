@@ -118,6 +118,9 @@ class Instruction
 
 std::ostream &operator<<(std::ostream &out, const Instruction &instr);
 
+bool operator<(const janus::Instruction &instr1,
+               const janus::Instruction &instr2);
+
 /** \brief A wrapper for the **Instruction** that contains memory accesses
  *
  * - The **Instruction** class should be machine independent. For machine

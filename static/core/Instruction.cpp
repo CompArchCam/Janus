@@ -122,6 +122,12 @@ ostream &janus::operator<<(ostream &out, const Instruction &instr)
     return out;
 }
 
+bool janus::operator<(const janus::Instruction &instr1,
+                      const janus::Instruction &instr2)
+{
+    return instr1.id < instr2.id;
+}
+
 /// Return true if the instruction is a control flow instruction including
 /// jumps, returns, interupts etc
 bool Instruction::isControlFlow()
