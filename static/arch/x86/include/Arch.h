@@ -3,10 +3,15 @@
 #ifndef _JANUS_ARCH_STATIC_
 #define _JANUS_ARCH_STATIC_
 
-#include "Function.h"
+#include "Variable.h"
 #include "janus_arch.h"
 #include <map>
 #include <set>
+#include <vector>
+
+namespace janus {
+    class Function;
+}
 
 /// Direct translation matrix for capstone register sets
 extern uint32_t csToJanus[];

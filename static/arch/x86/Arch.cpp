@@ -3,6 +3,7 @@
 #include "Arch.h"
 #include "BasicBlock.h"
 #include "janus_arch.h"
+#include "Function.h"
 #include <set>
 
 using namespace janus;

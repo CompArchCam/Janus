@@ -181,7 +181,6 @@ set(ANALYSIS_SOURCES
     analysis/IO.cpp
     analysis/Analysis.cpp
     analysis/Profile.cpp
-    analysis/SSA.cpp
     analysis/Affine.cpp
     analysis/AST.cpp
     analysis/Dependence.cpp
