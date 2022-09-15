@@ -116,7 +116,7 @@ void printSSADot(janus::Function &function, void *outputStream)
         if (vs->notUsed)
             continue;
         if (vs->isPHI) {
-            os << "V" << dec << vs->id << " [label=\"" << vs << " in BB" << dec
+            os << "V" << dec << vs << " [label=\"" << vs << " in BB" << dec
                << vs->block->bid << "\"";
             if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME)
                 os << ",fillcolor=dodgerblue";
@@ -124,13 +124,13 @@ void printSSADot(janus::Function &function, void *outputStream)
                 os << ",fillcolor=cyan";
             os << ",shape=\"diamond\"];" << endl;
         } else if (vs->type == JVAR_MEMORY) {
-            os << "V" << dec << vs->id << " [label=\"" << vs
+            os << "V" << dec << vs << " [label=\"" << vs
                << "\",fillcolor=indigo,fontcolor=white,shape=box];" << endl;
         } else if (vs->type == JVAR_POLYNOMIAL) {
-            os << "V" << dec << vs->id << " [label=\"" << vs
+            os << "V" << dec << vs << " [label=\"" << vs
                << "\",fillcolor=pink,shape=box];" << endl;
         } else {
-            os << "V" << dec << vs->id << " [label=\"" << vs << "\"";
+            os << "V" << dec << vs << " [label=\"" << vs << "\"";
             if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME)
                 os << ",fillcolor=dodgerblue";
             os << ",shape=\"box\"];" << endl;
@@ -152,12 +152,12 @@ void printSSADot(janus::Function &function, void *outputStream)
     // print edges
     for (auto &instr : function.instrs) {
         for (auto vs : function.getCFG().getSSAVarRead(instr)) {
-            os << "V" << dec << vs->id << " -> I" << instr.id << ";" << endl;
+            os << "V" << dec << vs << " -> I" << instr.id << ";" << endl;
         }
         for (auto vs : function.getCFG().getSSAVarWrite(instr)) {
             if (vs->notUsed)
                 continue;
-            os << "I" << dec << instr.id << " -> V" << vs->id << ";" << endl;
+            os << "I" << dec << instr.id << " -> V" << vs << ";" << endl;
         }
     }
 
@@ -167,17 +167,17 @@ void printSSADot(janus::Function &function, void *outputStream)
             continue;
         if (vs->isPHI) {
             for (auto phi : vs->pred) {
-                os << "V" << dec << phi->id << " -> V" << vs->id << ";" << endl;
+                os << "V" << dec << phi << " -> V" << vs << ";" << endl;
             }
         }
         if (vs->type == JVAR_MEMORY || vs->type == JVAR_POLYNOMIAL) {
             for (auto vi : vs->pred) {
-                os << "V" << dec << vi->id << " -> V" << vs->id << ";" << endl;
+                os << "V" << dec << vi << " -> V" << vs << ";" << endl;
             }
         }
         if (vs->type == JVAR_SHIFTEDCONST || vs->type == JVAR_SHIFTEDREG) {
             for (auto vi : vs->pred) {
-                os << "V" << dec << vi->id << " -> V" << vs->id << ";" << endl;
+                os << "V" << dec << vi << " -> V" << vs << ";" << endl;
             }
         }
     }
