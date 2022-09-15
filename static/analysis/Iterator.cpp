@@ -97,14 +97,10 @@ static bool finalValueAnalysis(Loop *loop)
         // check the input of the jump instruction
         for (auto vi :
              cjump->block->parentFunction->getCFG().getSSAVarRead(*cjump)) {
-            if (loop->id == 9)
-                cout << "Loop9: " << vi->id << "; address = " << (void *)vi
-                     << endl;
             if (vi->type == JVAR_CONTROLFLAG) {
                 cmpInstr = vi->lastModified;
             }
         }
-        cout << endl;
 
         if (!cmpInstr) {
             LOOPLOG("\t\tCould not locate an instruction that modifies control "
@@ -328,8 +324,6 @@ bool iteratorAnalysis(Loop *loop)
         }
     }
     // step 2: identify loop boundary operations
-    if (loop->id == 9)
-        cout << "Call A" << endl;
     if (!finalValueAnalysis(loop))
         return false;
 
@@ -451,8 +445,6 @@ bool postIteratorAnalysis(janus::Loop *loop)
         if (foundNewIterator) {
             // Only redo the iterator analysis if we've found a new iterator in
             // the undecided variables
-            if (loop->id == 9)
-                cout << "Call B" << endl;
             finalValueAnalysis(loop);
 
             // assign loop iterators again

@@ -155,6 +155,8 @@ void buildExpr(Expr &expr, set<Expr *> &exprs, Instruction *instr)
 {
     const auto instrInputs =
         instr->block->parentFunction->getCFG().getSSAVarRead(*instr);
+    cout << *instr << " : build Expr instrInputs size=" << instrInputs.size()
+         << endl;
 
     if (!instr)
         return;

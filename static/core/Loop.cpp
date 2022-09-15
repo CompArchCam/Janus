@@ -83,7 +83,6 @@ void searchLoop(JanusContext *gc, Function *function)
     /* Now all loop stack blocks have been recognised
      * contruct loops */
     for (auto block_id : loopPool) {
-        cout << block_id << ": Loop " << loopArray.size() << endl;
         loopArray.emplace_back(entry + block_id, function);
     }
 }

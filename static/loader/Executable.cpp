@@ -110,9 +110,7 @@ void Executable::liftSymbolToFunction(JanusContext *jc)
                 size = (*sit).section->endAddr - (*sit).startAddr;
 
             // create new function and put it into the global vector
-            cout << fid << endl;
             jc->functions.emplace_back(jc, fid, (*sit), size);
-            cout << size << endl;
 
             fid++;
         }

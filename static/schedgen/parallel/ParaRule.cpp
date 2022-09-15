@@ -96,7 +96,6 @@ static void prepareLoopHeader(JanusContext *gc, Loop &loop)
         // get the last conditional jump, a check block is always conditional
         // jump
         Instruction *cjump = checkBlock.lastInstr();
-        std::cout << *cjump << endl;
         header.jumpInstructionOpcode = cjump->minstr->opcode;
         header.jumpingGoesBack =
             (cjump->minstr->getTargetAddress() ==

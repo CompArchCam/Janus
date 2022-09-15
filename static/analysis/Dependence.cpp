@@ -52,9 +52,6 @@ void dependenceAnalysis(janus::Loop *loop)
         // conclude an expanded expression for the phi node
         CyclicStatus status =
             buildCyclicExpr(phi->expr, nullptr, nullptr, loop, visitedPhi);
-        if (loop->id == 9)
-            cout << phi << " Expr: " << *phi->expr
-                 << " CyclicStatus: " << status << endl;
 
         if (status == FoundCyclic) {
             // found cyclic expressions
@@ -82,8 +79,6 @@ bool buildCyclicExpr(janus::Expr *expr, janus::Loop *loop)
     set<Expr *> visitedPhi;
     CyclicStatus status =
         buildCyclicExpr(expr, nullptr, nullptr, loop, visitedPhi);
-    if (loop->id == 9)
-        cout << " Expr: " << *expr << " CyclicStatus: " << status << endl;
 
     return (status == FoundCyclic);
 }
@@ -97,10 +92,6 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
                                     ExpandedExpr *expr, // OUT
                                     Loop *loop, set<Expr *> &visitedPhi)
 {
-    if (loop->id == 9)
-        cout << "StartExpr " << *startExpr << " CurrentExpr is null?"
-             << currentExpr << endl;
-
     if (!currentExpr) {
         // initial stage
         // the startExpr must be a PHI expression
@@ -121,10 +112,8 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
         ExpandedExpr *e1 = new ExpandedExpr(ExpandedExpr::SUM);
         ExpandedExpr *e2 = new ExpandedExpr(ExpandedExpr::SUM);
 
-        cout << "BP1" << endl;
         CyclicStatus r1 =
             buildCyclicExpr(startExpr, startExpr->p.e1, e1, loop, visitedPhi);
-        cout << "BP2" << endl;
         CyclicStatus r2 =
             buildCyclicExpr(startExpr, startExpr->p.e2, e2, loop, visitedPhi);
 
@@ -168,7 +157,6 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
         else if (r1 == FoundConstPhi || r2 == FoundConstPhi) {
             return FoundConstPhi;
         } else {
-            cout << *startExpr << " Case A0" << endl;
             return FoundConst;
         }
 
@@ -181,11 +169,9 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
         // if it is a constant in the loop, simply add the term
         if (currentExpr->isLeaf()) {
             expr->addTerm(currentExpr);
-            cout << "Case A1" << endl;
             return FoundConst;
         } else if (currentExpr->vs && loop->isConstant(currentExpr->vs)) {
             expr->addTerm(currentExpr);
-            cout << "Case A2" << endl;
             return FoundConst;
         }
 
@@ -195,7 +181,6 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
         case Expr::VAR:
         case Expr::MEM:
             expr->addTerm(currentExpr);
-            cout << "Case A3" << endl;
             return FoundConst;
             break;
         case Expr::UNARY:
@@ -256,7 +241,6 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
         case Expr::PHI: {
             // check if it is already visited
             if (visitedPhi.find(currentExpr) != visitedPhi.end()) {
-                cout << "Case 0" << endl;
                 return FoundConst;
             }
             // if not found, mark the phi node visited
@@ -285,7 +269,6 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
                     // add its final values to the cyclic expression
                     if (sit->finalKind == Iterator::INTEGER) {
                         expr->addTerm(Expr(sit->finalImm));
-                        cout << "Case 1" << endl;
                         return FoundConst;
                     } else if (sit->finalKind == Iterator::EXPANDED_EXPR) {
                         CyclicStatus status = FoundConst;
@@ -306,7 +289,6 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
                                     return status2;
                             }
                         }
-                        cout << "Case 2" << endl;
                         return status;
                     } else {
                         LOOPLOG("\t\t\tFinal value for the iterator not found "
@@ -318,7 +300,6 @@ static CyclicStatus buildCyclicExpr(Expr *startExpr,    // IN
                 if (loop->ancestors.find(suspect) != loop->ancestors.end()) {
                     // treat it as a constant
                     expr->addTerm(currentExpr);
-                    cout << "Case 3" << endl;
                     return FoundConst;
                 }
             } else {
