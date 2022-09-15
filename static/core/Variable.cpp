@@ -9,6 +9,8 @@
 using namespace janus;
 using namespace std;
 
+static uint32_t cnt = 0;
+
 VarState::VarState()
 {
     value = 0;
@@ -27,6 +29,8 @@ VarState::VarState()
     notUsed = true;
     constLoop = NULL;
     dependsOnMemory = false;
+
+    id = cnt++;
 }
 
 VarState::VarState(Variable var)
@@ -47,6 +51,8 @@ VarState::VarState(Variable var)
     notUsed = true;
     constLoop = NULL;
     dependsOnMemory = false;
+
+    id = cnt++;
 }
 
 VarState::VarState(Variable var, BasicBlock *block, Instruction *lastModified)
@@ -66,6 +72,8 @@ VarState::VarState(Variable var, BasicBlock *block, Instruction *lastModified)
     notUsed = true;
     constLoop = NULL;
     dependsOnMemory = false;
+
+    id = cnt++;
 }
 
 VarState::VarState(Variable var, BasicBlock *block, bool isPHI)
@@ -84,6 +92,8 @@ VarState::VarState(Variable var, BasicBlock *block, bool isPHI)
     notUsed = true;
     constLoop = NULL;
     dependsOnMemory = false;
+
+    id = cnt++;
 }
 
 Variable::Variable(const JVar &var)

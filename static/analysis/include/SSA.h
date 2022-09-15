@@ -193,7 +193,6 @@ void SSAGraph<DomCFG>::buildSSAGraph()
     int id = 0;
     map<Variable, int> versions;
     for (auto &vs : ssaVariables) {
-        vs->id = id++;
         auto var = (Variable)(*vs);
         int version = versions[var];
         vs->version = version;
