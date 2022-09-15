@@ -153,72 +153,74 @@ bool janus::operator<(const Expr &expr1, const Expr &expr2)
 
 void buildExpr(Expr &expr, set<Expr *> &exprs, Instruction *instr)
 {
+    const auto instrInputs =
+        instr->block->parentFunction->getCFG().getSSAVarRead(*instr);
 
     if (!instr)
         return;
-    if (instr->inputs.size() == 0)
+    if (instrInputs.size() == 0)
         return;
 
     if (instr->opcode == Instruction::Add) {
-        if (instr->inputs.size() < 2) {
+        if (instrInputs.size() < 2) {
             LOOPLOG("Irregular instruction " << *instr << " not yet handled"
                                              << endl);
             return;
         }
         expr.kind = Expr::BINARY;
         expr.b.op = Expr::ADD;
-        expr.b.e1 = instr->inputs[0]->expr;
-        if (instr->inputs[1])
-            expr.b.e2 = instr->inputs[1]->expr;
+        expr.b.e1 = instrInputs[0]->expr;
+        if (instrInputs[1])
+            expr.b.e2 = instrInputs[1]->expr;
         else // duplicate the operands for "add x0, x0"
-            expr.b.e2 = instr->inputs[0]->expr;
+            expr.b.e2 = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::Sub) {
-        if (instr->inputs.size() < 2) {
+        if (instrInputs.size() < 2) {
             LOOPLOG("Irregular instruction " << *instr << " not yet handled"
                                              << endl);
             return;
         }
         expr.kind = Expr::BINARY;
         expr.b.op = Expr::SUB;
-        expr.b.e1 = instr->inputs[0]->expr;
-        if (instr->inputs[1])
-            expr.b.e2 = instr->inputs[1]->expr;
+        expr.b.e1 = instrInputs[0]->expr;
+        if (instrInputs[1])
+            expr.b.e2 = instrInputs[1]->expr;
         else // duplicate the operands for "sub x0, x0"
-            expr.b.e2 = instr->inputs[0]->expr;
+            expr.b.e2 = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::Mov) {
-        if (instr->inputs.size() < 1) {
+        if (instrInputs.size() < 1) {
             cerr << "Error in parsing instruction " << *instr;
             return;
         }
         expr.kind = Expr::UNARY;
         expr.u.op = Expr::MOV;
-        expr.u.e = instr->inputs[0]->expr;
+        expr.u.e = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::Neg) {
-        if (instr->inputs.size() < 1) {
+        if (instrInputs.size() < 1) {
             cerr << "Error in parsing instruction " << *instr;
             return;
         }
         expr.kind = Expr::UNARY;
         expr.u.op = Expr::NEG;
-        expr.u.e = instr->inputs[0]->expr;
+        expr.u.e = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::And ||
                instr->opcode == Instruction::Or ||
                instr->opcode == Instruction::Xor) {
-        if (instr->inputs.size() < 2) {
+        if (instrInputs.size() < 2) {
             LOOPLOG("Irregular instruction " << *instr << " not yet handled"
                                              << endl);
             return;
         }
         expr.kind = Expr::BINARY;
         expr.b.op = Expr::BIT;
-        expr.b.e1 = instr->inputs[0]->expr;
-        if (instr->inputs[1])
-            expr.b.e2 = instr->inputs[1]->expr;
+        expr.b.e1 = instrInputs[0]->expr;
+        if (instrInputs[1])
+            expr.b.e2 = instrInputs[1]->expr;
         else // duplicate the operands for "xor x0, x0"
-            expr.b.e2 = instr->inputs[0]->expr;
+            expr.b.e2 = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::GetPointer) {
         VarState *vs = NULL;
-        for (auto vi : instr->inputs) {
+        for (auto vi : instrInputs) {
             if (vi->type == JVAR_POLYNOMIAL) {
                 vs = vi;
             }
@@ -290,55 +292,55 @@ void buildExpr(Expr &expr, set<Expr *> &exprs, Instruction *instr)
     } else if (instr->opcode == Instruction::Mul) {
         expr.kind = Expr::BINARY;
         expr.b.op = Expr::MUL;
-        expr.b.e1 = instr->inputs[0]->expr;
-        if (instr->inputs.size() > 1)
-            expr.b.e2 = instr->inputs[1]->expr;
+        expr.b.e1 = instrInputs[0]->expr;
+        if (instrInputs.size() > 1)
+            expr.b.e2 = instrInputs[1]->expr;
         else // duplicate the operands for "mul x0, x0"
-            expr.b.e2 = instr->inputs[0]->expr;
+            expr.b.e2 = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::Div) {
         expr.kind = Expr::BINARY;
         expr.b.op = Expr::DIV;
-        expr.b.e1 = instr->inputs[0]->expr;
-        if (instr->inputs.size() > 1)
-            expr.b.e2 = instr->inputs[1]->expr;
+        expr.b.e1 = instrInputs[0]->expr;
+        if (instrInputs.size() > 1)
+            expr.b.e2 = instrInputs[1]->expr;
         else // duplicate the operands for "div x0, x0"
-            expr.b.e2 = instr->inputs[0]->expr;
+            expr.b.e2 = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::Load) {
         expr.kind = Expr::UNARY;
         expr.u.op = Expr::MOV;
-        expr.u.e = instr->inputs[0]->expr;
+        expr.u.e = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::Store) {
         expr.kind = Expr::UNARY;
         expr.u.op = Expr::MOV;
-        expr.u.e = instr->inputs[0]->expr;
+        expr.u.e = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::Shl ||
                instr->opcode == Instruction::LShr ||
                instr->opcode == Instruction::AShr) {
-        if (instr->inputs.size() < 2) {
+        if (instrInputs.size() < 2) {
             LOOPLOG("Irregular instruction " << *instr << " not yet handled"
                                              << endl);
             return;
         }
         expr.kind = Expr::BINARY;
         expr.b.op = Expr::SHL;
-        expr.b.e1 = instr->inputs[0]->expr;
-        if (instr->inputs[1])
-            expr.b.e2 = instr->inputs[1]->expr;
+        expr.b.e1 = instrInputs[0]->expr;
+        if (instrInputs[1])
+            expr.b.e2 = instrInputs[1]->expr;
         else // duplicate the operands for "shl x0, x0"
-            expr.b.e2 = instr->inputs[0]->expr;
+            expr.b.e2 = instrInputs[0]->expr;
     } else if (instr->opcode == Instruction::Call ||
                instr->opcode == Instruction::Return) {
 
     } /* else if (instr->isMOV_partial()) {
         //partial move or type conversion
-        if (instr->inputs.size()==2) {
+        if (inputs.size()==2) {
             expr.kind = Expr::UNARY;
             expr.u.op = Expr::MOV;
-            expr.u.e = instr->inputs[1]->expr;
-        } else if (instr->inputs.size()==1) {
+            expr.u.e = inputs[1]->expr;
+        } else if (inputs.size()==1) {
             expr.kind = Expr::UNARY;
             expr.u.op = Expr::MOV;
-            expr.u.e = instr->inputs[0]->expr;
+            expr.u.e = inputs[0]->expr;
         } else {
             cerr<<"Error in parsing instruction ";
             instr->print(&cerr);

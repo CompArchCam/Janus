@@ -1,4 +1,5 @@
 #include "Slice.h"
+#include "Function.h"
 #include "Instruction.h"
 #include "Loop.h"
 #include "Variable.h"
@@ -28,17 +29,18 @@ Slice::Slice(VarState *vs, SliceScope scope, Loop *loop) : scope(scope)
             if (v->lastModified) {
                 if (loop->contains(*v->lastModified)) {
                     instrs.push_front(v->lastModified);
-                    for (auto vi : v->lastModified->inputs) {
+                    for (auto vi : loop->parent->getCFG().getSSAVarRead(
+                             *v->lastModified)) {
                         q.push(vi);
                     }
                 } else {
-                    // state defined outside of the loop, simply add to inputs
+                    // state defined outside of the loop, simply add to
+                    // inputs
                     inputs.insert(v);
                 }
             } else {
                 // stop if we hit a loop iterator
-                if (v->isPHI &&
-                    loop->iterators.find(v) != loop->iterators.end())
+                if (v->isPHI && loop->iterators.contains(v))
                     continue;
                 for (auto pred : v->pred) {
                     q.push(pred);
@@ -53,11 +55,12 @@ Slice::Slice(VarState *vs, SliceScope scope, Loop *loop) : scope(scope)
             if (visited.find(v) != visited.end())
                 continue;
             visited.insert(v);
-            // if we found an instruction that generate the state, add to the
-            // slice
+            // if we found an instruction that generate the state, add to
+            // the slice
             if (v->lastModified) {
                 instrs.push_front(v->lastModified);
-                for (auto vi : v->lastModified->inputs) {
+                for (auto vi :
+                     loop->parent->getCFG().getSSAVarRead(*v->lastModified)) {
                     q.push(vi);
                 }
             } else {

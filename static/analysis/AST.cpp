@@ -14,9 +14,9 @@ void buildASTGraph(Function *function)
     auto &exprs = function->exprs;
 
     // check if SSA graph is present
-    if (!function)
+    if (!function || !function->isExecutable)
         return;
-    if (!function->allStates.size()) {
+    if (!function->getCFG().ssaVariables.size()) {
         cerr << "function " << function->name
              << " SSA not present in AST construction" << endl;
         return;
@@ -24,11 +24,11 @@ void buildASTGraph(Function *function)
 
     // step 1: for each variable state (SSA node), reserve space for an
     // expression
-    for (auto vs : function->allStates) {
+    for (auto &vs : function->getCFG().ssaVariables) {
         // skip expression that has already been constructed
         if (vs->expr)
             continue;
-        Expr *expr = new Expr(vs);
+        Expr *expr = new Expr(vs.get());
         vs->expr = expr;
         exprs.insert(expr);
     }
@@ -157,7 +157,7 @@ void buildASTGraph(Function *function)
     // LOOPLOG("The following instructions are not handled:"<<endl);
     for (auto &instr : function->instrs) {
         // link output with inputs in terms of expressions
-        for (auto &output : instr.outputs) {
+        for (auto &output : function->getCFG().getSSAVarWrite(instr)) {
             buildExpr(*output->expr, exprs, &instr);
         }
     }

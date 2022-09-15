@@ -268,7 +268,9 @@ static bool needBroadcast(Loop &loop, Instruction &instr) { return false; }
 
 bool checkPostIteratorUpdate(Instruction &instr)
 {
-    for (auto vi : instr.inputs) {
+    Function *parent = instr.block->parentFunction;
+
+    for (auto vi : parent->getCFG().getSSAVarRead(instr)) {
         if (vi->type == JVAR_MEMORY) {
             for (auto pred : vi->pred) {
                 // none of them should be PHI nodes
@@ -277,7 +279,7 @@ bool checkPostIteratorUpdate(Instruction &instr)
             }
         }
     }
-    for (auto vo : instr.outputs) {
+    for (auto vo : parent->getCFG().getSSAVarWrite(instr)) {
         if (vo->type == JVAR_MEMORY) {
             for (auto pred : vo->pred) {
                 // none of them should be PHI nodes

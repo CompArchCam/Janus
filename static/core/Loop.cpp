@@ -1,15 +1,12 @@
 #include "Loop.h"
-#include "Affine.h"
 #include "Alias.h"
 #include "Analysis.h"
 #include "BasicBlock.h"
 #include "Dependence.h"
 #include "Function.h"
 #include "IO.h"
-#include "Induction.h"
 #include "Iterator.h"
 #include "JanusContext.h"
-#include "Profile.h"
 #include "Utility.h"
 
 #include <cassert>
@@ -30,12 +27,21 @@ using namespace std;
  * Each loop has only one start node (X) but may have multiple end nodes (Ys) */
 void searchLoop(JanusContext *gc, Function *function)
 {
-    if (!gc || !function)
+    if (!gc || !function || !function->isExecutable)
         return;
 
     auto &loopArray = gc->loops;
-    BasicBlock *entry = function->getCFG().entry;
-    uint32_t size = function->getCFG().blocks.size();
+
+    BasicBlock *entry;
+    uint32_t size;
+
+    if (!function->isExecutable) {
+        entry = nullptr;
+        size = 0;
+    } else {
+        entry = function->getCFG().entry;
+        size = function->getCFG().blocks.size();
+    }
 
     if (size == 0)
         return;
@@ -77,6 +83,7 @@ void searchLoop(JanusContext *gc, Function *function)
     /* Now all loop stack blocks have been recognised
      * contruct loops */
     for (auto block_id : loopPool) {
+        cout << block_id << ": Loop " << loopArray.size() << endl;
         loopArray.emplace_back(entry + block_id, function);
     }
 }

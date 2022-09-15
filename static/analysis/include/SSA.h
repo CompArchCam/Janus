@@ -13,11 +13,13 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <queue>
 #include <utility>
 
-#include "Concepts.h"
 #include "Arch.h"
+#include "Concepts.h"
+#include "MachineInstruction.h"
 
 template <typename T>
 concept SSARequirement = requires
@@ -34,7 +36,45 @@ class SSAGraph : public DomCFG
   public:
     SSAGraph(const DomCFG &);
 
+    std::set<janus::Variable> variables;
+
+    std::set<std::unique_ptr<janus::VarState>> ssaVariables;
+
+    /// The initial states for all variables found in this function
+    std::map<janus::Variable, janus::VarState *> inputStates;
+
+    /// Counts the number of instruction lifted for output
+    int instructionLiftCount;
+
+    auto getSSAVarRead(janus::Instruction instr)
+        -> const std::vector<janus::VarState *>
+    {
+        if (ssaVarRead.contains(instr))
+            return ssaVarRead.at(instr);
+        else
+            // TODO: check if this is the nicest thing to do
+            return {};
+    }
+
+    auto getSSAVarWrite(janus::Instruction instr)
+        -> const std::vector<janus::VarState *>
+    {
+        if (ssaVarWrite.contains(instr))
+            return ssaVarWrite.at(instr);
+        else
+            // TODO: check if this is the nicest thing to do
+            return {};
+    }
+
   private:
+    std::map<janus::Instruction, std::vector<janus::VarState *>> ssaVarRead;
+
+    std::map<janus::Instruction, std::vector<janus::VarState *>> ssaVarWrite;
+
+    void initVariables();
+
+    void initVariables(janus::Instruction &);
+
     void copyDefinitions(std::map<janus::Variable, janus::VarState *> *,
                          std::map<janus::Variable, janus::VarState *> *);
 
@@ -116,6 +156,8 @@ void linkArchSpecSSANodes(
 template <SSARequirement DomCFG>
 SSAGraph<DomCFG>::SSAGraph(const DomCFG &domcfg) : DomCFG(domcfg)
 {
+    instructionLiftCount = 0;
+    initVariables();
     buildSSAGraph();
 }
 
@@ -127,14 +169,15 @@ void SSAGraph<DomCFG>::buildSSAGraph()
         bb.lastStates.clear();
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
-            for (auto vs : instr.outputs) {
-                bb.lastStates[*(Variable *)vs] = vs;
-            }
+            if (ssaVarWrite.contains(instr))
+                for (auto vs : ssaVarWrite.at(instr)) {
+                    bb.lastStates[*(Variable *)vs] = vs;
+                }
         }
     }
 
     /* Step 2: Insert Phi node */
-    for (auto var : DomCFG::func.allVars)
+    for (auto var : variables)
         insertPhiNodes(var);
 
     /* Step 3: Link all instruction's input to Phi and outputs */
@@ -149,7 +192,7 @@ void SSAGraph<DomCFG>::buildSSAGraph()
      * Used for human-readable SSA */
     int id = 0;
     map<Variable, int> versions;
-    for (auto vs : DomCFG::func.allStates) {
+    for (auto &vs : ssaVariables) {
         vs->id = id++;
         auto var = (Variable)(*vs);
         int version = versions[var];
@@ -258,49 +301,53 @@ SSAGraph<DomCFG>::getOrInitVarState(Variable var,
     // for constant immediate, there is no need to query, simply create a new
     // state
     if (var.type == JVAR_CONSTANT) {
-        auto *vs = new VarState(var, DomCFG::entry, false);
-        DomCFG::func.allStates.insert(vs);
-        return vs;
+        auto vs = std::make_unique<VarState>(var, DomCFG::entry, false);
+        auto res = vs.get();
+        ssaVariables.insert(std::move(vs));
+        return res;
     }
 
     // we currently assume all memory variables are different
     if (var.type == JVAR_MEMORY || var.type == JVAR_POLYNOMIAL) {
-        auto *vs = new VarState(var, DomCFG::entry, false);
-        DomCFG::func.allStates.insert(vs);
-        linkMemoryNodes(var, vs, latestDefs);
-        return vs;
+        auto vs = std::make_unique<VarState>(var, DomCFG::entry, false);
+        auto res = vs.get();
+        ssaVariables.insert(std::move(vs));
+        linkMemoryNodes(var, res, latestDefs);
+        return res;
     }
 
     if (var.type == JVAR_SHIFTEDCONST || var.type == JVAR_SHIFTEDREG) {
-        auto *vs = new VarState(var, DomCFG::entry, false);
-        DomCFG::func.allStates.insert(vs);
-        linkShiftedNodes(var, vs, latestDefs);
-        return vs;
+        auto vs = std::make_unique<VarState>(var, DomCFG::entry, false);
+        auto res = vs.get();
+        ssaVariables.insert(std::move(vs));
+        linkShiftedNodes(var, res, latestDefs);
+        return res;
     }
     // for the rest of variables, get latest def
-    VarState *vs = latestDefs[var];
-    if (!vs) {
+    VarState *res = latestDefs[var];
+    if (!res) {
         // uninitialized variable
-        if (DomCFG::func.inputStates.contains(var)) {
-            latestDefs[var] = DomCFG::func.inputStates[var];
-            return DomCFG::func.inputStates[var];
+        if (inputStates.contains(var)) {
+            latestDefs[var] = inputStates[var];
+            return inputStates[var];
         }
 
         // not constructed yet
-        vs = new VarState(var, DomCFG::entry, false);
-        DomCFG::func.allStates.insert(vs);
-        latestDefs[var] = vs;
-        DomCFG::func.inputStates[var] = vs;
+        auto vs = std::make_unique<VarState>(var, DomCFG::entry, false);
+        res = vs.get();
+        latestDefs[var] = res;
+        inputStates[var] = res;
+        ssaVariables.insert(std::move(vs));
     }
-    return vs;
+    return res;
 }
 
 template <SSARequirement DomCFG>
 void SSAGraph<DomCFG>::createSuccFromPred()
 {
-    for (VarState *vs : DomCFG::func.allStates) {
+    for (auto &vs : ssaVariables) {
         for (VarState *vsPred : vs->pred) {
-            vsPred->succ.insert(vs);
+            vsPred->succ.insert(vs.get());
         }
     }
 }
@@ -342,19 +389,20 @@ void SSAGraph<DomCFG>::updateSSANodes(BlockID bid,
 
         for (Variable var : inputs) {
             VarState *vs = getOrInitVarState(var, latestDefs);
-            instr.inputs.push_back(vs);
+            ssaVarRead[instr].push_back(vs);
             latestDefs[var] = vs;
         }
         inputs.clear();
 
         // update instruction output
-        for (auto vs : instr.outputs) {
-            auto var = (Variable)(*vs);
-            latestDefs[var] = vs;
-            // for memory output, link the base, offset and disp too
-            if (var.type == JVAR_MEMORY)
-                linkMemoryNodes(var, vs, latestDefs);
-        }
+        if (ssaVarWrite.contains(instr))
+            for (auto vs : ssaVarWrite.at(instr)) {
+                auto var = (Variable)(*vs);
+                latestDefs[var] = vs;
+                // for memory output, link the base, offset and disp too
+                if (var.type == JVAR_MEMORY)
+                    linkMemoryNodes(var, vs, latestDefs);
+            }
 
         // corner case, guess call argument
         if (instr.opcode == Instruction::Call) {
@@ -376,7 +424,7 @@ void SSAGraph<DomCFG>::guessCallArgument(Instruction &instr,
         VarState *vs = latestDefs[var];
         if (vs != nullptr &&
             (vs->lastModified != nullptr || vs->pred.size() > 2)) {
-            instr.inputs.push_back(vs);
+            ssaVarRead[instr].push_back(vs);
         }
     }
 }
@@ -399,9 +447,9 @@ void SSAGraph<DomCFG>::linkMemoryNodes(Variable var, VarState *vs,
         Variable ivar;
         ivar.type = JVAR_CONSTANT;
         ivar.value = var.value;
-        auto *ivs = new VarState(ivar, DomCFG::entry, false);
-        DomCFG::func.allStates.insert(ivs);
-        vs->pred.insert(ivs);
+        auto ivs = std::make_unique<VarState>(ivar, DomCFG::entry, false);
+        vs->pred.insert(ivs.get());
+        ssaVariables.insert(std::move(ivs));
     }
 }
 
@@ -412,17 +460,18 @@ void SSAGraph<DomCFG>::linkShiftedNodes(Variable var, VarState *vs,
     Variable immedShift;
     immedShift.type = JVAR_CONSTANT;
     immedShift.value = var.shift_value;
-    auto *shiftvs = new VarState(immedShift, DomCFG::entry, false);
-    DomCFG::func.allStates.insert(shiftvs);
-    vs->pred.insert(shiftvs);
+    auto shiftvs = std::make_unique<VarState>(immedShift, DomCFG::entry, false);
+    vs->pred.insert(shiftvs.get());
+    ssaVariables.insert(std::move(shiftvs));
 
     if (var.type == JVAR_SHIFTEDCONST) {
         Variable immedVal;
         immedVal.type = JVAR_CONSTANT;
         immedVal.value = var.value;
-        auto *immedvs = new VarState(immedVal, DomCFG::entry, false);
-        DomCFG::func.allStates.insert(immedvs);
-        vs->pred.insert(immedvs);
+        auto immedvs =
+            std::make_unique<VarState>(immedVal, DomCFG::entry, false);
+        vs->pred.insert(immedvs.get());
+        ssaVariables.insert(std::move(immedvs));
     } else if (var.type == JVAR_SHIFTEDREG) {
         VarState *regState =
             getOrInitVarState(Variable((uint32_t)var.value), latestDefs);
@@ -439,24 +488,27 @@ void SSAGraph<DomCFG>::linkDependentNodes()
     for (auto &bb : DomCFG::blocks) {
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
-            for (auto vs : instr.inputs) {
-                initInputs.insert(vs);
-                // link dependents
-                if (vs->type == JVAR_POLYNOMIAL || vs->type == JVAR_MEMORY) {
-                    for (auto vi : vs->pred)
-                        vi->dependants.insert(&instr);
+            if (ssaVarRead.contains(instr))
+                for (auto vs : ssaVarRead.at(instr)) {
+                    initInputs.insert(vs);
+                    // link dependents
+                    if (vs->type == JVAR_POLYNOMIAL ||
+                        vs->type == JVAR_MEMORY) {
+                        for (auto vi : vs->pred)
+                            vi->dependants.insert(&instr);
+                    }
+                    vs->dependants.insert(&instr);
                 }
-                vs->dependants.insert(&instr);
-            }
             // mark all memory output as used
-            for (auto vs : instr.outputs) {
-                if (vs->type == JVAR_MEMORY) {
-                    for (auto vi : vs->pred) {
-                        vs->dependants.insert(&instr);
-                        initInputs.insert(vs);
+            if (ssaVarWrite.contains(instr))
+                for (auto vs : ssaVarWrite.at(instr)) {
+                    if (vs->type == JVAR_MEMORY) {
+                        for (auto vi : vs->pred) {
+                            vs->dependants.insert(&instr);
+                            initInputs.insert(vs);
+                        }
                     }
                 }
-            }
         }
     }
 
@@ -495,7 +547,7 @@ void SSAGraph<DomCFG>::buildDominanceFrontierClosure(
     queue<BasicBlock *> q;
 
     // Find all basic blocks that contain definitions of variable var
-    for (auto &bb : DomCFG::func.getCFG().blocks) {
+    for (auto &bb : DomCFG::blocks) {
         if (bb.lastStates.contains(var)) {
             bbs.insert(&bb);
             q.push(&bb);
@@ -536,15 +588,336 @@ void SSAGraph<DomCFG>::insertPhiNodes(Variable var)
     // step 2: insert phi nodes
     for (auto bb : phiblocks) {
         // create a variable state at each phi block for this variable
-        VarState *vs = new VarState(var, bb, true);
-        // record the variable state in the function's global state buffer.
-        DomCFG::func.allStates.insert(vs);
+        auto vs = std::make_unique<VarState>(var, bb, true);
         // update last state in this phi block
         if (!bb->lastStates.contains(var))
-            bb->lastStates[var] = vs;
+            bb->lastStates[var] = vs.get();
         // insert phi node
-        bb->phiNodes.push_back(vs);
+        bb->phiNodes.push_back(vs.get());
+        // record the variable state in the function's global state buffer.
+        ssaVariables.insert(std::move(vs));
     }
 }
+
+#include "janus_arch.h"
+
+template <SSARequirement DomCFG>
+void SSAGraph<DomCFG>::initVariables()
+{
+    // lift individual instruction
+    for (auto &instr : DomCFG::func.instrs) {
+        instructionLiftCount++;
+        initVariables(instr);
+    }
+}
+
+#ifdef JANUS_X86
+
+/* Generate output states for a given instruction */
+template <SSARequirement DomCFG>
+void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
+{
+    MachineInstruction *minstr = instr.minstr;
+    BasicBlock *block = instr.block;
+    if (!minstr || !block)
+        return;
+
+    if (minstr->fineType == INSN_NOP)
+        return;
+
+    for (int i = 0; i < minstr->opndCount; i++) {
+        Variable var = minstr->operands[i].lift(instr.pc + instr.minstr->size);
+        // record this variable
+        variables.insert(var);
+        // add outputs to the instruction
+        if (minstr->operands[i].access == OPND_WRITE ||
+            minstr->operands[i].access == OPND_READ_WRITE) {
+            auto vs = std::make_unique<VarState>(var, block, &instr);
+            ssaVarWrite[instr].push_back(vs.get());
+            ssaVariables.insert(std::move(vs));
+        }
+    }
+
+    // if the instruction modifies eflag, add to the output too
+    if (minstr->writeControlFlag()) {
+        Variable var((uint32_t)0);
+        var.type = JVAR_CONTROLFLAG;
+        variables.insert(var);
+        auto vs = std::make_unique<VarState>(var, block, &instr);
+        ssaVarWrite[instr].push_back(vs.get());
+        ssaVariables.insert(std::move(vs));
+    }
+
+    // imul
+    if ((minstr->opcode == X86_INS_IMUL || minstr->opcode == X86_INS_IDIV ||
+         minstr->opcode == X86_INS_MUL || minstr->opcode == X86_INS_DIV) &&
+        minstr->opndCount == 1) {
+        // implicit EAX:EDX output
+        Variable var((uint32_t)JREG_RAX);
+        auto vs = std::make_unique<VarState>(var, block, &instr);
+        ssaVarWrite[instr].push_back(vs.get());
+        ssaVariables.insert(std::move(vs));
+        Variable var2((uint32_t)JREG_RDX);
+        auto vs2 = std::make_unique<VarState>(var2, block, &instr);
+        ssaVarWrite[instr].push_back(vs2.get());
+        ssaVariables.insert(std::move(vs2));
+    }
+
+    // call
+    else if (minstr->opcode == X86_INS_CALL) {
+        // force the calling function to generate RAX output
+        Variable var((uint32_t)JREG_RAX);
+        auto vs = std::make_unique<VarState>(var, block, &instr);
+        ssaVarWrite[instr].push_back(vs.get());
+        ssaVariables.insert(std::move(vs));
+        Variable var2((uint32_t)JREG_XMM0);
+        auto vs2 = std::make_unique<VarState>(var2, block, &instr);
+        ssaVarWrite[instr].push_back(vs2.get());
+        ssaVariables.insert(std::move(vs2));
+    }
+
+    // push or pop
+    else if (minstr->opcode == X86_INS_PUSH || minstr->opcode == X86_INS_POP) {
+        Variable var((uint32_t)JREG_RSP);
+        auto vs = std::make_unique<VarState>(var, block, &instr);
+        ssaVarWrite[instr].push_back(vs.get());
+        ssaVariables.insert(std::move(vs));
+        if (minstr->opcode == X86_INS_POP) {
+            for (int i = 0; i < minstr->opndCount; i++) {
+                Variable var =
+                    minstr->operands[i].lift(instr.pc + instr.minstr->pc);
+                auto vs2 = std::make_unique<VarState>(var, block, &instr);
+                ssaVarWrite[instr].push_back(vs2.get());
+                ssaVariables.insert(std::move(vs2));
+            }
+        }
+    }
+
+    else if (minstr->opcode == X86_INS_CDQ || minstr->opcode == X86_INS_CDQE) {
+        Variable var((uint32_t)JREG_RAX);
+        auto vs = std::make_unique<VarState>(var, block, &instr);
+        ssaVarWrite[instr].push_back(vs.get());
+        ssaVariables.insert(std::move(vs));
+    }
+
+    else if (minstr->opcode == X86_INS_MOVDQU ||
+             minstr->opcode == X86_INS_MOVDQA) {
+        Variable var = minstr->operands[0].lift(instr.pc + instr.minstr->pc);
+        minstr->operands[0].access = OPND_WRITE;
+        minstr->operands[1].access = OPND_READ;
+        auto vs = std::make_unique<VarState>(var, block, &instr);
+        ssaVarWrite[instr].push_back(vs.get());
+        ssaVariables.insert(std::move(vs));
+    }
+}
+
+#elifdef JANUS_AARCH64
+
+template <SSARequirement DomCFG>
+void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
+{
+    MachineInstruction *minstr = instr.minstr;
+    BasicBlock *block = instr.block;
+    if (!minstr || !block)
+        return;
+
+    if (minstr->fineType == INSN_NOP)
+        return;
+
+    VarState *vs;
+    Variable var;
+    switch (minstr->opcode) {
+    case ARM64_INS_CMP: // fairly sure CMP only writes control flags but
+                        // capstone seems to think it writes a register
+                        //  No reads/writes to registers (other than control
+                        //  flags but this is checked elsewhere)
+        break;
+    // Store instructions have read/write to everything for some reason
+    case ARM64_INS_ST1:
+    case ARM64_INS_ST2:
+    case ARM64_INS_ST3:
+    case ARM64_INS_ST4:
+    case ARM64_INS_STLRB:
+    case ARM64_INS_STLRH:
+    case ARM64_INS_STLR:
+    case ARM64_INS_STLXP:
+    case ARM64_INS_STLXRB:
+    case ARM64_INS_STLXRH:
+    case ARM64_INS_STLXR:
+    case ARM64_INS_STNP:
+    case ARM64_INS_STRB:
+    case ARM64_INS_STR:
+    case ARM64_INS_STRH:
+    case ARM64_INS_STTRB:
+    case ARM64_INS_STTRH:
+    case ARM64_INS_STTR:
+    case ARM64_INS_STURB:
+    case ARM64_INS_STUR:
+    case ARM64_INS_STURH:
+    case ARM64_INS_STXP:
+    case ARM64_INS_STXRB:
+    case ARM64_INS_STXRH:
+    case ARM64_INS_STXR:
+        for (int i = 0; i < minstr->opndCount; i++) {
+            var = minstr->operands[i].lift(instr.pc);
+            // record this variable
+            variables.insert(var);
+
+            // Only add memory outputs
+            if (minstr->operands[i].access == OPND_WRITE ||
+                (minstr->operands[i].access == OPND_READ_WRITE &&
+                 minstr->operands[i].type == OPND_MEM)) {
+                auto vs = std::make_unique<VarState>(var, block, &instr);
+                ssaVarWrite[instr].push_back(vs.get());
+                ssaVariables.insert(std::move(vs));
+            }
+// Pre- and post-indexing
+#if 0
+                if((minstr->isType(INSN_PREINDEX) || minstr->isType(INSN_POSTINDEX)) &&
+                            minstr->operands[i].type == OPND_MEM) {
+                    // For pre/post indexed addresses, base register is written back to
+                    var = Variable((uint32_t)(minstr->operands[i].mem.base));
+                    auto vs = std::make_unique<VarState>(var, block, &instr);
+                    ssaVarWrite[instr].push_back(vs.get());
+                    ssaVariables.insert(std::move(vs));
+                }
+#endif
+        }
+        break;
+    case ARM64_INS_STP:
+        for (int i = 0; i < minstr->opndCount; i++) {
+            var = minstr->operands[i].lift(instr.pc);
+            // record this variable
+            variables.insert(var);
+
+            // Only add memory outputs
+            if (minstr->operands[i].access == OPND_WRITE ||
+                (minstr->operands[i].access == OPND_READ_WRITE &&
+                 minstr->operands[i].type == OPND_MEM)) {
+                // create two variable states for stp
+                auto vs = std::make_unique<VarState>(var, block, &instr);
+                ssaVariables[instr].push_back(vs);
+                var.value += minstr->operands[i].size;
+                variables.insert(var);
+                auto vs2 = std::make_unique<VarState>(var, block, &instr);
+                ssaVariables[instr].push_back(vs2);
+            }
+        }
+        break;
+    // Load instructions have read/write to everything for some reason
+    case ARM64_INS_LD1:
+    case ARM64_INS_LD1R:
+    case ARM64_INS_LD2R:
+    case ARM64_INS_LD2:
+    case ARM64_INS_LD3R:
+    case ARM64_INS_LD3:
+    case ARM64_INS_LD4:
+    case ARM64_INS_LD4R:
+    case ARM64_INS_LDARB:
+    case ARM64_INS_LDARH:
+    case ARM64_INS_LDAR:
+    case ARM64_INS_LDAXP:
+    case ARM64_INS_LDAXRB:
+    case ARM64_INS_LDAXRH:
+    case ARM64_INS_LDAXR:
+    case ARM64_INS_LDNP:
+    case ARM64_INS_LDP:
+    case ARM64_INS_LDPSW:
+    case ARM64_INS_LDRB:
+    case ARM64_INS_LDR:
+    case ARM64_INS_LDRH:
+    case ARM64_INS_LDRSB:
+    case ARM64_INS_LDRSH:
+    case ARM64_INS_LDRSW:
+    case ARM64_INS_LDTRB:
+    case ARM64_INS_LDTRH:
+    case ARM64_INS_LDTRSB:
+    case ARM64_INS_LDTRSH:
+    case ARM64_INS_LDTRSW:
+    case ARM64_INS_LDTR:
+    case ARM64_INS_LDURB:
+    case ARM64_INS_LDUR:
+    case ARM64_INS_LDURH:
+    case ARM64_INS_LDURSB:
+    case ARM64_INS_LDURSH:
+    case ARM64_INS_LDURSW:
+    case ARM64_INS_LDXP:
+    case ARM64_INS_LDXRB:
+    case ARM64_INS_LDXRH:
+    case ARM64_INS_LDXR:
+        for (int i = 0; i < minstr->opndCount; i++) {
+            var = minstr->operands[i].lift(instr.pc);
+            // record this variable
+            variables.insert(var);
+
+            // Only add non memory outputs
+            if (minstr->operands[i].access == OPND_WRITE ||
+                (minstr->operands[i].access == OPND_READ_WRITE &&
+                 (minstr->operands[i].type != OPND_MEM))) {
+                auto vs = std::make_unique<VarState>(var, block, &instr);
+                ssaVarWrite[instr].push_back(vs.get());
+                ssaVariables.insert(std::move(vs));
+            }
+// Pre- and post-indexing
+#if 0
+                if((minstr->isType(INSN_PREINDEX) || minstr->isType(INSN_POSTINDEX)) &&
+                            minstr->operands[i].type == OPND_MEM) {
+                    // For pre/post indexed addresses, base register is written back to
+                    var = Variable((uint32_t)(minstr->operands[i].mem.base));
+                    auto vs = std::make_unique<VarState>(var, block, &instr);
+                    ssaVarWrite[instr].push_back(vs.get());
+                    ssaVariables.insert(std::move(vs));
+                }
+#endif
+        }
+        break;
+    default:
+        for (int i = 0; i < minstr->opndCount; i++) {
+
+            var = minstr->operands[i].lift(instr.pc);
+            // record this variable
+            function->allVars.insert(var);
+
+            // add outputs to the instruction
+            if (minstr->operands[i].access == OPND_WRITE ||
+                minstr->operands[i].access == OPND_READ_WRITE) {
+                auto vs = std::make_unique<VarState>(var, block, &instr);
+                ssaVarWrite[instr].push_back(vs.get());
+                ssaVariables.insert(std::move(vs));
+            }
+        }
+        break;
+    }
+
+    // Any post processing
+
+    if (minstr->writeControlFlag()) {
+        Variable var((uint32_t)0);
+        var.type = JVAR_CONTROLFLAG;
+        function->allVars.insert(var);
+        auto vs = std::make_unique<VarState>(var, block, &instr);
+        ssaVarWrite[instr].push_back(vs.get());
+        ssaVariables.insert(std::move(vs));
+    }
+
+    switch (minstr->opcode) {
+    // Function calls
+    case ARM64_INS_BL:
+    case ARM64_INS_BLR: {
+        Variable var(
+            (uint32_t)
+                JREG_X0); /* TODO: It appears to be more complicated than this
+                             on ARM as return values may be passed in any of
+                             R0-R7 and pointers to memory areas appear to be
+                             placed in R8. Also, you can also pass/return using
+                             V0-V7 when doing SIMD/vector stuff. */
+        auto vs = std::make_unique<VarState>(var, block, &instr);
+        ssaVarWrite[instr].push_back(vs.get());
+        ssaVariables.insert(std::move(vs));
+    } break;
+    }
+}
+
+#endif
 
 #endif

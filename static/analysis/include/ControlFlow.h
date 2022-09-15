@@ -230,7 +230,7 @@ concept CDGInput = requires
 };
 
 template <CDGInput PCFG>
-class InstructionControlDependence : PCFG
+class InstructionControlDependence : public PCFG
 {
   public:
     std::unordered_map<janus::Instruction *, std::vector<janus::Instruction *>>

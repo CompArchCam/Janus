@@ -179,7 +179,8 @@ static void generatePrefetchRulesForSlice(JanusContext *jc, Slice &slice,
         // for constant stride, we can simply modify the memory operands
         // without inserting new instructions or use additional registers
 
-        for (auto vi : front->inputs) {
+        for (auto vi :
+             front->block->parentFunction->getCFG().getSSAVarRead(*front)) {
             if (vi->type == JVAR_MEMORY) {
                 MemoryLocation *ml = loop.locationTable[vi];
                 if (ml && ml->containIterator(&loop)) {
@@ -232,7 +233,8 @@ static bool instrContainIterator(Instruction *instr, Loop *loop)
 {
     if (!instr)
         return false;
-    for (auto vi : instr->inputs) {
+    for (auto vi :
+         instr->block->parentFunction->getCFG().getSSAVarRead(*instr)) {
         if (vi->type == JVAR_MEMORY) {
             MemoryLocation *ml = loop->locationTable[vi];
             if (ml && ml->containIterator(loop))

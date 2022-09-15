@@ -58,7 +58,7 @@ void variableAnalysis(janus::Loop *loop)
              * memory width */
             if (instr.minstr->opcode == ARM64_INS_LDP ||
                 instr.minstr->opcode == ARM64_INS_STP) {
-                for (auto vi : instr.inputs) {
+                for (auto vi : parent->getCFG().getSSAVarRead(instr)) {
                     if (vi->type == JVAR_STACKFRAME) {
                         Variable mem1 = Variable(*vi);
                         Variable mem2 = Variable(*vi);
@@ -77,7 +77,7 @@ void variableAnalysis(janus::Loop *loop)
             }
 #endif
             /* Check all inputs from loop instructions */
-            for (auto vs : instr.inputs) {
+            for (auto vs : parent->getCFG().getSSAVarRead(instr)) {
                 if (vs->type == JVAR_MEMORY || vs->type == JVAR_POLYNOMIAL) {
                     // add base and index into initVars
                     for (auto phi : vs->pred) {
@@ -93,7 +93,7 @@ void variableAnalysis(janus::Loop *loop)
                 }
             }
             // specifically for outputs base and offset, add to initVars
-            for (auto vs : instr.outputs) {
+            for (auto vs : parent->getCFG().getSSAVarWrite(instr)) {
                 if (vs->type == JVAR_MEMORY || vs->type == JVAR_POLYNOMIAL) {
                     for (auto phi : vs->pred) {
                         if (loop->isInitial(phi)) {
@@ -134,7 +134,7 @@ void variableAnalysis(janus::Loop *loop)
             // 2. the output does not modify the storage of the inputs
             // then the outputs should be constant as well
             bool constInputs(true);
-            for (auto *vs : instr->inputs) {
+            for (auto *vso : parent->getCFG().getSSAVarRead(*instr)) {
                 if (vs->type == JVAR_MEMORY || vs->type == JVAR_POLYNOMIAL ||
                     vs->type == JVAR_SHIFTEDREG ||
                     vs->type == JVAR_SHIFTEDCONST) {
@@ -145,12 +145,12 @@ void variableAnalysis(janus::Loop *loop)
                     constInputs &= loop->isConstant(vs);
             }
             if (constInputs) {
-                for (auto *vso : instr->outputs) {
+                for (auto *vso : parent->getCFG().getSSAVarWrite(*instr)) {
                     if (vso->constLoop == loop)
                         continue;
                     // check with inputs
                     bool outputConst(true);
-                    for (auto *vi : instr->inputs) {
+                    for (auto *vi : parent->getCFG().getSSAVarRead(*instr)) {
                         if (*(Variable *)vso == *(Variable *)vi) {
                             outputConst = false;
                             break;
@@ -181,7 +181,7 @@ void variableAnalysis(janus::Loop *loop)
         for (int i = 0; i < bb.size; i++) {
             auto &instr = bb.instrs[i];
             // we are only interested in stack/absolute outputs
-            for (auto vs : instr.outputs) {
+            for (auto vs : parent->getCFG().getSSAVarWrite(instr)) {
                 if (vs->type == JVAR_REGISTER || vs->type == JVAR_STACK ||
                     vs->type == JVAR_STACKFRAME || vs->type == JVAR_ABSOLUTE) {
                     // try to find it in the phi variables
@@ -232,6 +232,8 @@ void variableAnalysis(janus::Loop *loop)
 void scratchAnalysis(janus::Loop *loop)
 {
     BasicBlock *entry = loop->parent->getCFG().entry;
+    Function *parent = loop->parent;
+
     LOOPLOG("\tStarted scratch analysis" << endl);
     /* Work out all the registers needed for copying before loop context */
     for (auto v : loop->initVars) {
@@ -249,7 +251,7 @@ void scratchAnalysis(janus::Loop *loop)
         BasicBlock &bb = entry[bid];
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
-            for (auto vo : instr.outputs) {
+            for (auto vo : parent->getCFG().getSSAVarWrite(instr)) {
                 if (vo->type == JVAR_REGISTER || vo->type == JVAR_STACK ||
                     vo->type == JVAR_STACKFRAME) {
                     bool neededOutside = false;
@@ -316,14 +318,14 @@ void scratchAnalysis(janus::Loop *loop)
         while (cloop != loop) {
             depth++;
             cloop = cloop->parentLoop;
-            if (cloop == NULL)
+            if (cloop == nullptr)
                 break;
         }
 
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
 
-            for (auto vi : instr.inputs) {
+            for (auto vi : parent->getCFG().getSSAVarRead(instr)) {
                 if (vi->type == JVAR_REGISTER) {
                     if (jreg_is_gpr(vi->value))
                         regFreq[vi->value] += (64 * depth + 1);
@@ -337,7 +339,7 @@ void scratchAnalysis(janus::Loop *loop)
                     }
                 }
             }
-            for (auto vo : instr.outputs) {
+            for (auto vo : parent->getCFG().getSSAVarWrite(instr)) {
                 if (vo->type == JVAR_REGISTER) {
                     if (jreg_is_gpr(vo->value))
                         regFreq[vo->value] += (64 * depth + 1);
@@ -393,7 +395,7 @@ void scratchAnalysis(janus::Loop *loop)
 void variableAnalysis(janus::Function *function)
 {
     for (auto &instr : function->instrs) {
-        for (auto vi : instr.inputs) {
+        for (auto vi : function->getCFG().getSSAVarRead(instr)) {
             if (vi->type == JVAR_REGISTER)
                 instr.regReads.insert(vi->value);
             else if (vi->type == JVAR_MEMORY || vi->type == JVAR_POLYNOMIAL) {
@@ -402,7 +404,7 @@ void variableAnalysis(janus::Function *function)
                         instr.regReads.insert(vm->value);
             }
         }
-        for (auto vo : instr.outputs) {
+        for (auto vo : function->getCFG().getSSAVarWrite(instr)) {
             if (vo->type == JVAR_REGISTER)
                 instr.regWrites.insert(vo->value);
             else if (vo->type == JVAR_MEMORY || vo->type == JVAR_POLYNOMIAL) {

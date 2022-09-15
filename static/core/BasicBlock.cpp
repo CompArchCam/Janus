@@ -59,12 +59,12 @@ Instruction *BasicBlock::lastInstr() { return &(instrs[size - 1]); }
 
 bool BasicBlock::dominates(BasicBlock &block)
 {
-    return (*parentFunction->domTree)[block.bid].contains(bid);
+    return (*parentFunction->getCFG().domTree)[block.bid].contains(bid);
 }
 
 bool BasicBlock::dominates(BasicBlock *block)
 {
-    return (*parentFunction->domTree)[block->bid].contains(bid);
+    return (*parentFunction->getCFG().domTree)[block->bid].contains(bid);
 }
 
 // DFS through ancestors to find the closest definition
@@ -115,11 +115,11 @@ VarState *BasicBlock::alive(Variable var)
     return NULL; // undefined
 }
 
-VarState *BasicBlock::alive(Variable var, int index)
+[[deprecated]] VarState *BasicBlock::alive(Variable var, int index)
 {
     // search for definition in this block
     for (int i = index - 1; i >= 0; i--) {
-        for (auto vs : instrs[i].outputs)
+        for (auto vs : parentFunction->getCFG().getSSAVarWrite(instrs[i]))
             if ((Variable)*vs == var)
                 return vs;
     }

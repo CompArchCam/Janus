@@ -4,6 +4,10 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+
+#include "Instruction.h"
+#include "JanusContext.h"
+
 using namespace janus;
 using namespace std;
 
@@ -63,15 +67,17 @@ int get_opcode(Instruction *instr)
 
 VarState *get_input(Instruction &instr, int index)
 {
-    return instr.inputs[index];
+    return instr.block->parentFunction->getCFG().getSSAVarRead(instr)[index];
 }
+
 VarState *get_output(Instruction &instr, int index)
 {
-    return instr.outputs[index];
+    return instr.block->parentFunction->getCFG().getSSAVarWrite(instr)[index];
 }
-VarState *get_src1(Instruction &instr) { return instr.inputs[0]; }
-VarState *get_src2(Instruction &instr) { return instr.inputs[1]; }
-VarState *get_src3(Instruction &instr) { return instr.inputs[2]; }
-VarState *get_src4(Instruction &instr) { return instr.inputs[3]; }
-VarState *get_dest(Instruction &instr) { return instr.outputs[0]; }
+
+VarState *get_src1(Instruction &instr) { return get_input(instr, 0); }
+VarState *get_src2(Instruction &instr) { return get_input(instr, 1); }
+VarState *get_src3(Instruction &instr) { return get_input(instr, 2); }
+VarState *get_src4(Instruction &instr) { return get_input(instr, 3); }
+VarState *get_dest(Instruction &instr) { return get_output(instr, 0); }
 #endif

@@ -215,8 +215,8 @@ static void generateDOALLRules(JanusContext *gc, Loop &loop)
         // jump
         auto *cjump = checkBlock.lastInstr();
         // retrieve the phi node of the eflag
-        Instruction *cmpInstr = NULL;
-        for (auto vi : cjump->inputs) {
+        Instruction *cmpInstr = nullptr;
+        for (auto vi : parent->getCFG().getSSAVarRead(*cjump)) {
             if (vi->type == JVAR_CONTROLFLAG) {
                 cmpInstr = vi->lastModified;
             }
@@ -236,13 +236,13 @@ static void generateDOALLRules(JanusContext *gc, Loop &loop)
             inductionVar;   // This is the induction var in the cmp instruction
         Variable condition; // This is obtained as the non-induction var operand
                             // in the cmp instruction
-        Iterator *iter = NULL;
+        Iterator *iter = nullptr;
         bool found = false;
         int inductionVarOpndIndex =
             -1; // This stores which operand in the cmp instruction is the
                 // induction variable Used when handling PARA_LOOP_UPDATE_BOUNDS
         int i = 0;
-        for (auto phi : cmpInstr->inputs) {
+        for (auto phi : parent->getCFG().getSSAVarRead(*cmpInstr)) {
             if (phi->expr && phi->expr->expandedLoopForm) {
                 iter = phi->expr->expandedLoopForm->hasIterator(&loop);
                 if (iter) {

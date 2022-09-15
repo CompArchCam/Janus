@@ -53,7 +53,8 @@ static void generateRulesForEachLoop(JanusContext *gc, Loop &loop)
          * TODO: reduce the number of checks using alias analysis */
         for (auto &memInstr : bb->minstrs) {
             bool instrUsesPrivateVar = false;
-            for (auto &opnd : memInstr.instr->inputs) {
+            for (auto &opnd :
+                 loop.parent->getCFG().getSSAVarRead(*memInstr.instr)) {
                 Variable stackVar = *(Variable *)memInstr.mem;
                 if (loop.privateVars.find(stackVar) != loop.privateVars.end() ||
                     loop.phiVars.find(stackVar) != loop.phiVars.end() ||

@@ -54,9 +54,9 @@ class Function
     /// Actual storage of all the function's abstract instructions, read-only
     std::vector<Instruction> instrs;
     /// Set of variables used in this function
-    std::set<Variable> allVars;
+    /* std::set<Variable> allVars; */
     /// Set of all SSA variables ever defined (or used) in this function
-    std::set<VarState *> allStates;
+    /* std::set<VarState *> allStates; */
     /// Entry block of the function CFG
     // BasicBlock *entry;
     /// Block size
@@ -65,10 +65,10 @@ class Function
     // std::vector<BasicBlock> blocks;
     /// The root of the dominator tree (indexed by blockID) for the CFG in this
     /// function
-    std::shared_ptr<std::vector<BitVector>> domTree;
+    /* std::shared_ptr<std::vector<BitVector>> domTree; */
     /// The root of the post dominator tree (indexed by blockID) for the CFG in
     /// this function
-    std::shared_ptr<std::vector<BitVector>> pdomTree;
+    /* std::shared_ptr<std::vector<BitVector>> pdomTree; */
 
     /* --------------------------------------------------------------
      *                    query data structure
@@ -95,16 +95,11 @@ class Function
     /// A set of expression pointers used in this function
     std::set<Expr *> exprs;
     /// The initial states for all variables found in this function
-    std::map<Variable, VarState *> inputStates;
+    /* std::map<Variable, VarState *> inputStates; */
     /// Unique pointer to the control flow graph
-    std::unique_ptr<ControlFlowGraph> cfg;
-    /// Unique pointer to processed cfg; very bad indeed
-    std::shared_ptr<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>
-        pcfg;
-    /// Check
-    std::shared_ptr<
-        SSAGraph<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>>
-        ssa;
+    std::unique_ptr<SSAGraph<InstructionControlDependence<
+        PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>>>
+        cfg;
 
     /* --------------------------------------------------------------
      *                Architecture specific information
@@ -169,7 +164,7 @@ class Function
     void analyseLoopRelations();
     /** \brief creates the cfg is not present; otherwise return the cfg object
      */
-    ControlFlowGraph &getCFG();
+    auto getCFG() -> decltype(*cfg);
 };
 } // namespace janus
 

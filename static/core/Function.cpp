@@ -288,9 +288,9 @@ void Function::visualize(void *outputStream)
     // TODO: fix this somehow afterwards
     os << dec;
     for (auto &bb : getCFG().blocks) {
-        if (pcfg != nullptr && !pcfg->idoms.empty() &&
-            pcfg->idoms.contains(&bb) && pcfg->idoms[&bb]->bid != bb.bid) {
-            os << "\tBB" << pcfg->idoms[&bb]->bid << " -> BB" << bb.bid << ";"
+        if (cfg != nullptr && !cfg->idoms.empty() && cfg->idoms.contains(&bb) &&
+            cfg->idoms[&bb]->bid != bb.bid) {
+            os << "\tBB" << cfg->idoms[&bb]->bid << " -> BB" << bb.bid << ";"
                << endl;
         }
     }
@@ -317,9 +317,9 @@ void Function::visualize(void *outputStream)
     // print the dom edge
     os << dec;
     for (auto &bb : getCFG().blocks) {
-        if (pcfg != nullptr && !pcfg->ipdoms.empty() &&
-            pcfg->ipdoms.contains(&bb)) {
-            os << "\tBB" << pcfg->ipdoms[&bb]->bid << " -> BB" << bb.bid << ";"
+        if (cfg != nullptr && !cfg->ipdoms.empty() &&
+            cfg->ipdoms.contains(&bb)) {
+            os << "\tBB" << cfg->ipdoms[&bb]->bid << " -> BB" << bb.bid << ";"
                << endl;
         }
     }
@@ -345,10 +345,12 @@ bool Function::needSync()
     return false;
 }
 
-ControlFlowGraph &Function::getCFG()
+auto Function::getCFG() -> decltype(*cfg)
 {
-    if (!cfg) {
-        cfg = make_unique<ControlFlowGraph>(this);
+    if (!cfg && isExecutable) {
+        cfg = make_unique<decltype(cfg)::element_type>(
+            SSAGraph(InstructionControlDependence(PostDominanceAnalysis(
+                DominanceAnalysis(ControlFlowGraph(this))))));
     }
     return *cfg;
 }

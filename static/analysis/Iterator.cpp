@@ -93,13 +93,18 @@ static bool finalValueAnalysis(Loop *loop)
         // get the last conditional jump, a check block is always conditional
         // jump
         Instruction *cjump = checkBlock.lastInstr();
-        Instruction *cmpInstr = NULL;
+        Instruction *cmpInstr = nullptr;
         // check the input of the jump instruction
-        for (auto vi : cjump->inputs) {
+        for (auto vi :
+             cjump->block->parentFunction->getCFG().getSSAVarRead(*cjump)) {
+            if (loop->id == 9)
+                cout << "Loop9: " << vi->id << "; address = " << (void *)vi
+                     << endl;
             if (vi->type == JVAR_CONTROLFLAG) {
                 cmpInstr = vi->lastModified;
             }
         }
+        cout << endl;
 
         if (!cmpInstr) {
             LOOPLOG("\t\tCould not locate an instruction that modifies control "
@@ -107,6 +112,9 @@ static bool finalValueAnalysis(Loop *loop)
                     << endl);
             return false;
         }
+
+        const auto cmpInstrInputs =
+            loop->parent->getCFG().getSSAVarRead(*cmpInstr);
 
         if (cmpInstr->opcode != Instruction::Compare) {
             // if it is not a compare, then it could be a subtraction
@@ -121,7 +129,7 @@ static bool finalValueAnalysis(Loop *loop)
             }
         }
 
-        if (cmpInstr->inputs.size() != 2) {
+        if (cmpInstrInputs.size() != 2) {
             LOOPLOG("\t\tFound irregular compare instruction with less or more "
                     "than two operands! "
                     << *cmpInstr << endl);
@@ -129,8 +137,8 @@ static bool finalValueAnalysis(Loop *loop)
         }
 
         // obtain the expressions for both comparison operands
-        auto cmpOP1 = expandExpr(cmpInstr->inputs[0]->expr, loop);
-        auto cmpOP2 = expandExpr(cmpInstr->inputs[1]->expr, loop);
+        auto cmpOP1 = expandExpr(cmpInstrInputs[0]->expr, loop);
+        auto cmpOP2 = expandExpr(cmpInstrInputs[1]->expr, loop);
         if (!(cmpOP1 && cmpOP2)) {
             LOOPLOG("\t\tFailed to retrieve expression for comparison. "
                     "\n\tDisable further analysis for this loop"
@@ -167,7 +175,7 @@ static bool finalValueAnalysis(Loop *loop)
                 miter->checkState = NULL;
                 if (!cmpOP1->hasTerm(it.first))
                     miter->checkState =
-                        loop->getAbsoluteStorage(cmpInstr->inputs[0]);
+                        loop->getAbsoluteStorage(cmpInstrInputs[0]);
                 if (!cmpOP2->hasTerm(it.first)) {
                     if (miter->checkState) {
                         LOOPLOG("\t\tLoop contains irregular comparisons! "
@@ -175,7 +183,7 @@ static bool finalValueAnalysis(Loop *loop)
                         miter->checkState = NULL;
                     } else {
                         miter->checkState =
-                            loop->getAbsoluteStorage(cmpInstr->inputs[1]);
+                            loop->getAbsoluteStorage(cmpInstrInputs[1]);
                     }
                 }
             }
@@ -203,14 +211,14 @@ static bool finalValueAnalysis(Loop *loop)
                     cmpOP1->extendToVariableScope(loop->parent, loop, &itVar);
                     cmpOP2->extendToVariableScope(loop->parent, loop, &itVar);
                     if (!cmpOP1->hasTerm(it.first))
-                        miter->checkState = cmpInstr->inputs[0];
+                        miter->checkState = cmpInstrInputs[0];
                     if (!cmpOP2->hasTerm(it.first)) {
                         if (miter->checkState) {
                             LOOPLOG("\t\tLoop contains irregular comparisons! "
                                     << endl);
                             miter->checkState = NULL;
                         } else
-                            miter->checkState = cmpInstr->inputs[1];
+                            miter->checkState = cmpInstrInputs[1];
                     }
                     // overwrite bound expression
                     boundExpr = boundTest;
@@ -320,6 +328,8 @@ bool iteratorAnalysis(Loop *loop)
         }
     }
     // step 2: identify loop boundary operations
+    if (loop->id == 9)
+        cout << "Call A" << endl;
     if (!finalValueAnalysis(loop))
         return false;
 
@@ -441,6 +451,8 @@ bool postIteratorAnalysis(janus::Loop *loop)
         if (foundNewIterator) {
             // Only redo the iterator analysis if we've found a new iterator in
             // the undecided variables
+            if (loop->id == 9)
+                cout << "Call B" << endl;
             finalValueAnalysis(loop);
 
             // assign loop iterators again

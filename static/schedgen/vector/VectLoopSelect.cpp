@@ -109,7 +109,7 @@ bool isVectorRuntimeCompatible(Loop &loop, set<InstOp> &supported_opcode,
                 // check reduction read
             }
 
-            for (auto vi : instr.inputs) {
+            for (auto vi : parent->getCFG().getSSAVarRead(instr)) {
                 if (vi->type == JVAR_ABSOLUTE) {
                     LOOPLOGLINE("loop " << dec << loop.id
                                         << " unsupported operand: " << vi);
@@ -117,7 +117,7 @@ bool isVectorRuntimeCompatible(Loop &loop, set<InstOp> &supported_opcode,
                 }
             }
 
-            for (auto vo : instr.outputs) {
+            for (auto vo : parent->getCFG().getSSAVarWrite(instr)) {
                 if (vo->type == JVAR_ABSOLUTE) {
                     LOOPLOGLINE("loop " << dec << loop.id
                                         << " unsupported operand: " << vo);

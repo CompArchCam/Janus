@@ -77,9 +77,9 @@ class Instruction
     PCAddress pc;
 
     /// Set of input variables in SSA form.
-    std::vector<VarState *> inputs;
+    /* std::vector<VarState *> inputs; */
     /// Set of output variables in SSA form.
-    std::vector<VarState *> outputs;
+    /* std::vector<VarState *> outputs; */
     /// Immediate control dependent instruction
     // std::vector<Instruction *> controlDep;
     /// Pointer to the belonging basic block

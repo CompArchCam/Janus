@@ -298,7 +298,6 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg) : PCFG(cfg)
 {
     buildDominanceTree();
     buildDominanceFrontiers();
-    PCFG::func.domTree = domTree;
 }
 
 template <DomInput PCFG>
@@ -382,7 +381,6 @@ PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
 {
     buildPostDominanceTree();
     buildPostDominanceFrontiers();
-    PCFG::func.pdomTree = pdomTree;
 }
 
 template <PostDomInput PCFG>

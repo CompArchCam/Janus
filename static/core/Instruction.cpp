@@ -208,16 +208,18 @@ void Instruction::getInputs(std::vector<Variable> &v)
 
 bool Instruction::isMemoryAccess()
 {
+    Function *parent = block->parentFunction;
+
     if (opcode == Nop)
         return false;
-    for (auto vs : inputs) {
+    for (auto vs : parent->getCFG().getSSAVarRead(*this)) {
         if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME ||
             vs->type == JVAR_MEMORY || vs->type == JVAR_ABSOLUTE) {
             return true;
         }
     }
 
-    for (auto vs : outputs) {
+    for (auto vs : parent->getCFG().getSSAVarWrite(*this)) {
         if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME ||
             vs->type == JVAR_MEMORY || vs->type == JVAR_ABSOLUTE) {
             return true;
@@ -238,10 +240,15 @@ bool Instruction::isVectorInstruction()
 MemoryInstruction::MemoryInstruction(Instruction *instr)
     : instr(instr), mem(NULL), nonMem(NULL), type(Unknown)
 {
+    const auto instrInputs =
+        instr->block->parentFunction->getCFG().getSSAVarRead(*instr);
+    const auto instrOutputs =
+        instr->block->parentFunction->getCFG().getSSAVarWrite(*instr);
+
     // corner case
     if (instr->opcode == Instruction::Compare) {
         type = ReadAndRead;
-        for (auto vs : instr->inputs) {
+        for (auto vs : instrInputs) {
             if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME ||
                 vs->type == JVAR_MEMORY || vs->type == JVAR_ABSOLUTE) {
                 mem = vs;
@@ -251,7 +258,7 @@ MemoryInstruction::MemoryInstruction(Instruction *instr)
         return;
     }
 
-    for (auto vs : instr->inputs) {
+    for (auto vs : instrInputs) {
         if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME ||
             vs->type == JVAR_MEMORY || vs->type == JVAR_ABSOLUTE) {
             type = Read;
@@ -260,7 +267,7 @@ MemoryInstruction::MemoryInstruction(Instruction *instr)
         }
     }
 
-    for (auto vs : instr->outputs) {
+    for (auto vs : instrOutputs) {
         if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME ||
             vs->type == JVAR_MEMORY || vs->type == JVAR_ABSOLUTE) {
             if (type == Read) {
@@ -281,21 +288,21 @@ MemoryInstruction::MemoryInstruction(Instruction *instr)
 
     // work out the non-mem part
     if (type == Read) {
-        for (auto vs : instr->outputs) {
+        for (auto vs : instrOutputs) {
             if (vs != mem) {
                 nonMem = vs;
                 break;
             }
         }
     } else if (type == Write) {
-        for (auto vs : instr->inputs) {
+        for (auto vs : instrInputs) {
             if (vs != mem) {
                 nonMem = vs;
                 break;
             }
         }
     } else if (type == ReadAndWrite) {
-        for (auto vs : instr->inputs) {
+        for (auto vs : instrInputs) {
             Variable read = (Variable)*mem;
             Variable write = (Variable)*vs;
             if (vs != mem) {

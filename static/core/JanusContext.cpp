@@ -29,63 +29,23 @@ JanusContext::JanusContext(const char *name, JMode mode)
 
 void JanusContext::buildProgramDependenceGraph()
 {
-    std::map<FuncID, std::shared_ptr<PostDominanceAnalysis<
-                         DominanceAnalysis<ControlFlowGraph>>>>
-        store;
     GSTEP("Building basic blocks: ");
     uint32_t numBlocks = 0;
+    uint32_t numInstrLifted = 0;
     /* Step 1: build CFG for each function */
     for (auto &func : functions) {
         if (func.isExecutable) {
-            numBlocks += func.getCFG().blocks.size();
-            if (func.getCFG().numBlocks <= 1) {
-                continue;
-            }
-            auto pcfg = make_shared<
-                PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>(
-                PostDominanceAnalysis(DominanceAnalysis(func.getCFG())));
-            auto pcfg_object =
-                PostDominanceAnalysis(DominanceAnalysis(func.getCFG()));
-            func.pcfg = pcfg;
-            // this is some very bad syntax; the better solution would be to
-            // provide a deduction guide for
-            store[func.fid] = pcfg;
+            auto preLoopAnalysis =
+                make_unique<decltype(func.cfg)::element_type>(
+                    SSAGraph(InstructionControlDependence(PostDominanceAnalysis(
+                        DominanceAnalysis(ControlFlowGraph(func))))));
+            numBlocks += preLoopAnalysis->blocks.size();
+            numInstrLifted += preLoopAnalysis->instructionLiftCount;
+            func.cfg = std::move(preLoopAnalysis);
         }
     }
-    GSTEPCONT(numBlocks << " blocks" << endl);
-
-    /* Step 2: lift the disassembly to IR (the CFG must be ready) */
-    GSTEP("Lifting disassembly to IR: ");
-    uint32_t numInstrs = 0;
-    for (auto &func : functions) {
-        if (func.isExecutable && !func.getCFG().blocks.empty()) {
-            numInstrs += liftInstructions(&func);
-        }
-    }
-    GSTEPCONT(numInstrs << " instructions lifted" << endl);
-
-    // Step 3 : construct SSA graph GSTEP("Building SSA graphs" << endl);
-    for (auto &func : functions) {
-        if (func.isExecutable && !func.getCFG().blocks.empty()) {
-            // The external storage need to handle this explicitly
-            // XXX: note that the responsiblity to check the file exist is now
-            // on the caller
-            if (store.contains(func.fid)) {
-                auto x = SSAGraph(*store[func.fid]);
-                func.ssa = make_shared<decltype(x)>(x);
-            }
-        }
-    }
-
-    /* Step 4: construct Control Dependence Graph */
-    GSTEP("Building control dependence graphs" << endl);
-    for (auto &func : functions) {
-        if (func.isExecutable && !func.getCFG().blocks.empty()) {
-            if (store.contains(func.fid)) {
-                auto x = InstructionControlDependence(*store[func.fid]);
-            }
-        }
-    }
+    cout << numBlocks << " blocks" << endl;
+    cout << numInstrLifted << " instructions are lifted to IR" << endl;
 }
 
 static void loopAnalysisFirstPass(JanusContext *jc)

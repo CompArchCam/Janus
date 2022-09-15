@@ -112,7 +112,7 @@ void printSSADot(janus::Function &function, void *outputStream)
     os << "node [style=\"rounded,filled\"]" << endl;
 
     // print nodes
-    for (auto vs : function.allStates) {
+    for (auto &vs : function.getCFG().ssaVariables) {
         if (vs->notUsed)
             continue;
         if (vs->isPHI) {
@@ -151,10 +151,10 @@ void printSSADot(janus::Function &function, void *outputStream)
 
     // print edges
     for (auto &instr : function.instrs) {
-        for (auto vs : instr.inputs) {
+        for (auto vs : function.getCFG().getSSAVarRead(instr)) {
             os << "V" << dec << vs->id << " -> I" << instr.id << ";" << endl;
         }
-        for (auto vs : instr.outputs) {
+        for (auto vs : function.getCFG().getSSAVarWrite(instr)) {
             if (vs->notUsed)
                 continue;
             os << "I" << dec << instr.id << " -> V" << vs->id << ";" << endl;
@@ -162,7 +162,7 @@ void printSSADot(janus::Function &function, void *outputStream)
     }
 
     // print phi node and memory edges
-    for (auto vs : function.allStates) {
+    for (auto &vs : function.getCFG().ssaVariables) {
         if (vs->notUsed)
             continue;
         if (vs->isPHI) {
@@ -202,6 +202,8 @@ static void addPredRecurisve(VarState *vs, set<VarState *> &loopNodeExpanded)
 
 void printSSADot(janus::Loop &loop, void *outputStream)
 {
+    Function *parent = loop.parent;
+
     std::ostream &os = *(std::ostream *)outputStream;
     os << "digraph Loop_" << loop.id << "_SSA {" << endl;
     os << "label=\"Loop " << loop.id
@@ -217,10 +219,10 @@ void printSSADot(janus::Loop &loop, void *outputStream)
         BasicBlock &bb = entry[bid];
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
-            for (auto vs : instr.inputs) {
+            for (auto vs : parent->getCFG().getSSAVarRead(instr)) {
                 loopNodes.insert(vs);
             }
-            for (auto vs : instr.outputs) {
+            for (auto vs : parent->getCFG().getSSAVarWrite(instr)) {
                 loopNodes.insert(vs);
             }
         }
@@ -288,11 +290,11 @@ void printSSADot(janus::Loop &loop, void *outputStream)
         BasicBlock &bb = entry[bid];
         for (int i = 0; i < bb.size; i++) {
             Instruction &instr = bb.instrs[i];
-            for (auto vs : instr.inputs) {
+            for (auto vs : parent->getCFG().getSSAVarRead(instr)) {
                 os << "V" << dec << vs->id << " -> I" << instr.id << ";"
                    << endl;
             }
-            for (auto vs : instr.outputs) {
+            for (auto vs : parent->getCFG().getSSAVarWrite(instr)) {
                 if (vs->notUsed)
                     continue;
                 os << "I" << dec << instr.id << " -> V" << vs->id << ";"

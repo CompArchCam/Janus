@@ -2,8 +2,8 @@
 
 #include "Arch.h"
 #include "BasicBlock.h"
-#include "janus_arch.h"
 #include "Function.h"
+#include "janus_arch.h"
 #include <set>
 
 using namespace janus;
@@ -220,7 +220,7 @@ void analyseStack(Function *function)
         int max_offset = 0;
         int min_offset = 0;
         /* Work out the implicit stack usages*/
-        for (auto var : function->allVars) {
+        for (auto var : function->getCFG().variables) {
             if (var.type == JVAR_STACK) {
                 int offset = var.value;
                 if (max_offset < offset)
