@@ -24,11 +24,11 @@ void buildASTGraph(Function *function)
 
     // step 1: for each variable state (SSA node), reserve space for an
     // expression
-    for (auto vs : function->allStates) {
+    for (auto &vs : function->allStates) {
         // skip expression that has already been constructed
         if (vs->expr)
             continue;
-        Expr *expr = new Expr(vs);
+        Expr *expr = new Expr(vs.get());
         vs->expr = expr;
         exprs.insert(expr);
     }

@@ -112,7 +112,7 @@ void printSSADot(janus::Function &function, void *outputStream)
     os << "node [style=\"rounded,filled\"]" << endl;
 
     // print nodes
-    for (auto vs : function.allStates) {
+    for (auto &vs : function.allStates) {
         if (vs->notUsed)
             continue;
         if (vs->isPHI) {
@@ -162,7 +162,7 @@ void printSSADot(janus::Function &function, void *outputStream)
     }
 
     // print phi node and memory edges
-    for (auto vs : function.allStates) {
+    for (auto &vs : function.allStates) {
         if (vs->notUsed)
             continue;
         if (vs->isPHI) {

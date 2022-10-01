@@ -6,6 +6,7 @@
 #include "Utility.h"
 #include "Variable.h"
 #include <iostream>
+#include <memory>
 #include <vector>
 
 namespace janus

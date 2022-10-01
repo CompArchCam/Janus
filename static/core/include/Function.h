@@ -56,7 +56,7 @@ class Function
     /// Set of variables used in this function
     std::set<Variable> allVars;
     /// Set of all SSA variables ever defined (or used) in this function
-    std::set<VarState *> allStates;
+    std::set<std::unique_ptr<VarState>> allStates;
     /// Entry block of the function CFG
     // BasicBlock *entry;
     /// Block size

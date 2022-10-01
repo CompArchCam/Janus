@@ -56,13 +56,13 @@ void JanusContext::buildProgramDependenceGraph()
 
     /* Step 2: lift the disassembly to IR (the CFG must be ready) */
     GSTEP("Lifting disassembly to IR: ");
-    uint32_t numInstrs = 0;
-    for (auto &func : functions) {
-        if (func.isExecutable && !func.getCFG().blocks.empty()) {
-            numInstrs += liftInstructions(&func);
-        }
-    }
-    GSTEPCONT(numInstrs << " instructions lifted" << endl);
+    // uint32_t numInstrs = 0;
+    // for (auto &func : functions) {
+    //     if (func.isExecutable && !func.getCFG().blocks.empty()) {
+    //         numInstrs += initVariable(&func);
+    //     }
+    // }
+    // GSTEPCONT(numInstrs << " instructions lifted" << endl);
 
     // Step 3 : construct SSA graph GSTEP("Building SSA graphs" << endl);
     for (auto &func : functions) {

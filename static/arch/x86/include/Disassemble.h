@@ -14,7 +14,7 @@ void disassemble(janus::Function *function);
 /// independent Instruction
 janus::Instruction::Opcode liftOpcode(janus::MachineInstruction *minstr);
 /// Lift the machine instruction to abstract instructions
-int liftInstructions(janus::Function *function);
+int initVariable(janus::Function *function);
 /// Fill the variable input of the instruction, include implicit variables
 void getInstructionInputs(janus::MachineInstruction *minstr,
                           std::vector<janus::Variable> &v);
