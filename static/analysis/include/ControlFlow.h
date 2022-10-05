@@ -136,6 +136,20 @@ class DominanceAnalysis : public ProcessedCFG
     /// Constructor
     DominanceAnalysis(const ProcessedCFG &);
 
+    /*
+     * Implementation Note: why use std::shared_ptr here?
+     * Since each analysis object is designed to be copy constructible, using
+     * shared_ptr allows the pointer to the object holding the results to
+     * be copied, rather than the results themselves. In addition, using
+     * smart pointers makes sure that the object is deleted after the last
+     * reference to the object goes out of scope, thus avoiding memory leaks.
+     *
+     * In cases where the results (or any field for the matter) should not be
+     * copied and whose ownership should belong solely to a single analysis
+     * object, use std::unique_ptr instead. The object allocated on the heap
+     * will get deleted once the std::unique_ptr goes out of scope.
+     */
+
     /// The root of the dominator tree (indexed by blockID) for the CFG in this
     /// function
     std::shared_ptr<std::vector<janus::BitVector>> domTree;

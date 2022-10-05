@@ -298,7 +298,7 @@ DominanceAnalysis<PCFG>::DominanceAnalysis(const PCFG &cfg) : PCFG(cfg)
 {
     buildDominanceTree();
     buildDominanceFrontiers();
-    PCFG::func.domTree = domTree;
+    // PCFG::func.domTree = domTree;
 }
 
 template <DomInput PCFG>
@@ -309,8 +309,8 @@ void DominanceAnalysis<PCFG>::buildDominanceTree()
         return;
 
     // construct a two dimensional dominator tree
-    domTree =
-        make_shared<vector<BitVector>>(size, BitVector(size, uint32_t(-1)));
+    domTree = std::make_shared<vector<BitVector>>(
+        size, BitVector(size, uint32_t(-1)));
     vector<BitVector> &curdomTree = *domTree;
 
     //[> initialisation <]
@@ -382,7 +382,7 @@ PostDominanceAnalysis<PCFG>::PostDominanceAnalysis(const PCFG &pcfg)
 {
     buildPostDominanceTree();
     buildPostDominanceFrontiers();
-    PCFG::func.pdomTree = pdomTree;
+    // PCFG::func.pdomTree = pdomTree;
 }
 
 template <PostDomInput PCFG>
@@ -410,8 +410,8 @@ void PostDominanceAnalysis<PCFG>::buildPostDominanceTree()
     }
 
     // construct a two dimensional post dominance tree
-    pdomTree =
-        make_shared<vector<BitVector>>(size, BitVector(size, uint32_t(-1)));
+    pdomTree = std::make_shared<vector<BitVector>>(
+        size, BitVector(size, uint32_t(-1)));
     vector<BitVector> &curpdomTree = *pdomTree;
 
     // initialisation from the terminator node

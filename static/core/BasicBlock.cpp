@@ -57,14 +57,26 @@ BasicBlock::BasicBlock(Function *func, BlockID bid, InstID startInstID,
 
 Instruction *BasicBlock::lastInstr() { return &(instrs[size - 1]); }
 
-bool BasicBlock::dominates(BasicBlock &block)
+bool BasicBlock::dominates(const BasicBlock &block) const
 {
-    return (*parentFunction->domTree)[block.bid].contains(bid);
+    const auto &domTree = *(parentFunction->getSSA().domTree);
+    if (block.bid < domTree.size()) {
+        return domTree.at(block.bid).contains(bid);
+    } else {
+        return false;
+    }
+    // return (*parentFunction->getSSA().domTree)[block.bid].contains(bid);
 }
 
-bool BasicBlock::dominates(BasicBlock *block)
+bool BasicBlock::dominates(const BasicBlock *block) const
 {
-    return (*parentFunction->domTree)[block->bid].contains(bid);
+    const auto &domTree = *(parentFunction->getSSA().domTree);
+    if (block->bid < domTree.size()) {
+        return domTree.at(block->bid).contains(bid);
+    } else {
+        return false;
+    }
+    // return (*parentFunction->getSSA().domTree)[block->bid].contains(bid);
 }
 
 // DFS through ancestors to find the closest definition

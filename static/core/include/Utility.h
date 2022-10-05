@@ -3,12 +3,29 @@
 
 #include "janus.h"
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
 namespace janus
 {
+// clang-format off
+
+/// \brief Utility function to allow "janus::make_unique_ptr(new [Constructor])"
+/// syntax so that we can create smart pointers with template argument deduction.
+///
+/// This function does not allow the type the unique_ptr references to be a pointer
+/// itself, so as to avoid the problem where T is implicitly an array and must be deleted
+/// with "delete[]" rather than "delete" (one of the original reasons why template
+/// deduction is not supported with std::unique_ptr in the first place).
+template<typename T>
+requires(!std::is_pointer_v<T>)
+auto make_unique_ptr(T* t) -> std::unique_ptr<T>
+{
+    return std::unique_ptr<T>(t);
+}
+// clang-format on
 
 class RegSet
 {
@@ -73,7 +90,7 @@ class BitVector
     void insert(uint32_t bitPos);
     /** \brief Resets the given bit */
     void remove(uint32_t bitPos);
-    bool contains(uint32_t bitPos);
+    bool contains(uint32_t bitPos) const;
     void clear();
     void setUniversal();
     void merge(BitVector &bv);

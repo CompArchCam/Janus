@@ -65,10 +65,10 @@ class Function
     // std::vector<BasicBlock> blocks;
     /// The root of the dominator tree (indexed by blockID) for the CFG in this
     /// function
-    std::shared_ptr<std::vector<BitVector>> domTree;
+    // std::shared_ptr<std::vector<BitVector>> domTree;
     /// The root of the post dominator tree (indexed by blockID) for the CFG in
     /// this function
-    std::shared_ptr<std::vector<BitVector>> pdomTree;
+    // std::shared_ptr<std::vector<BitVector>> pdomTree;
 
     /* --------------------------------------------------------------
      *                    query data structure
@@ -99,10 +99,10 @@ class Function
     /// Unique pointer to the control flow graph
     std::unique_ptr<ControlFlowGraph> cfg;
     /// Unique pointer to processed cfg; very bad indeed
-    std::shared_ptr<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>
+    std::unique_ptr<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>
         pcfg;
     /// Check
-    std::shared_ptr<
+    std::unique_ptr<
         SSAGraph<PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>>
         ssa;
 
@@ -170,6 +170,7 @@ class Function
     /** \brief creates the cfg is not present; otherwise return the cfg object
      */
     ControlFlowGraph &getCFG();
+    auto getSSA() -> decltype(*ssa);
 };
 } // namespace janus
 

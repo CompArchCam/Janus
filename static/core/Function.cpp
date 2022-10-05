@@ -352,3 +352,5 @@ ControlFlowGraph &Function::getCFG()
     }
     return *cfg;
 }
+
+auto Function::getSSA() -> decltype(*ssa) { return *ssa; }

@@ -29,9 +29,6 @@ JanusContext::JanusContext(const char *name, JMode mode)
 
 void JanusContext::buildProgramDependenceGraph()
 {
-    std::map<FuncID, std::shared_ptr<PostDominanceAnalysis<
-                         DominanceAnalysis<ControlFlowGraph>>>>
-        store;
     GSTEP("Building basic blocks: ");
     uint32_t numBlocks = 0;
     /* Step 1: build CFG for each function */
@@ -41,15 +38,10 @@ void JanusContext::buildProgramDependenceGraph()
             if (func.getCFG().numBlocks <= 1) {
                 continue;
             }
-            auto pcfg = make_shared<
-                PostDominanceAnalysis<DominanceAnalysis<ControlFlowGraph>>>(
-                PostDominanceAnalysis(DominanceAnalysis(func.getCFG())));
-            auto pcfg_object =
-                PostDominanceAnalysis(DominanceAnalysis(func.getCFG()));
-            func.pcfg = pcfg;
+            func.pcfg = janus::make_unique_ptr(
+                new PostDominanceAnalysis(DominanceAnalysis(func.getCFG())));
             // this is some very bad syntax; the better solution would be to
             // provide a deduction guide for
-            store[func.fid] = pcfg;
         }
     }
     GSTEPCONT(numBlocks << " blocks" << endl);
@@ -66,26 +58,23 @@ void JanusContext::buildProgramDependenceGraph()
 
     // Step 3 : construct SSA graph GSTEP("Building SSA graphs" << endl);
     for (auto &func : functions) {
-        if (func.isExecutable && !func.getCFG().blocks.empty()) {
+        if (func.isExecutable && !func.getCFG().blocks.empty() && func.pcfg) {
             // The external storage need to handle this explicitly
             // XXX: note that the responsiblity to check the file exist is now
             // on the caller
-            if (store.contains(func.fid)) {
-                auto x = SSAGraph(*store[func.fid]);
-                func.ssa = make_shared<decltype(x)>(x);
-            }
+            func.ssa = janus::make_unique_ptr(new SSAGraph(*func.pcfg));
         }
     }
 
-    /* Step 4: construct Control Dependence Graph */
-    GSTEP("Building control dependence graphs" << endl);
-    for (auto &func : functions) {
-        if (func.isExecutable && !func.getCFG().blocks.empty()) {
-            if (store.contains(func.fid)) {
-                auto x = InstructionControlDependence(*store[func.fid]);
-            }
-        }
-    }
+    // /* Step 4: construct Control Dependence Graph */
+    // GSTEP("Building control dependence graphs" << endl);
+    // for (auto &func : functions) {
+    //     if (func.isExecutable && !func.getCFG().blocks.empty()) {
+    //         if (store.contains(func.fid)) {
+    //             auto x = InstructionControlDependence(*store[func.fid]);
+    //         }
+    //     }
+    // }
 }
 
 static void loopAnalysisFirstPass(JanusContext *jc)

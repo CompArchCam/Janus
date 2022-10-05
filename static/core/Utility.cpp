@@ -135,7 +135,7 @@ void BitVector::remove(uint32_t bitPos)
     blocks[block_id] = blocks[block_id] & (~(1 << (bitPos % 32)));
 }
 
-bool BitVector::contains(uint32_t bitPos)
+bool BitVector::contains(uint32_t bitPos) const
 {
     uint32_t block_id = bitPos / 32;
     GASSERT(block_id <= blocks.size(), "bit position out of range");
