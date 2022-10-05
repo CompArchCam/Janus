@@ -277,7 +277,7 @@ void ControlFlowGraph::buildBasicBlocks(
 }
 
 ControlFlowGraph::ControlFlowGraph(Function &function)
-    : cfg(make_unique<CFG>(function)), func(cfg->func), blocks(cfg->bs),
+    : cfg(std::make_shared<CFG>(function)), func(cfg->func), blocks(cfg->bs),
       unRecognised(cfg->urs), terminations(cfg->ts), returnBlocks(cfg->rbs),
       blockSplitInstrs(cfg->bsis)
 {
