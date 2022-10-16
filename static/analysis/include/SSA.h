@@ -35,6 +35,8 @@ class SSAGraph : public DomCFG
   public:
     SSAGraph(const DomCFG &);
 
+    std::set<std::unique_ptr<janus::VarState>> ssaVars;
+
   private:
     uint32_t count = 0;
 
@@ -159,7 +161,7 @@ void SSAGraph<DomCFG>::buildSSAGraph()
      * Used for human-readable SSA */
     int id = 0;
     map<Variable, int> versions;
-    for (auto &vs : DomCFG::func.allStates) {
+    for (auto &vs : ssaVars) {
         vs->id = id++;
         auto var = (Variable)(*vs);
         int version = versions[var];
@@ -271,7 +273,7 @@ SSAGraph<DomCFG>::getOrInitVarState(Variable var,
         std::unique_ptr<VarState> vs =
             make_unique<VarState>(var, DomCFG::entry, false);
         auto res = vs.get();
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
         return res;
     }
 
@@ -280,7 +282,7 @@ SSAGraph<DomCFG>::getOrInitVarState(Variable var,
         std::unique_ptr<VarState> vs =
             make_unique<VarState>(var, DomCFG::entry, false);
         auto res = vs.get();
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
         linkMemoryNodes(var, res, latestDefs);
         return res;
     }
@@ -289,7 +291,7 @@ SSAGraph<DomCFG>::getOrInitVarState(Variable var,
         std::unique_ptr<VarState> vs =
             make_unique<VarState>(var, DomCFG::entry, false);
         auto res = vs.get();
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
         linkShiftedNodes(var, res, latestDefs);
         return res;
     }
@@ -306,7 +308,7 @@ SSAGraph<DomCFG>::getOrInitVarState(Variable var,
         std::unique_ptr<VarState> vs2 =
             std::make_unique<VarState>(var, DomCFG::entry, false);
         vs = vs2.get();
-        DomCFG::func.allStates.insert(std::move(vs2));
+        ssaVars.insert(std::move(vs2));
         latestDefs[var] = vs;
         DomCFG::func.inputStates[var] = vs;
     }
@@ -316,7 +318,7 @@ SSAGraph<DomCFG>::getOrInitVarState(Variable var,
 template <SSARequirement DomCFG>
 void SSAGraph<DomCFG>::createSuccFromPred()
 {
-    for (auto &vs : DomCFG::func.allStates) {
+    for (auto &vs : ssaVars) {
         for (VarState *vsPred : vs->pred) {
             vsPred->succ.insert(vs.get());
         }
@@ -420,7 +422,7 @@ void SSAGraph<DomCFG>::linkMemoryNodes(Variable var, VarState *vs,
         std::unique_ptr<VarState> ivs =
             std::make_unique<VarState>(ivar, DomCFG::entry, false);
         vs->pred.insert(ivs.get());
-        DomCFG::func.allStates.insert(std::move(ivs));
+        ssaVars.insert(std::move(ivs));
     }
 }
 
@@ -434,7 +436,7 @@ void SSAGraph<DomCFG>::linkShiftedNodes(Variable var, VarState *vs,
     std::unique_ptr<VarState> shiftvs =
         make_unique<VarState>(immedShift, DomCFG::entry, false);
     vs->pred.insert(shiftvs.get());
-    DomCFG::func.allStates.insert(std::move(shiftvs));
+    ssaVars.insert(std::move(shiftvs));
 
     if (var.type == JVAR_SHIFTEDCONST) {
         Variable immedVal;
@@ -443,7 +445,7 @@ void SSAGraph<DomCFG>::linkShiftedNodes(Variable var, VarState *vs,
         std::unique_ptr<VarState> immedvs =
             make_unique<VarState>(immedVal, DomCFG::entry, false);
         vs->pred.insert(immedvs.get());
-        DomCFG::func.allStates.insert(std::move(immedvs));
+        ssaVars.insert(std::move(immedvs));
     } else if (var.type == JVAR_SHIFTEDREG) {
         VarState *regState =
             getOrInitVarState(Variable((uint32_t)var.value), latestDefs);
@@ -564,7 +566,7 @@ void SSAGraph<DomCFG>::insertPhiNodes(Variable var)
         // insert phi node
         bb->phiNodes.push_back(vs.get());
         // record the variable state in the function's global state buffer.
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
     }
 }
 
@@ -605,7 +607,7 @@ void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
             std::unique_ptr<VarState> vs =
                 std::make_unique<VarState>(var, block, &instr);
             instr.outputs.push_back(vs.get());
-            DomCFG::func.allStates.insert(std::move(vs));
+            ssaVars.insert(std::move(vs));
         }
     }
 
@@ -617,7 +619,7 @@ void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
         std::unique_ptr<VarState> vs =
             std::make_unique<VarState>(var, block, &instr);
         instr.outputs.push_back(vs.get());
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
     }
 
     // imul
@@ -629,12 +631,12 @@ void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
         std::unique_ptr<VarState> vs =
             std::make_unique<VarState>(var, block, &instr);
         instr.outputs.push_back(vs.get());
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
         Variable var2((uint32_t)JREG_RDX);
         std::unique_ptr<VarState> vs2 =
             std::make_unique<VarState>(var2, block, &instr);
         instr.outputs.push_back(vs2.get());
-        DomCFG::func.allStates.insert(std::move(vs2));
+        ssaVars.insert(std::move(vs2));
     }
 
     // call
@@ -644,12 +646,12 @@ void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
         std::unique_ptr<VarState> vs =
             make_unique<VarState>(var, block, &instr);
         instr.outputs.push_back(vs.get());
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
         Variable var2((uint32_t)JREG_XMM0);
         std::unique_ptr<VarState> vs2 =
             std::make_unique<VarState>(var2, block, &instr);
         instr.outputs.push_back(vs2.get());
-        DomCFG::func.allStates.insert(std::move(vs2));
+        ssaVars.insert(std::move(vs2));
     }
 
     // push or pop
@@ -658,14 +660,14 @@ void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
         std::unique_ptr<VarState> vs =
             make_unique<VarState>(var, block, &instr);
         instr.outputs.push_back(vs.get());
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
         if (minstr->opcode == X86_INS_POP) {
             for (int i = 0; i < minstr->opndCount; i++) {
                 Variable var =
                     minstr->operands[i].lift(instr.pc + instr.minstr->pc);
                 vs = std::make_unique<VarState>(var, block, &instr);
                 instr.outputs.push_back(vs.get());
-                DomCFG::func.allStates.insert(std::move(vs));
+                ssaVars.insert(std::move(vs));
             }
         }
     }
@@ -675,7 +677,7 @@ void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
         std::unique_ptr<VarState> vs =
             std::make_unique<VarState>(var, block, &instr);
         instr.outputs.push_back(vs.get());
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
     }
 
     else if (minstr->opcode == X86_INS_MOVDQU ||
@@ -686,7 +688,7 @@ void SSAGraph<DomCFG>::initVariables(janus::Instruction &instr)
         std::unique_ptr<VarState> vs =
             std::make_unique<VarState>(var, block, &instr);
         instr.outputs.push_back(vs.get());
-        DomCFG::func.allStates.insert(std::move(vs));
+        ssaVars.insert(std::move(vs));
     }
 }
 

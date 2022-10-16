@@ -9,8 +9,9 @@
 #include <set>
 #include <vector>
 
-namespace janus {
-    class Function;
+namespace janus
+{
+class Function;
 }
 
 /// Direct translation matrix for capstone register sets

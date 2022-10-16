@@ -112,30 +112,31 @@ void printSSADot(janus::Function &function, void *outputStream)
     os << "node [style=\"rounded,filled\"]" << endl;
 
     // print nodes
-    for (auto &vs : function.allStates) {
-        if (vs->notUsed)
-            continue;
-        if (vs->isPHI) {
-            os << "V" << dec << vs->id << " [label=\"" << vs << " in BB" << dec
-               << vs->block->bid << "\"";
-            if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME)
-                os << ",fillcolor=dodgerblue";
-            else
-                os << ",fillcolor=cyan";
-            os << ",shape=\"diamond\"];" << endl;
-        } else if (vs->type == JVAR_MEMORY) {
-            os << "V" << dec << vs->id << " [label=\"" << vs
-               << "\",fillcolor=indigo,fontcolor=white,shape=box];" << endl;
-        } else if (vs->type == JVAR_POLYNOMIAL) {
-            os << "V" << dec << vs->id << " [label=\"" << vs
-               << "\",fillcolor=pink,shape=box];" << endl;
-        } else {
-            os << "V" << dec << vs->id << " [label=\"" << vs << "\"";
-            if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME)
-                os << ",fillcolor=dodgerblue";
-            os << ",shape=\"box\"];" << endl;
+    if (function.ssa)
+        for (auto &vs : function.ssa->ssaVars) {
+            if (vs->notUsed)
+                continue;
+            if (vs->isPHI) {
+                os << "V" << dec << vs->id << " [label=\"" << vs << " in BB"
+                   << dec << vs->block->bid << "\"";
+                if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME)
+                    os << ",fillcolor=dodgerblue";
+                else
+                    os << ",fillcolor=cyan";
+                os << ",shape=\"diamond\"];" << endl;
+            } else if (vs->type == JVAR_MEMORY) {
+                os << "V" << dec << vs->id << " [label=\"" << vs
+                   << "\",fillcolor=indigo,fontcolor=white,shape=box];" << endl;
+            } else if (vs->type == JVAR_POLYNOMIAL) {
+                os << "V" << dec << vs->id << " [label=\"" << vs
+                   << "\",fillcolor=pink,shape=box];" << endl;
+            } else {
+                os << "V" << dec << vs->id << " [label=\"" << vs << "\"";
+                if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME)
+                    os << ",fillcolor=dodgerblue";
+                os << ",shape=\"box\"];" << endl;
+            }
         }
-    }
 
     for (auto &instr : function.instrs) {
         if (instr.opcode == Instruction::Nop)
@@ -162,25 +163,29 @@ void printSSADot(janus::Function &function, void *outputStream)
     }
 
     // print phi node and memory edges
-    for (auto &vs : function.allStates) {
-        if (vs->notUsed)
-            continue;
-        if (vs->isPHI) {
-            for (auto phi : vs->pred) {
-                os << "V" << dec << phi->id << " -> V" << vs->id << ";" << endl;
+    if (function.ssa)
+        for (auto &vs : function.ssa->ssaVars) {
+            if (vs->notUsed)
+                continue;
+            if (vs->isPHI) {
+                for (auto phi : vs->pred) {
+                    os << "V" << dec << phi->id << " -> V" << vs->id << ";"
+                       << endl;
+                }
+            }
+            if (vs->type == JVAR_MEMORY || vs->type == JVAR_POLYNOMIAL) {
+                for (auto vi : vs->pred) {
+                    os << "V" << dec << vi->id << " -> V" << vs->id << ";"
+                       << endl;
+                }
+            }
+            if (vs->type == JVAR_SHIFTEDCONST || vs->type == JVAR_SHIFTEDREG) {
+                for (auto vi : vs->pred) {
+                    os << "V" << dec << vi->id << " -> V" << vs->id << ";"
+                       << endl;
+                }
             }
         }
-        if (vs->type == JVAR_MEMORY || vs->type == JVAR_POLYNOMIAL) {
-            for (auto vi : vs->pred) {
-                os << "V" << dec << vi->id << " -> V" << vs->id << ";" << endl;
-            }
-        }
-        if (vs->type == JVAR_SHIFTEDCONST || vs->type == JVAR_SHIFTEDREG) {
-            for (auto vi : vs->pred) {
-                os << "V" << dec << vi->id << " -> V" << vs->id << ";" << endl;
-            }
-        }
-    }
     os << "}" << endl << endl;
 }
 

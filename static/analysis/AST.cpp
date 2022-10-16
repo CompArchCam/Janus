@@ -16,7 +16,7 @@ void buildASTGraph(Function *function)
     // check if SSA graph is present
     if (!function)
         return;
-    if (!function->allStates.size()) {
+    if (!function->ssa->ssaVars.size()) {
         cerr << "function " << function->name
              << " SSA not present in AST construction" << endl;
         return;
@@ -24,14 +24,15 @@ void buildASTGraph(Function *function)
 
     // step 1: for each variable state (SSA node), reserve space for an
     // expression
-    for (auto &vs : function->allStates) {
-        // skip expression that has already been constructed
-        if (vs->expr)
-            continue;
-        Expr *expr = new Expr(vs.get());
-        vs->expr = expr;
-        exprs.insert(expr);
-    }
+    if (function->ssa)
+        for (auto &vs : function->ssa->ssaVars) {
+            // skip expression that has already been constructed
+            if (vs->expr)
+                continue;
+            Expr *expr = new Expr(vs.get());
+            vs->expr = expr;
+            exprs.insert(expr);
+        }
 
     // step 2: create additional expressions for SSA node corner cases
     // copy existing nodes

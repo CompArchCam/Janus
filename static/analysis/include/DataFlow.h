@@ -33,6 +33,7 @@
  *
  * TODO: change this when we move instructions out of the function class
  */
+
 template <typename T>
 concept DataFlowInput = requires
 {

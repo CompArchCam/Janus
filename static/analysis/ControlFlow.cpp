@@ -52,7 +52,7 @@ void ControlFlowGraph::buildBasicBlocks(
             if (instr.opcode == Instruction::ConditionalBranch)
                 marks[id + offset] += BB_LEADER;
 
-            while (id < instrCount - 2 &&
+            while (id < instrCount - 2 && id + offset < instrs.size() &&
                    instrs[id + offset].opcode == Instruction::Nop) {
                 offset++;
             }

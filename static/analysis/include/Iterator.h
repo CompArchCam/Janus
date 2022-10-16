@@ -30,9 +30,9 @@ class Iterator
   public:
     enum IteratorKind {
         ITERATOR_NONE,
-        INDUCTION_IMM, // induction whose stride is immediate value
-        INDUCTION_VAR, // induction stride is a constant variable (stack,
-                       // absolute)
+        INDUCTION_IMM,    // induction whose stride is immediate value
+        INDUCTION_VAR,    // induction stride is a constant variable (stack,
+                          // absolute)
         ITER_LINKED_LIST, // the iterator is a linked list
         ITER_GENERIC,     // the iterator update can have a fixed expression
         REDUCTION_PLUS    // a reduction variable with plus operation

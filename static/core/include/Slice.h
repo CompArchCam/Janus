@@ -23,7 +23,7 @@ class Slice
     enum SliceScope {
         GeneralScope, /// An incomplete slice, or just a list of instructions
         CyclicScope,  /// Slice inputs are previous loop iterators and loop
-                     /// constants
+                      /// constants
         LoopScope, /// Slice inputs are loop constant, induction variables and
                    /// memory accesses
         FunctionScope, /// Slice inputs are function arguments and memory

@@ -99,9 +99,9 @@ class BasicBlock
     Instruction *lastInstr();
 
     /** \brief returns true iff this dominates the given block */
-    bool dominates(BasicBlock &block);
+    bool dominates(const BasicBlock &block) const;
     /** \brief returns true iff this dominates the given block */
-    bool dominates(BasicBlock *block);
+    bool dominates(const BasicBlock *block) const;
     /// print the basic block into a dot compatible stream
     void printDot(void *outputStream);
     /** \brief Returns the SSA definition (of the given variable) used at the
