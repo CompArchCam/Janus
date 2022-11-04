@@ -21,14 +21,12 @@ public:
     std::string                                 name;
     ///the raw data parsed from the executable
     janus::Executable                           program;
-    ///A vector of recognised functions in the executable
-    std::vector<janus::Function>                functions;
+
     ///A vector of recognised loops in the executable
     std::vector<janus::Loop>                    loops;
     ///A vector of recognised loop nests - inter-procedural
     std::vector<std::set<LoopID>>               loopNests;
-    //the main function of the program (not entry)
-    janus::Function                             *main;
+
     //call graphs
     std::map<FuncID, std::set<FuncID>>          callGraph;
     //data structure for look up
