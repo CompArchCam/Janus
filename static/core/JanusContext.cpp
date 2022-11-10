@@ -22,7 +22,7 @@ JanusContext::JanusContext(const char* name, JMode mode)
     program.open(this, name);
 
     //lift the binary to disassembly
-    program.disassemble(this);
+    //ExecutableBinaryStructure executableBinaryStructure = program.disassemble(this);
 }
 
 void JanusContext::buildProgramDependenceGraph()

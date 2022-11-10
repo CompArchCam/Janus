@@ -108,8 +108,18 @@ int main(int argc, char **argv) {
    
     GIO_Init(argv[argNo], mode);
    
-   //Load executables
+    //Load executables
     JanusContext *jc = new JanusContext(argv[argNo], mode);
+
+    //janus::Executable  program;
+    // program.disassemble(this);
+    char *filename = argv[argNo];
+    ExecutableBinaryStructure executableBinaryStructure = ExecutableBinaryStructure(filename);
+    // Returns a list of functions.
+    // Updates main function and function map.
+    std::vector<janus::Function> functions = executableBinaryStructure.disassemble(Function *fmain, std::map<PCAddress,
+    		janus::Function *>*  functionMap, std::map<PCAddress, janus::Function *>* externalFunctions);
+
     //
     jc->sharedOn= sharedOn;
     

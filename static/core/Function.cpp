@@ -15,7 +15,8 @@
 using namespace std;
 using namespace janus;
 
-Function::Function(JanusContext *gc,FuncID fid, const Symbol &symbol, uint32_t size)
+//Function::Function(JanusContext *gc,FuncID fid, const Symbol &symbol, uint32_t size)
+Function::Function(FuncID fid, const Symbol &symbol, uint32_t size)
 :context(gc),fid(fid),size(size)
 {
     startAddress = symbol.startAddr;

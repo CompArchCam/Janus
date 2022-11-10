@@ -43,9 +43,9 @@ namespace janus {
          *                       information storage
          * ------------------------------------------------------------- */
         ///Actual storage of all the function's machine instructions, read-only
-        std::vector<MachineInstruction>        minstrs;
+        //std::vector<MachineInstruction>        minstrs;
         ///Actual storage of all the function's abstract instructions, read-only
-        std::vector<Instruction>               instrs;
+        //std::vector<Instruction>               instrs;
         ///Set of variables used in this function
         std::set<Variable>                     allVars;
         ///Set of all SSA variables ever defined (or used) in this function
@@ -87,6 +87,15 @@ namespace janus {
         ///The initial states for all variables found in this function
         std::map<Variable, VarState*>          inputStates;
 
+        std::vector<MachineInstruction> getAllMachineInstructions() {
+        	// TODO: Implement
+        	return null;
+        }
+
+        std::vector<Instruction> getAllInstructions() {
+        	// TODO: Implement
+        	return null;
+        }
         /* --------------------------------------------------------------
          *                Architecture specific information
          * ------------------------------------------------------------- */
@@ -132,7 +141,8 @@ namespace janus {
         uint32_t                               traverseStartStep;
         uint32_t                               traverseEndStep;
 
-        Function(JanusContext *gc, FuncID fid, const Symbol &symbol, uint32_t size);
+        //Function(JanusContext *gc, FuncID fid, const Symbol &symbol, uint32_t size);
+        Function(FuncID fid, const Symbol &symbol, uint32_t size);
         ~Function();
 
         //retrieve information from instructions

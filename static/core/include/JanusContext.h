@@ -13,14 +13,21 @@
 #include <set>
 #include <string>
 
-class JanusContext {
-public:
+class JanusContext
+{
+private:
     ///Analysis mode
     JMode                                       mode;
     ///The name of the executable
     std::string                                 name;
     ///the raw data parsed from the executable
-    janus::Executable                           program;
+    //janus::Executable  program;
+
+    // Analyzed binary structure, after lifting
+    BinaryStructure binaryStrucure;
+
+public:
+
 
     ///A vector of recognised loops in the executable
     std::vector<janus::Loop>                    loops;

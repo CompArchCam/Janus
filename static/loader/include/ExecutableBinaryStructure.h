@@ -78,8 +78,11 @@ bool operator<(const Symbol &a, const Symbol &b);
  *
  */
 class Executable {
+private:
+    ///The name of the executable
+    std::string name;
 public:
-    Executable(){};
+    Executable(const char *filename);
     ~Executable();
     uint64_t                        capstoneHandle;
     bool                            isExecutable;
@@ -94,9 +97,11 @@ public:
 
     uint32_t                        fileSize;
     ///load into the executable based on the file path
-    void                            open(JanusContext *jc, const char *filename);
+    //void                            open(JanusContext *jc, const char *filename);
+    void                            open(const char *filename);
     ///lift to disassembly and functions
-    void                            disassemble(JanusContext *jc);
+    //void                            disassemble(JanusContext *jc);
+    std::vector<janus::Function>    disassemble(Function *fmain, std::map<PCAddress, janus::Function *>*  functionMap, janus::Function *>* externalFunctions);
     void                            printSection();
 
 protected:
@@ -107,7 +112,8 @@ private:
     void                            parseHeader();
     void                            parseFlat();
     //create Function classes from the symbols
-    void                            liftSymbolToFunction(JanusContext *jc);
+    std::vector<janus::Function>  	liftSymbolToFunction()
+    //void                            liftSymbolToFunction(JanusContext *jc);
     void                            retrieveHiddenSymbol(Section &section);
     void                            parseELF64();
 };

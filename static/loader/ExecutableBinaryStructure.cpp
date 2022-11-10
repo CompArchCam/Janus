@@ -17,12 +17,18 @@
 using namespace std;
 using namespace janus;
 
+Executable::Executable(const char *filename)
+{
+    open(filename);
+}
+
 Executable::~Executable()
 {
     delete[] buffer;
 }
 
-void Executable::open(JanusContext *jc, const char *filename)
+//void Executable::open(JanusContext *jc, const char *filename)
+void Executable::open(const char *filename)
 {
     ifstream binFile(filename, ios::in|ios::ate|ios::binary);
 
@@ -47,12 +53,16 @@ void Executable::open(JanusContext *jc, const char *filename)
     }
 }
 
-void Executable::disassemble(JanusContext *jc)
+//void Executable::disassemble(JanusContext *jc)
+void Executable::disassemble(Function *fmain, std::map<PCAddress, janus::Function *>*  functionMap, std::map<PCAddress, janus::Function *>* externalFunctions)
 {
-    //lift all the recognised symbols to functions
-    liftSymbolToFunction(jc);
+    //lift all the recognised symbols to function
+    //liftSymbolToFunction(jc);
+	std::vector<janus::Function> functions = liftSymbolToFunction();
     //disassemble each identified functions
-    disassembleAll(jc);
+    //disassembleAll(jc);
+	disassembleAll(capstoneHandle, functions, functionMap, externalFunctions);
+	// So, here we could return every function
 }
 
 void Executable::parseHeader()
@@ -88,8 +98,10 @@ void Executable::parseFlat()
     GSTEP("Found "<<symbols.size()<<" hidden symbols"<<endl);
 }
 
-void Executable::liftSymbolToFunction(JanusContext *jc)
+//void Executable::liftSymbolToFunction(JanusContext *jc)
+std::vector<janus::Function> Executable::liftSymbolToFunction()
 {
+	std::vector<janus::Function> functions;
     uint32_t      fid = 0;
     //construct a vector of functions from the symbol table
     //Infer the symbol boundaries by looking at the next entry
@@ -111,7 +123,8 @@ void Executable::liftSymbolToFunction(JanusContext *jc)
                 size = (*sit).section->endAddr - (*sit).startAddr;
             
             //create new function and put it into the global vector
-            jc->functions.emplace_back(jc,fid,(*sit),size);
+            //jc->functions.emplace_back(jc,fid,(*sit),size);
+            functions.emplace_back(fid,(*sit),size);
 
             fid++;
         }
