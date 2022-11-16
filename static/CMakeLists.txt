@@ -174,6 +174,8 @@ set(CORE_SOURCES
     core/Expression.cpp
     core/Slice.cpp
     core/MemoryLocation.cpp
+    # Added by jahic
+    core/ProgramDependenceAnalysis.cpp
 )
 
 set(ANALYSIS_SOURCES
@@ -190,7 +192,9 @@ set(ANALYSIS_SOURCES
 )
 
 set(LOADER_SOURCES
-    loader/Executable.cpp
+    #loader/Executable.cpp
+    # Added by jahic
+    loader/ExecutableBinaryStructure.cpp
     loader/ELF.cpp
 )
 

@@ -4,7 +4,8 @@
 #define _Janus_FUNCTION_
 
 #include "janus.h"
-#include "Executable.h"
+//#include "Executable.h"
+#include "ExecutableBinaryStructure.h"
 #include "MachineInstruction.h"
 #include "Instruction.h"
 #include "BasicBlock.h"

@@ -117,8 +117,11 @@ int main(int argc, char **argv) {
     ExecutableBinaryStructure executableBinaryStructure = ExecutableBinaryStructure(filename);
     // Returns a list of functions.
     // Updates main function and function map.
-    std::vector<janus::Function> functions = executableBinaryStructure.disassemble(Function *fmain, std::map<PCAddress,
-    		janus::Function *>*  functionMap, std::map<PCAddress, janus::Function *>* externalFunctions);
+    // Updates external functions.
+    Function *fmain;
+    std::map<PCAddress, janus::Function *>*  functionMap = &(jc->functionMap);
+    std::map<PCAddress, janus::Function *>* externalFunctions;
+    std::vector<janus::Function> functions = executableBinaryStructure.disassemble(fmain, functionMap, externalFunctions);
 
     //
     jc->sharedOn= sharedOn;

@@ -11,15 +11,19 @@ using namespace std;
 
 /* Generate output states for a given instruction */
 static void liftInstruction(Instruction &instr, Function *function);
-static void linkRelocation(JanusContext *jc, Function *pltFunc);
+//static void linkRelocation(JanusContext *jc, Function *pltFunc);
+static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunctions, std::map<PCAddress, janus::Function *>*  functionMap, Function *pltFunc);
 
-void disassembleAll(JanusContext *jc)
+//void disassembleAll(JanusContext *jc)
+void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *>*  functionMap,
+		std::map<PCAddress, janus::Function *>* externalFunctions)
 {
     GSTEP("Disassembling instructions: ");
     cs_err      err;
     //initialise capstone disassembly engine
     //TODO, recognise architecture automatically
-    err = cs_open(CS_ARCH_X86, CS_MODE_64, (csh *)(&jc->program.capstoneHandle));
+    //err = cs_open(CS_ARCH_X86, CS_MODE_64, (csh *)(&jc->program.capstoneHandle));
+    err = cs_open(CS_ARCH_X86, CS_MODE_64, (csh *)(&capstoneHandle));
 
     if (err) {
         printf("Failed on cs_open() in capstone with error returned: %u\n", err);
@@ -27,36 +31,45 @@ void disassembleAll(JanusContext *jc)
     }
 
     // we need the details for each instruction
-    cs_option((csh)jc->program.capstoneHandle, CS_OPT_DETAIL, CS_OPT_ON);
+    //cs_option((csh)jc->program.capstoneHandle, CS_OPT_DETAIL, CS_OPT_ON);
+    cs_option((csh)capstoneHandle, CS_OPT_DETAIL, CS_OPT_ON);
     //skip the padding between the instructions
-    cs_option((csh)jc->program.capstoneHandle, CS_OPT_SKIPDATA, CS_OPT_ON);
+    //cs_option((csh)jc->program.capstoneHandle, CS_OPT_SKIPDATA, CS_OPT_ON);
+    cs_option((csh)capstoneHandle, CS_OPT_SKIPDATA, CS_OPT_ON);
 
     //Disassemble each function
-    for (auto &func: jc->functions) {
+    //for (auto &func: jc->functions) {
+    for (auto &func: functions) {
         //disassemble the function and register the function lookup table
         if (func.isExecutable) {
             disassemble(&func);
-            jc->functionMap[func.startAddress] = &func;
+            //jc->functionMap[func.startAddress] = &func;
+            *functionMap[func.startAddress] = &func;
         }
         //if the function is calling shared library call
         else {
-            jc->externalFunctions[func.startAddress] = &func;
+            //jc->externalFunctions[func.startAddress] = &func;
+        	*externalFunctions[func.startAddress] = &func;
         }
     }
-    GSTEPCONT(jc->functions.size()<<" functions recognised"<<endl);
+    //GSTEPCONT(jc->functions.size()<<" functions recognised"<<endl);
+    GSTEPCONT(functions.size()<<" functions recognised"<<endl);
     //NOTE: once all external calls are registered
     //We also need to link the PLT relocation address to external shared library calls
     bool foundFortranMain = false;
     Function *fmain = NULL;
 
-    for (auto &func: jc->functions) {
+    //for (auto &func: jc->functions) {
+    for (auto &func: functions) {
         if (func.name == string(".plt") || func.name == string("_plt")) {
             func.isExecutable = false;
-            linkRelocation(jc, &func);
+            //linkRelocation(jc, &func);
+            linkRelocation(externalFunctions, functionMap, &func
             continue;
         }
         if (func.name == string("main") && !foundFortranMain) {
-            jc->main = &func;
+            //jc->main = &func;
+        	fmainRet = &func;
         }
         if (func.name == string("_start")) {
             //fmain = &func;
@@ -67,12 +80,15 @@ void disassembleAll(JanusContext *jc)
         }
     }
 
-    if (foundFortranMain) jc->main = fmain;
+    //if (foundFortranMain) jc->main = fmain;
+    if (foundFortranMain) fmainRet = fmain;
 
-    cs_close((csh *)(&jc->program.capstoneHandle));
+    //cs_close((csh *)(&jc->program.capstoneHandle));
+    cs_close((csh *)(&capstoneHandle));
 }
 
-static void linkRelocation(JanusContext *jc, Function *pltFunc)
+//static void linkRelocation(JanusContext *jc, Function *pltFunc)
+static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunctions, std::map<PCAddress, janus::Function *>*  functionMap, Function *pltFunc)
 {
     if (!pltFunc) return;
 
@@ -89,7 +105,8 @@ static void linkRelocation(JanusContext *jc, Function *pltFunc)
 
     uint32_t i = 1;
 
-    for (auto synthetic: jc->externalFunctions)
+    //for (auto synthetic: jc->externalFunctions)
+    for (auto synthetic: *externalFunctions)
     {
         Function *synFunc = synthetic.second;
         synFunc->startAddress = pltFunc->minstrs[3*i].pc;
@@ -98,7 +115,8 @@ static void linkRelocation(JanusContext *jc, Function *pltFunc)
         synFunc->name += "@plt";
         synFunc->isExternal = true;
         //update in the function map
-        jc->functionMap[synFunc->startAddress] = synFunc;
+        //jc->functionMap[synFunc->startAddress] = synFunc;
+        *functionMap[synFunc->startAddress] = synFunc;
         i++;
         if (i==nPltSym) break;
     }

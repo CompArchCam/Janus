@@ -1,5 +1,5 @@
-#ifndef Janus_EXECUTABLE_H
-#define Janus_EXECUTABLE_H
+#ifndef Janus_EXECUTABLE_BINARY_STRUCTURE_H
+#define Janus_EXECUTABLE_BINARY_STRUCTURE_H
 
 #include "janus.h"
 #include <string>
@@ -7,6 +7,8 @@
 #include <set>
 
 #include "elf.h"
+
+using namespace janus;
 
 class JanusContext;
 
@@ -77,13 +79,13 @@ bool operator<(const Symbol &a, const Symbol &b);
 /** \brief Executable includes all the low level data loaded from binary executables
  *
  */
-class Executable {
+class ExecutableBinaryStructure {
 private:
     ///The name of the executable
     std::string name;
 public:
-    Executable(const char *filename);
-    ~Executable();
+    ExecutableBinaryStructure(const char *filename);
+    ~ExecutableBinaryStructure();
     uint64_t                        capstoneHandle;
     bool                            isExecutable;
     bool                            hasStaticSymbolTable;
