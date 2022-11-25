@@ -90,12 +90,14 @@ namespace janus {
 
         std::vector<MachineInstruction> getAllMachineInstructions() {
         	// TODO: Implement
-        	return null;
+        	std::vector<MachineInstruction> machineInstructions;
+        	return machineInstructions;
         }
 
         std::vector<Instruction> getAllInstructions() {
         	// TODO: Implement
-        	return null;
+        	std::vector<Instruction> instructions;
+        	return instructions;
         }
         /* --------------------------------------------------------------
          *                Architecture specific information

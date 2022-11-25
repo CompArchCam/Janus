@@ -8,8 +8,10 @@ class JanusContext;
 void
 getBodyTemperature(JanusContext *gc, janus::Loop *loop);
 
-void
-loadLoopSelection(JanusContext *gc);
+//void
+//loadLoopSelection(JanusContext *gc);
+
+LoopAnalysisReport loadLoopSelection(std::vector<janus::Loop>& loops, std::string executableName);
 
 void
 loadDDGProfile(JanusContext *gc);

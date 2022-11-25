@@ -3,7 +3,8 @@
 
 #include "elf.h"          // ELF files structure
 
-class Executable;
+//class Executable;
+class ExecutableBinaryStructure;
 
 // Class for interpreting and dumping ELF files. Has templates for 32 and 64 bit version
 template <class TELF_Header, class TELF_SectionHeader, class TELF_Symbol, class TELF_Relocation>

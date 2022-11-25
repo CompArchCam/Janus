@@ -205,12 +205,14 @@ Loop::Loop(BasicBlock *start, Function *parent)
     }
 }
 
-void
-Loop::analyse(JanusContext *gc)
+//void Loop::analyse(JanusContext *gc)
+//void Loop::analyse(LoopAnalysisReport loopAnalysisReport)
+void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport)
 {
     if (analysed) return;
 
-    if (gc->manualLoopSelection && !pass) {
+    //if (gc->manualLoopSelection && !pass) {
+    if (loopAnalysisReport.getManualLoopSelection() && !pass) {
         //even if the loop is not selected, if it belongs to the same loop nest with selected loop
         //then we should analyse the loop
         for (auto l: ancestors)
@@ -230,9 +232,20 @@ Loop::analyse(JanusContext *gc)
     //Analyse sub-loop first
     //So that information in the inner loop should be available for analysis of the outer loop
     for (auto *l : subLoops)
-        l->analyse(gc);
+    	l->analyseBasic(loopAnalysisReport);
+        //l->analyse(gc);
 
-    if (gc->mode == JPROF && removed) {
+    analysePass0(loopAnalysisReport);
+}
+
+// Should only be called by JPROF
+// If a loop is removed, then do nothing.
+// Else, call analysePass0.
+void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport)
+{
+    //if (gc->mode == JPROF && removed) {
+	if (removed)
+	{
         LOOPLOG("-----------------------------------------------------------------"<<endl);
         if (invocation_count)
             LOOPLOG("Loop "<<dec<<id<<" is removed due to low profiled coverage: "<<coverage<<" or low iteration: "<<(total_iteration_count/invocation_count)<<endl);
@@ -240,9 +253,16 @@ Loop::analyse(JanusContext *gc)
             LOOPLOG("Loop "<<dec<<id<<" is removed due to low profiled coverage: "<<coverage<<endl);
         //we still analyse removed loops since it might contribute to alias analysis of parent/children loops
         //TODO: reduce the number of loops with the help of alias analysis
+        //return;
         return;
     }
 
+	analysePass0(loopAnalysisReport);
+}
+
+// Not called by JPROF for removed loops.
+void Loop::analysePass0(LoopAnalysisReport loopAnalysisReport)
+{
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" in "<<parent->name<<endl);
 
@@ -287,11 +307,12 @@ Loop::analyse(JanusContext *gc)
     LOOPLOG("========================================================="<<endl<<endl);
 }
 
-void
-Loop::analyse2(JanusContext *gc)
+//void Loop::analyse2(JanusContext *gc)
+void Loop::analyse2(LoopAnalysisReport loopAnalysisReport)
 {
     if (unsafe) return;
-    if (gc->manualLoopSelection && !pass) return;
+    //if (gc->manualLoopSelection && !pass) return;
+    if (loopAnalysisReport.getManualLoopSelection() && !pass) return;
 
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" Second Pass"<<endl);
@@ -304,11 +325,13 @@ Loop::analyse2(JanusContext *gc)
     LOOPLOG("========================================================="<<endl<<endl);
 }
 
-void
-Loop::analyse3(JanusContext *gc)
+//void
+//Loop::analyse3(JanusContext *gc)
+void Loop::analyse3(LoopAnalysisReport loopAnalysisReport)
 {
     if (unsafe) return;
-    if (gc->manualLoopSelection && !pass) return;
+    //if (gc->manualLoopSelection && !pass) return;
+    if (loopAnalysisReport.getManualLoopSelection() && !pass) return;
 
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" Third Pass"<<endl);

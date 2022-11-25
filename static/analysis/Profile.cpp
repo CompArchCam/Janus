@@ -70,32 +70,38 @@ filterParallelisableLoop(JanusContext *gc)
     }
 }
 
-void
-loadLoopSelection(JanusContext *jc)
+//void loadLoopSelection(JanusContext *jc)
+LoopAnalysisReport loadLoopSelection(std::vector<janus::Loop>& loops, std::string executableName)
 {
     /* Read ddg files from manual specification */
     ifstream iselect;
-    iselect.open(jc->name+".loop.select", ios::in);
+    //iselect.open(jc->name+".loop.select", ios::in);
+    iselect.open(executableName+".loop.select", ios::in);
 
     if (!iselect.good()) return;
-    GSTEPCONT("\tReading "<<jc->name<<".loop.select for loop selection"<<endl);
+    //GSTEPCONT("\tReading "<<jc->name<<".loop.select for loop selection"<<endl);
+    GSTEPCONT("\tReading "<<executableName<<".loop.select for loop selection"<<endl);
 
     int loopID,type;
     while (iselect >> loopID >> type) {
-        Loop &loop = jc->loops[loopID-1];
+        //Loop &loop = jc->loops[loopID-1];
+    	Loop &loop = loops[loopID-1];
         loop.pass = true;
         loop.type = (LoopType)type;
     }
 
     /* Assign runtime ID */
     int id = 0;
-    for (auto &loop: jc->loops) {
+    //for (auto &loop: jc->loops) {
+    for (auto &loop: loops) {
         if (loop.pass) {
             loop.header.id = id++;
         }
     }
-    jc->passedLoop = id;
-    jc->manualLoopSelection = true;
+    //jc->passedLoop = id;
+    //jc->manualLoopSelection = true;
+    LoopAnalysisReport loopAnalysisReport = LoopAnalysisReport(id, true);
+    return loopAnalysisReport;
 }
 
 void

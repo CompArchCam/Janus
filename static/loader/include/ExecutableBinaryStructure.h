@@ -2,13 +2,12 @@
 #define Janus_EXECUTABLE_BINARY_STRUCTURE_H
 
 #include "janus.h"
+#include "Function.h"
 #include <string>
 #include <vector>
 #include <set>
 
 #include "elf.h"
-
-using namespace janus;
 
 class JanusContext;
 
@@ -82,9 +81,9 @@ bool operator<(const Symbol &a, const Symbol &b);
 class ExecutableBinaryStructure {
 private:
     ///The name of the executable
-    std::string name;
+    std::string executableName;
 public:
-    ExecutableBinaryStructure(const char *filename);
+    ExecutableBinaryStructure(const char *executableName);
     ~ExecutableBinaryStructure();
     uint64_t                        capstoneHandle;
     bool                            isExecutable;
@@ -103,8 +102,16 @@ public:
     void                            open(const char *filename);
     ///lift to disassembly and functions
     //void                            disassemble(JanusContext *jc);
-    std::vector<janus::Function>    disassemble(Function *fmain, std::map<PCAddress, janus::Function *>*  functionMap, janus::Function *>* externalFunctions);
+    std::vector<janus::Function>    disassemble(Function *fmain,
+    								std::map<PCAddress, janus::Function *>*  functionMap,
+									std::map<PCAddress, janus::Function *>* externalFunctions);
     void                            printSection();
+
+    // Getters/setters
+    std::string getExecutableName()
+    {
+    	return executableName;
+    }
 
 protected:
     uint8_t                         *buffer;        //executable storage
@@ -114,7 +121,7 @@ private:
     void                            parseHeader();
     void                            parseFlat();
     //create Function classes from the symbols
-    std::vector<janus::Function>  	liftSymbolToFunction()
+    std::vector<janus::Function>  	liftSymbolToFunction();
     //void                            liftSymbolToFunction(JanusContext *jc);
     void                            retrieveHiddenSymbol(Section &section);
     void                            parseELF64();

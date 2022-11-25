@@ -1,5 +1,7 @@
 #include "JanusContext.h"
 #include "SchedGen.h"
+#include "ProgramDependenceAnalysis.h"
+#include "SourceCodeStructure.h"
 #include <string.h>
 
 using namespace std;
@@ -111,26 +113,116 @@ int main(int argc, char **argv) {
     //Load executables
     JanusContext *jc = new JanusContext(argv[argNo], mode);
 
+    switch(mode)
+    {
+    	case JNONE:
+    		;
+    		break;
+    	case JLCOV:
+    		;
+    		break;
+    	case JFCOV:
+    		;
+    		break;
+    	case JPROF:
+    		;
+    		break;
+    	case JPARALLEL:
+    		;
+    		break;
+    	case JVECTOR:
+    		;
+    		break;
+    	case JFETCH:
+    		;
+    		break;
+    	case JANALYSIS:
+    		;
+    		break;
+    	case JGRAPH:
+    		;
+    		break;
+    	case JOPT:
+    		;
+    		break;
+    	case JSECURE:
+    		;
+    		break;
+    	case JCUSTOM:
+    		;
+    		break;
+    	case JDLL:
+    		;
+    		break;
+    }
+
     //janus::Executable  program;
     // program.disassemble(this);
-    char *filename = argv[argNo];
-    ExecutableBinaryStructure executableBinaryStructure = ExecutableBinaryStructure(filename);
+    char *executableName = argv[argNo];
+    janus::ExecutableBinaryStructure executableBinaryStructure = janus::ExecutableBinaryStructure(executableName);
+
+    SourceCodeStructure sourceCodeStructure;
+
     // Returns a list of functions.
     // Updates main function and function map.
     // Updates external functions.
-    Function *fmain;
-    std::map<PCAddress, janus::Function *>*  functionMap = &(jc->functionMap);
+    janus::Function *fmain;
+    //std::map<PCAddress, janus::Function *>* functionMap = &(jc->functionMap);
+    std::map<PCAddress, janus::Function *>* functionMap = sourceCodeStructure.getFunctionMap();
     std::map<PCAddress, janus::Function *>* externalFunctions;
+    // Program object to contain fmain, functionMap, externalFunctions
     std::vector<janus::Function> functions = executableBinaryStructure.disassemble(fmain, functionMap, externalFunctions);
+
+
 
     //
     jc->sharedOn= sharedOn;
     
     //build CFG
-    jc->buildProgramDependenceGraph();
+    //jc->buildProgramDependenceGraph();
+    janus::ProgramDependenceAnalysis programDependenceAnalysis;
+
+    programDependenceAnalysis.buildCFGForEachFunction(functions);
+    programDependenceAnalysis.liftDisassemblyToIR(functions);
+    programDependenceAnalysis.constructSSA(functions);
+    programDependenceAnalysis.constructControlDependenceGraph(functions);
+
+    // Update the code structure with analysis results.
+    sourceCodeStructure.updateBinaryStructure(main, functions, functionMap)
+
+	std::vector<janus::Loop> loops = sourceCodeStructure.getAllLoops();
 
     //analyse
-    jc->analyseLoop();
+    //jc->analyseLoop();
+
+
+	// Identify loops from the control flow graph
+	programDependenceAnalysis.identifyLoopsFromCFG(std::vector<janus::Function> functions);
+
+	// Analyze loop relations within one procedure
+	programDependenceAnalysis.analyseLoopRelationsWithinProcedure(std::vector<janus::Function> functions);
+
+	// TODO: How to update loops independently and update them back to functions?
+	// Do not use pointers, because we want to keep functions structure consistent.
+	// Or maybe use pointers?
+
+    // Analyze loop relations across procedures
+	programDependenceAnalysis.analyseLoopAndFunctionRelations(sourceCodeStructure.getAllLoops());
+
+    //load loop selection from previous run
+	LoopAnalysisReport loopAnalysisReport = loadLoopSelection(codeStructure.getAllLoops(), sourceCodeStructure.getExecutableName());
+
+	programDependenceAnalysis.performBasicLoopAnalysis(sourceCodeStructure.getAllLoops(), loopAnalysisReport);
+
+	// Only valid for JPROF.
+	// If a loop is removed, then nothing.
+	// therwise, this analysis will call
+	if (mode == JPROF)
+		programDependenceAnalysis.reduceLoopsAliasAnalysis(sourceCodeStructure.getAllLoops(), loopAnalysisReport);
+	else
+		programDependenceAnalysis.performBasicPass(sourceCodeStructure.getAllLoops(), loopAnalysisReport);
+
+	programDependenceAnalysis.performLoopAnalysisPasses(sourceCodeStructure.getAllLoops(), loopAnalysisReport);
 
     if(mode == JANALYSIS || mode == JGRAPH) {
         dumpCFG(jc);

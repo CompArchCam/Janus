@@ -1,6 +1,7 @@
 #include "ParseELF.h"          // ELF files structure
 
-#include "Executable.h"
+//#include "Executable.h"
+#include "ExecutableBinaryStructure.h"
 #include <iostream>
 #include <cstring>
 #include "IO.h"

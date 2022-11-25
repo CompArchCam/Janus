@@ -176,6 +176,7 @@ set(CORE_SOURCES
     core/MemoryLocation.cpp
     # Added by jahic
     core/ProgramDependenceAnalysis.cpp
+    core/SourceCodeStructure.cpp
 )
 
 set(ANALYSIS_SOURCES

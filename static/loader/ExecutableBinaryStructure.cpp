@@ -1,10 +1,12 @@
-#include "Executable.h"
+//#include "Executable.h"
+#include "ExecutableBinaryStructure.h"
 #include "Function.h"
 #include "JanusContext.h"
 #include "ParseELF.h"
 #include "Disassemble.h"
 #include "IO.h"
 #include "capstone/capstone.h"
+
 #include <cstring>
 #include <algorithm>
 #include <set>
@@ -17,9 +19,10 @@
 using namespace std;
 using namespace janus;
 
-ExecutableBinaryStructure::ExecutableBinaryStructure(const char *filename)
+ExecutableBinaryStructure::ExecutableBinaryStructure(const char *executableName)
 {
-    open(filename);
+	this->executableName = string(executableName);
+    open(executableName);
 }
 
 ExecutableBinaryStructure::~ExecutableBinaryStructure()

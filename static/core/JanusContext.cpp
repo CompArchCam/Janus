@@ -90,7 +90,7 @@ void JanusContext::analyseLoop()
     }
 
     /* Step 3: analyse loop relations across procedures */
-    analyseLoopAndFunctionRelations();
+    analyseLoopAndFunctionRelations(std::vector<janus::Loop> loops);
 
     /* Step 4: load profiling information */
     if (mode == JPROF) {

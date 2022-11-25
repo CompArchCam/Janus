@@ -25,7 +25,22 @@ private:
     //janus::Executable  program;
 
     // Analyzed binary structure, after lifting
-    BinaryStructure binaryStrucure;
+    janus::ExecutableBinaryStructure executableBinaryStructure;
+
+    ///A vector of recognised functions in the executable
+    //std::vector<janus::Function>                functions;
+	///A vector of recognised loops in the executable
+	//std::vector<janus::Loop>                    loops;
+	///A vector of recognised loop nests - inter-procedural
+	//std::vector<std::set<LoopID>>               loopNests;
+	//the main function of the program (not entry)
+	//janus::Function                             *main;
+	//call graphs
+	//std::map<FuncID, std::set<FuncID>>          callGraph;
+	//data structure for look up
+	//std::map<PCAddress, janus::Function *>      functionMap;
+	//shared library calls or external functions
+	//std::map<PCAddress, janus::Function *>      externalFunctions;
 
 public:
 
