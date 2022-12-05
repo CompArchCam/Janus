@@ -2,11 +2,13 @@
 
 #include "Arch.h"
 #include "BasicBlock.h"
+#include "capstone/capstone.h"
 #include "janus_arch.h"
 #include <set>
 
 using namespace janus;
 using namespace std;
+#define GCC_CODE 1
 
 uint32_t csToJanus[] =
 {
@@ -173,9 +175,14 @@ void getOutputCallConvention(std::vector<janus::Variable> &v)
 
 void analyseStack(Function *function)
 {
+    std::set<int> endBlocks;
     BasicBlock *entry = function->entry;
     function->hasBasePointer = false;
     function->hasConstantStackPointer = true;
+    function->hasConstantSP_PushPop = true;
+    function->hasConstantSP_AddSub = true;
+    function->hasConstantSP_total = true;
+    function->hasCanary = false;
     uint64_t totalFrameSize;
     /* XXX we use a simple solution by looking at the first block
      * of the function to scan any explicit stack pointer movement */
@@ -183,47 +190,167 @@ void analyseStack(Function *function)
     bool found = false;
     int size = 0;
 
+    int sizeAdd = 0;
+    bool prologue_end = false;
+    int sizeChangeAddSub=0;
+    int sizeChangePushPop=0;
+
     for (int i=0; i<entry->size; i++) {
         MachineInstruction &instr = *entry->instrs[i].minstr;
 
         /* check whether rbp is a base pointer */
         if (instr.isMakingStackBase()) {
             function->hasBasePointer = true;
-            size = 0;
+            size = 0;   //if mov rsp->rbp, then push rbp is not calculated in current frame size
             continue;
         }
         if (instr.isPUSH()) {
-            size += instr.operands[0].size;
+            if(found){ //or if found=true;
+                sizeAdd += instr.operands[0].size;
+            }
+            else{
+                size += instr.operands[0].size;
+            }
+            sizeChangePushPop += instr.operands[0].size;
         }
+        if(instr.isPOP()){
+            sizeChangePushPop -= instr.operands[0].size;
+        }
+        sizeChangeAddSub -= instr.isAddStackPointer();
         
         if (!found) {
             stackSize = instr.isMoveStackPointer();
+            sizeChangeAddSub += instr.isMoveStackPointer();
             if (!stackSize) continue;
             function->stackFrameSize = stackSize;
             found = true;
+            function->prologueEnd = instr.pc;
+            prologue_end =  true;
+        }
+        if(instr.readsStackCanary()){
+           function->canaryReadIns = instr.pc;
+           function->hasCanary = true;
         }
     }
     function->totalFrameSize = function->stackFrameSize + size;
+    //TODO issue: in some functions, we already have just one entry/exit block
+    if(sizeAdd) function->hasConstantStackPointer = false;
 
     for (int i=1; i<function->numBlocks; i++) {
         if (function->terminations.find(i) != function->terminations.end()) continue;
 
         auto &bb = function->entry[i];
+
+        if(bb.succ1 == NULL){ //add to termination block and continue
+           endBlocks.insert(i);
+           continue;
+        }
+
         for (int j=0; j<bb.size; j++) {
             auto &mi = *bb.instrs[j].minstr;
 
+            auto &instr = bb.instrs[j];
+
             int sizeChange = 0;
             sizeChange += mi.isMoveStackPointer();
-            if (mi.isPUSH())
-                sizeChange += mi.operands[0].size;
-            if (mi.isPOP())
-                sizeChange -= mi.operands[0].size;
+          
+            sizeChangeAddSub += mi.isMoveStackPointer();
 
+            sizeChangeAddSub -= mi.isAddStackPointer();
+
+            if (mi.isPUSH()){
+                sizeChange += mi.operands[0].size;
+                sizeChangePushPop += mi.operands[0].size;
+            }
+            if (mi.isPOP()){
+                sizeChange -= mi.operands[0].size;
+                sizeChangePushPop -= mi.operands[0].size;
+            }
             if (sizeChange) {
                 function->hasConstantStackPointer = false;
             }
+#if GCC_CODE
+            //for gcc compiled code
+            //mov    0x8(%rsp),%rdi
+            //xor    %fs:0x28,%rdi
+            if(mi.checksStackCanary()){
+                function->canaryCheckIns = mi.pc;
+            }
+#else
+
+            //for clang compiled code
+            //mov    %fs:0x28,%rax
+            //cmp    0x68(%rsp),%rax
+            if(mi.readsStackCanary()){
+                if( j+1<bb.size && bb.instrs[j+1].minstr->opcode == X86_INS_CMP)
+                    function->canaryCheckIns = mi.pc;
+            }
+#endif
         }
     }
+
+    for(auto i : function->terminations){
+       int change=0;
+       BasicBlock &bb = function->blocks[i];
+       for (int j=0; j<bb.size; j++) {
+           auto &mi = *bb.instrs[j].minstr;
+           auto &instr = bb.instrs[j];
+           change += mi.isMoveStackPointer();
+           sizeChangeAddSub += mi.isMoveStackPointer();
+           sizeChangeAddSub -= mi.isAddStackPointer();
+           if (mi.isPUSH()){
+               change += mi.operands[0].size;
+               sizeChangePushPop += mi.operands[0].size;
+           }
+           if (mi.isPOP()){
+               change -= mi.operands[0].size;
+               sizeChangePushPop -= mi.operands[0].size;
+           }
+           if(mi.isLeave()){
+               change -= 8;
+               sizeChangePushPop -= 8;
+
+           }
+
+       }
+    }
+    if(function->terminations.size() == 0){
+        for(auto i : endBlocks){
+           int change=0;
+           BasicBlock &bb = function->blocks[i];
+           for (int j=0; j<bb.size; j++) {
+               auto &mi = *bb.instrs[j].minstr;
+               auto &instr = bb.instrs[j];
+               change += mi.isMoveStackPointer();
+               sizeChangeAddSub -= mi.isAddStackPointer();
+               sizeChangeAddSub += mi.isMoveStackPointer();
+               if (mi.isPUSH()){
+                   change += mi.operands[0].size;
+                   sizeChangePushPop += mi.operands[0].size;
+               }
+               if (mi.isPOP()){
+                   change -= mi.operands[0].size;
+                   sizeChangePushPop -= mi.operands[0].size;
+               }
+           }
+        }
+    }
+    //need to add termination and entry as well.
+    //for all termination blocks of this function, count size only once per termination block. how to know if it's not a termination block without
+    if(sizeChangeAddSub!=0){
+        function->hasConstantSP_AddSub = false;
+    }
+    if(sizeChangePushPop!=0){
+         function->hasConstantSP_PushPop = false;
+
+    }
+    int totalsize = sizeChangePushPop+sizeChangeAddSub;
+    if(totalsize!=0){
+        function->hasConstantSP_total = false;
+    }
+    function->changeSizeAddSub = sizeChangeAddSub;
+    function->changeSizePushPop = sizeChangePushPop;
+    function->changeSizeTotal = totalsize;
 
     if (function->totalFrameSize == 0) {
         int max_offset = 0;

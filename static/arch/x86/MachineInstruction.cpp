@@ -13,6 +13,8 @@
 using namespace janus;
 using namespace std;
 
+static char *get_eflag_name(uint64_t flag);
+
 MachineInstruction::MachineInstruction(InstID id, void *cs_handle, void *cs_instr)
 :id(id)
 {
@@ -21,6 +23,10 @@ MachineInstruction::MachineInstruction(InstID id, void *cs_handle, void *cs_inst
 
     pc = instr->address;
     opcode = instr->id;
+
+    cs_x86 *x86;
+    x86 = &(detail->x86);
+    eflags = x86->eflags;
 
     /* Assign instruction names */
     int mnemonicLength = strlen(instr->mnemonic);
@@ -177,6 +183,31 @@ MachineInstruction::readControlFlag()
     return (isType(INSN_CONTROL) && fineType == INSN_CJUMP);
 }
 
+uint32_t
+MachineInstruction::updatesOFlag(){ //overflow flag
+   return ((eflags & (OF_FLAG_MODIFIED | OF_FLAG_SET | OF_FLAG_RESET)) ? 1 : 0);
+}
+uint32_t
+MachineInstruction::readsOFlag(){
+   return ((eflags & OF_FLAG_READ) ? 1 : 0);
+}
+uint32_t
+MachineInstruction::readsArithFlags(){ // AF,SF, ZF, CF, PF,OF
+   return ((eflags & ARITH_FLAGS_READ) ? 1 : 0);
+}
+uint32_t
+MachineInstruction::updatesArithFlags(){
+   return ((eflags & (ARITH_FLAGS_MODIFIED | ARITH_FLAGS_SET | ARITH_FLAGS_RESET)) ? 1 : 0);
+}
+uint32_t
+MachineInstruction::readsStatusFlags(){ //AF,SF, ZF, CF, PF
+   return ((eflags & STATUS_FLAG_READ) ? 1 : 0);
+
+}
+uint32_t MachineInstruction::updatesStatusFlags(){
+   return ((eflags & (STATUS_FLAG_MODIFIED | STATUS_FLAG_SET | STATUS_FLAG_RESET)) ? 1 : 0);
+}
+
 bool
 MachineInstruction::useReg(uint32_t reg)
 {
@@ -201,7 +232,17 @@ MachineInstruction::isMoveStackPointer()
 {
     /* For x86, it is sub rsp, #offset */
     if (opcode != X86_INS_SUB) return 0;
-    if (operands[0].type != OPND_REG && operands[0].reg == JREG_RSP) return 0;
+    if (operands[0].type != OPND_REG && operands[0].reg != JREG_RSP) return 0;
+    if (operands[1].type != OPND_IMM) return 0;
+    return operands[1].intImm;
+}
+
+int
+MachineInstruction::isAddStackPointer()
+{
+    /* For x86, it is add rsp, #offset */
+    if (opcode != X86_INS_ADD) return 0;
+    if (operands[0].type != OPND_REG || operands[0].reg != JREG_RSP) return 0;
     if (operands[1].type != OPND_IMM) return 0;
     return operands[1].intImm;
 }
@@ -209,7 +250,8 @@ MachineInstruction::isMoveStackPointer()
 bool
 MachineInstruction::isMakingStackBase()
 {
-    if (readReg(JREG_RSP) && writeReg(JREG_RBP)) return true;
+    if(operands[0].type != OPND_REG || operands[1].type != OPND_REG) return false;
+    if(operands[0].reg == JREG_RBP && operands[1].reg == JREG_RSP) return true;
     return false;
 }
 
@@ -247,6 +289,35 @@ MachineInstruction::isReturn()
 {
     return (opcode == X86_INS_RET);
 }
+bool
+MachineInstruction::isLeave(){
+
+    return (opcode == X86_INS_LEAVE);
+}
+
+bool MachineInstruction::checksStackCanary(){
+  if(opcode == X86_INS_XOR){ //for g++
+       if(operands[1].structure == OPND_SEGMEM &&
+                operands[1].segMem.segment == JREG_FS &&
+                        operands[1].segMem.disp == 0x28
+                                && operands[0].type == OPND_REG)
+          return true;
+
+   }
+   return false;
+}
+bool MachineInstruction::readsStackCanary(){
+   if(isMOV()){
+       if(operands[1].structure == OPND_SEGMEM &&
+                operands[1].segMem.segment == JREG_FS
+                        && operands[1].segMem.disp == 40
+                                && operands[0].type == OPND_REG){
+           return true;
+       }
+
+   }
+   return false;
+}
 
 //TODO explore all opcodes that do this or implement otherwise
 bool
@@ -257,6 +328,7 @@ MachineInstruction::isMOV()
             opcode == X86_INS_MOVQ      ||
             opcode == X86_INS_MOVAPS    ||
             opcode == X86_INS_MOVAPD    ||
+            opcode == X86_INS_MOVUPS    || 
             opcode == X86_INS_MOVSD     ||
             opcode == X86_INS_MOVSS     ||
             opcode == X86_INS_VMOVSS    ||
@@ -266,6 +338,10 @@ MachineInstruction::isMOV()
             opcode == X86_INS_CVTSI2SS  ||
             opcode == X86_INS_MOVSXD    ||
             opcode == X86_INS_MOVDQA    ||
+            opcode == X86_INS_MOVZX     ||
+            opcode == X86_INS_MOVSX     ||
+            opcode == X86_INS_MOVSW     ||
+            opcode == X86_INS_MOVABS    ||
             opcode == X86_INS_CDQE);
 }
 
@@ -508,4 +584,114 @@ MachineInstruction::isFPU(){
         opcode == X86_INS_FXTRACT ||
         opcode == X86_INS_FYL2X);
       
+}
+static char *get_eflag_name(uint64_t flag)
+{
+        switch(flag) {
+                default:
+                        return NULL;
+                case X86_EFLAGS_UNDEFINED_OF:
+                        return "UNDEF_OF";
+                case X86_EFLAGS_UNDEFINED_SF:
+                        return "UNDEF_SF";
+                case X86_EFLAGS_UNDEFINED_ZF:
+                        return "UNDEF_ZF";
+                case X86_EFLAGS_MODIFY_AF:
+                        return "MOD_AF";
+                case X86_EFLAGS_UNDEFINED_PF:
+                        return "UNDEF_PF";
+                case X86_EFLAGS_MODIFY_CF:
+                        return "MOD_CF";
+                case X86_EFLAGS_MODIFY_SF:
+                        return "MOD_SF";
+                case X86_EFLAGS_MODIFY_ZF:
+                        return "MOD_ZF";
+                 case X86_EFLAGS_UNDEFINED_AF:
+                        return "UNDEF_AF";
+               case X86_EFLAGS_MODIFY_PF:
+                        return "MOD_PF";
+                case X86_EFLAGS_UNDEFINED_CF:
+                        return "UNDEF_CF";
+                case X86_EFLAGS_MODIFY_OF:
+                        return "MOD_OF";
+                case X86_EFLAGS_RESET_OF:
+                        return "RESET_OF";
+                case X86_EFLAGS_RESET_CF:
+                        return "RESET_CF";
+                case X86_EFLAGS_RESET_DF:
+                        return "RESET_DF";
+                case X86_EFLAGS_RESET_IF:
+                        return "RESET_IF";
+                case X86_EFLAGS_TEST_OF:
+                        return "TEST_OF";
+                case X86_EFLAGS_TEST_SF:
+                        return "TEST_SF";
+                case X86_EFLAGS_TEST_ZF:
+                        return "TEST_ZF";
+                case X86_EFLAGS_TEST_PF:
+                        return "TEST_PF";
+                case X86_EFLAGS_TEST_CF:
+                        return "TEST_CF";
+                case X86_EFLAGS_RESET_SF:
+                        return "RESET_SF";
+                case X86_EFLAGS_RESET_AF:
+                        return "RESET_AF";
+                case X86_EFLAGS_RESET_TF:
+                        return "RESET_TF";
+                case X86_EFLAGS_RESET_NT:
+                        return "RESET_NT";
+                case X86_EFLAGS_PRIOR_OF:
+                        return "PRIOR_OF";
+                case X86_EFLAGS_PRIOR_SF:
+                        return "PRIOR_SF";
+                case X86_EFLAGS_PRIOR_ZF:
+                        return "PRIOR_ZF";
+                case X86_EFLAGS_PRIOR_AF:
+                        return "PRIOR_AF";
+                case X86_EFLAGS_PRIOR_PF:
+                        return "PRIOR_PF";
+                case X86_EFLAGS_PRIOR_CF:
+                        return "PRIOR_CF";
+                case X86_EFLAGS_PRIOR_TF:
+                        return "PRIOR_TF";
+                case X86_EFLAGS_PRIOR_IF:
+                        return "PRIOR_IF";
+                case X86_EFLAGS_PRIOR_DF:
+                        return "PRIOR_DF";
+                case X86_EFLAGS_TEST_NT:
+                        return "TEST_NT";
+                case X86_EFLAGS_TEST_DF:
+                        return "TEST_DF";
+                case X86_EFLAGS_RESET_PF:
+                        return "RESET_PF";
+                case X86_EFLAGS_PRIOR_NT:
+                        return "PRIOR_NT";
+                case X86_EFLAGS_MODIFY_TF:
+                        return "MOD_TF";
+                case X86_EFLAGS_MODIFY_IF:
+                        return "MOD_IF";
+                case X86_EFLAGS_MODIFY_DF:
+                        return "MOD_DF";
+                case X86_EFLAGS_MODIFY_NT:
+                        return "MOD_NT";
+                case X86_EFLAGS_MODIFY_RF:
+                        return "MOD_RF";
+                case X86_EFLAGS_SET_CF:
+                        return "SET_CF";
+                case X86_EFLAGS_SET_DF:
+                        return "SET_DF";
+                case X86_EFLAGS_SET_IF:
+                        return "SET_IF";
+        }
+}
+void
+MachineInstruction::printEFlags(){
+     if(eflags){
+        printf("\tEFLAGS:");
+        for(int i = 0; i <= 45; i++)
+        if (eflags & ((uint64_t)1 << i)) {
+                printf(" %s", get_eflag_name((uint64_t)1 << i));
+        }
+        printf("\n");
+     }
 }

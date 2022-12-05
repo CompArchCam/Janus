@@ -82,6 +82,33 @@ public:
 bool operator==(BitVector &a, BitVector &b);
 bool operator!=(BitVector &a, BitVector &b);
 
+class FlagSet {
+public:
+    uint32_t            bits;
+    /** \brief Constructs an empty *FlagSet* (with all bits set to 0). */
+    FlagSet()            {bits = 0;}
+    /** \brief Constructs a *FlagSet* with the given bits set. */
+    FlagSet(uint32_t bits):bits(bits){}
+
+    void                insert(uint32_t flag);
+    void                remove(uint32_t flag);
+    void                complement();
+    bool                contains(uint32_t flag);
+    void                merge(FlagSet set);
+    void                subtract(FlagSet &set);
+    void                intersect(FlagSet &set);
+    /** \brief Returns the number of bits set. */
+    uint32_t            size();
+    void                clear(){bits = 0x0;}
+    void                setAll(){bits = 0xFF;}
+};
+
+FlagSet operator+(FlagSet a, FlagSet b);
+FlagSet operator-(FlagSet a, FlagSet b);
+FlagSet operator&(FlagSet a, FlagSet b);
+bool operator==(FlagSet a, FlagSet b);
+std::ostream& operator<<(std::ostream& out, const FlagSet& r);
+
 /* A 32-bit structure which contains four scratch registers */
 class ScratchSet {
 public:
