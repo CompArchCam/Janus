@@ -31,6 +31,8 @@ VarState::VarState() {
     notUsed = true;
     constLoop = NULL;
     dependsOnMemory = false;
+    trackable = false;
+    mallocsite = NULL;
 }
 
 VarState::VarState(Variable var) {
@@ -50,6 +52,8 @@ VarState::VarState(Variable var) {
     notUsed = true;
     constLoop = NULL;
     dependsOnMemory = false;
+    trackable = false;
+    mallocsite = NULL;
 }
 
 VarState::VarState(Variable var, BasicBlock *block, Instruction* lastModified)
@@ -69,6 +73,8 @@ VarState::VarState(Variable var, BasicBlock *block, Instruction* lastModified)
     notUsed = true;
     constLoop = NULL;
     dependsOnMemory = false;
+    trackable = false;
+    mallocsite = NULL;
 }
 
 VarState::VarState(Variable var, BasicBlock *block, bool isPHI)
@@ -87,6 +93,8 @@ VarState::VarState(Variable var, BasicBlock *block, bool isPHI)
     notUsed = true;
     constLoop = NULL;
     dependsOnMemory = false;
+    trackable = false;
+    mallocsite = NULL;
 }
 
 Variable::Variable(const JVar &var)
@@ -190,6 +198,24 @@ std::ostream& janus::operator<<(std::ostream& out, const Variable& v)
             if (index) {
                 out<<get_reg_name(index);
                 if (scale > 1) out <<"*"<<dec<<scale;
+            }
+            if (value > 0) out <<"+0x"<<hex<<value<<"]";
+            else if (value==0) out<<"]";
+            else out <<"-0x"<<hex<<-value<<"]";
+            break;
+        }
+        case JVAR_SEG_MEMORY:{
+            int scale = (int)v.scale;
+            out<<get_reg_name(scale);
+            out<<":[";
+            int base = (int)v.base;
+            int index = (int)v.index;
+            int value = (int)v.value;
+            if (base) out<<get_reg_name(base);
+            if (index && base) out<<"+";
+            if (index) {
+                out<<get_reg_name(index);
+               //     if (scale > 1) out <<"*"<<dec<<scale;
             }
             if (value > 0) out <<"+0x"<<hex<<value<<"]";
             else if (value==0) out<<"]";

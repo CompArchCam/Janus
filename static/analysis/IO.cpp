@@ -121,6 +121,8 @@ void printSSADot(janus::Function &function, void *outputStream) {
             os<<"V"<<dec<<vs->id<<" [label=\""<<vs<<"\",fillcolor=indigo,fontcolor=white,shape=box];"<<endl;
         } else if (vs->type == JVAR_POLYNOMIAL) {
             os<<"V"<<dec<<vs->id<<" [label=\""<<vs<<"\",fillcolor=pink,shape=box];"<<endl;
+        }else if(vs->type == JVAR_SEG_MEMORY){
+            os<<"V"<<dec<<vs->id<<" [label=\""<<vs<<"\",fillcolor=pink,shape=box];"<<endl;
         } else {
             os<<"V"<<dec<<vs->id<<" [label=\""<<vs<<"\"";
             if (vs->type == JVAR_STACK || vs->type == JVAR_STACKFRAME) os<<",fillcolor=dodgerblue";

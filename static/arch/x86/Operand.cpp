@@ -119,9 +119,9 @@ std::ostream& janus::operator<<(std::ostream& out, const Operand& v)
                 out<<"+"<<get_reg_name(v.segMem.index);
             if(v.segMem.disp) {
                 if(v.segMem.disp<0)
-                    out<<"-0x"<<(-(v.segMem.disp));
+                    out<<"-0x"<<hex<<(-(v.segMem.disp));
                 else
-                    out<<"+0x"<<(v.segMem.disp);
+                    out<<"+0x"<<hex<<(v.segMem.disp);
             }
             out <<"]";
         }
@@ -221,6 +221,12 @@ Variable Operand::lift(PCAddress nextInstrPc)
             var.base = fullMem.base;
             var.scale = fullMem.scale;
             var.type = JVAR_MEMORY;
+        } else if(structure = OPND_SEGMEM){ //this sec added by MA
+            var.value = segMem.disp;
+            var.index = segMem.index;
+            var.base = segMem.base;
+            var.type = JVAR_SEG_MEMORY;
+            var.scale = segMem.segment; //temporary because we dont have a segment field
         } else var.type = JVAR_UNKOWN;
         break;
     case OPND_IMM:
