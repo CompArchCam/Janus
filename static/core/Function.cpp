@@ -17,8 +17,10 @@ using namespace std;
 using namespace janus;
 
 //Function::Function(JanusContext *gc,FuncID fid, const Symbol &symbol, uint32_t size)
+//Function::Function(FuncID fid, const Symbol &symbol, uint32_t size)
+//:context(gc),fid(fid),size(size)
 Function::Function(FuncID fid, const Symbol &symbol, uint32_t size)
-:context(gc),fid(fid),size(size)
+:fid(fid),size(size)
 {
     startAddress = symbol.startAddr;
     endAddress = startAddress + size;
@@ -60,8 +62,8 @@ Function::~Function()
 }
 
 /* retrieve further information from instructions */
-void
-Function::translate()
+//void Function::translate()
+void Function::translateBasic()
 {
     if (translated) return;
 
@@ -83,14 +85,37 @@ Function::translate()
 
     /* For other mode, memory accesses are enough,
      * Only paralleliser and analysis mode needs to go further */
-    if (context->mode != JPARALLEL &&
+    /*if (context->mode != JPARALLEL &&
         context->mode != JPROF &&
         context->mode != JANALYSIS &&
         context->mode != JVECTOR &&
         context->mode != JOPT &&
 	    context->mode != JSECURE &&
         context->mode != JFETCH)
-        return;
+        return;*/
+
+    /* Construct the abstract syntax tree of the function */
+    //buildASTGraph(this);
+
+    /* Perform variable analaysis */
+    //variableAnalysis(this);
+
+    /* Peform liveness analysis */
+    //livenessAnalysis(this);
+}
+
+void Function::translateAdvance()
+{
+    /* For other mode, memory accesses are enough,
+     * Only paralleliser and analysis mode needs to go further */
+    /*if (context->mode != JPARALLEL &&
+        context->mode != JPROF &&
+        context->mode != JANALYSIS &&
+        context->mode != JVECTOR &&
+        context->mode != JOPT &&
+	    context->mode != JSECURE &&
+        context->mode != JFETCH)
+        return;*/
 
     /* Construct the abstract syntax tree of the function */
     buildASTGraph(this);
@@ -113,14 +138,15 @@ assign_loop_blocks(Loop *loop) {
         assign_loop_blocks(subLoop);
 }
 
-void
-Function::analyseLoopRelations()
+//void Function::analyseLoopRelations()
+void Function::analyseLoopRelations(std::vector<janus::Loop>* allLoops)
 {
     //get loop array
-    Loop *loopArray = context->loops.data();
+    //Loop *loopArray = context->loops.data();
+	Loop *loopArray = allLoops->data();
     //step 1 we simply use a O(n^2) comparison
-    for (auto loopID: loops) {
-        for (auto loopID2 : loops) {
+    for (auto loopID: loopIDs) {
+        for (auto loopID2 : loopIDs) {
             if (loopID != loopID2) {
                 //if loop 2 start block is in the loop 1's body
                 if (loopArray[loopID-1].contains(loopArray[loopID2-1].start->bid)) {
@@ -135,7 +161,7 @@ Function::analyseLoopRelations()
     //step 2 assign immediate parent and children
     map<LoopID,int> levels;
     int undecided = 0;
-    for (auto loopID: loops) {
+    for (auto loopID: loopIDs) {
         Loop &loop = loopArray[loopID-1];
         //starts with loops with 0 ancestors
         if (loop.ancestors.size()==0) {
@@ -150,14 +176,14 @@ Function::analyseLoopRelations()
     //if all loops are level 0, simply return
     if (!undecided) goto assign_blocks;
     //if all are undecided, it is a recursive loop
-    if (undecided == loops.size()) return;
+    if (undecided == loopIDs.size()) return;
 
 
     //step 3 recursively calculates the levels for each loop
     bool converge;
     do {
         converge = true;
-        for (auto loopID: loops) {
+        for (auto loopID: loopIDs) {
             Loop &loop = loopArray[loopID-1];
             if (loop.ancestors.size()==0) continue;
             bool allVisited = true;
@@ -187,7 +213,7 @@ Function::analyseLoopRelations()
 
 assign_blocks:
     //assign basic block to inner most loops
-    for (auto loopID: loops) {
+    for (auto loopID: loopIDs) {
         assign_loop_blocks(loopArray + loopID -1);
     }
 }

@@ -22,21 +22,28 @@ private:
 	// TODO: What does this data type contain?
 	std::map<PCAddress, janus::Function *> functionMap;
 
+	std::vector<std::set<LoopID>> loopNests;
+
 public:
 	SourceCodeStructure();
 
 	// For consistency reason, only update of the full structure is possible.
-	void updateBinaryStructure(janus::Function *main, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *>* functionMap);
+	void updateBinaryStructure(janus::Function *main, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *> functionMap);
 
 	std::vector<janus::Loop> getAllLoops();
 
-	Function getMainFunction();
+	janus::Function getMainFunction();
 
 	std::vector<janus::Function> getAllFunctions();
 
 	std::map<PCAddress, janus::Function *> getFunctionMap()
 	{
 		return functionMap;
+	}
+
+	std::string getExecutableName()
+	{
+		return executableName;
 	}
 };
 

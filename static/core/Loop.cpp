@@ -28,12 +28,16 @@ using namespace std;
  * then node X is called the loop start node 
  * Y is called the loop end node 
  * Each loop has only one start node (X) but may have multiple end nodes (Ys) */
-void
-searchLoop(JanusContext *gc, Function *function)
+//void searchLoop(JanusContext *gc, Function *function)
+//void searchLoop(JanusContext *gc, Function *function)
+void searchLoop(std::vector<janus::Loop>* loops, Function *function)
 {
-    if (!gc || !function) return;
+    //if (!gc || !function) return;
+	if (!function) return;
 
-    auto            &loopArray = gc->loops;
+    //auto            &loopArray = gc->loops;
+	auto            &loopArray = loops;
+
     BasicBlock      *entry = function->entry;
     uint32_t        size = function->blocks.size();
 
@@ -227,7 +231,8 @@ void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport)
     BasicBlock *entry = parent->entry;
 
     /* translate parent function before analysis */
-    if (parent) parent->translate();
+    //if (parent) parent->translate();
+    if (parent) parent->translateBasic();
 
     //Analyse sub-loop first
     //So that information in the inner loop should be available for analysis of the outer loop
@@ -235,7 +240,40 @@ void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport)
     	l->analyseBasic(loopAnalysisReport);
         //l->analyse(gc);
 
-    analysePass0(loopAnalysisReport);
+    analysePass0_Basic(loopAnalysisReport);
+}
+
+void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport)
+{
+    if (analysed) return;
+
+    //if (gc->manualLoopSelection && !pass) {
+    if (loopAnalysisReport.getManualLoopSelection() && !pass) {
+        //even if the loop is not selected, if it belongs to the same loop nest with selected loop
+        //then we should analyse the loop
+        for (auto l: ancestors)
+            if (l->pass) goto proceed;
+        for (auto l: descendants)
+            if (l->pass) goto proceed;
+        return;
+    }
+
+    proceed:
+    analysed = true;
+    BasicBlock *entry = parent->entry;
+
+    /* translate parent function before analysis */
+    //if (parent) parent->translate();
+    if (parent) parent->translateBasic();
+    if (parent) parent->translateAdvance();
+
+    //Analyse sub-loop first
+    //So that information in the inner loop should be available for analysis of the outer loop
+    for (auto *l : subLoops)
+    	l->analyseBasic(loopAnalysisReport);
+        //l->analyse(gc);
+
+    analysePass0_Advance(loopAnalysisReport);
 }
 
 // Should only be called by JPROF
@@ -257,11 +295,11 @@ void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport
         return;
     }
 
-	analysePass0(loopAnalysisReport);
+	analysePass0_Advance(loopAnalysisReport);
 }
 
 // Not called by JPROF for removed loops.
-void Loop::analysePass0(LoopAnalysisReport loopAnalysisReport)
+void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport)
 {
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" in "<<parent->name<<endl);
@@ -292,7 +330,8 @@ void Loop::analysePass0(LoopAnalysisReport loopAnalysisReport)
     Function *functions = gc->functions.data();
     for (auto call: subCalls) {
         LOOPLOG("\tAnalysing sub function calls "<<functions[call].name<<endl);
-        functions[call].translate();
+        //functions[call].translate();
+        functions[call].translateBasic();
     }
 
     /* Step 3: variable analysis (find constant variables) */
@@ -306,6 +345,56 @@ void Loop::analysePass0(LoopAnalysisReport loopAnalysisReport)
 
     LOOPLOG("========================================================="<<endl<<endl);
 }
+
+// Not called by JPROF for removed loops.
+void Loop::analysePass0_Advance(LoopAnalysisReport loopAnalysisReport)
+{
+    LOOPLOG("========================================================="<<endl);
+    LOOPLOG("Analysing Loop "<<dec<<id<<" in "<<parent->name<<endl);
+
+    /* Step 1: examine all basic blocks, check the sub-calls
+     * and unsafe exits */
+    for (auto bid: body) {
+        //check whether it is terminated by indirect branches
+        auto check = parent->unRecognised.find(bid);
+        if (check != parent->unRecognised.end()) {
+            sync.insert(bid);
+            continue;
+        }
+        //examine sub calls
+        if (entry[bid].lastInstr()->opcode == Instruction::Call) {
+            Function *func = parent->calls[entry[bid].lastInstr()->id];
+            if (func) {
+                calls[bid] = func->fid;
+                subCalls.insert(func->fid);
+                //merge further subcalls
+                for (auto sub: func->subCalls)
+                    subCalls.insert(sub);
+            }
+        }
+    }
+
+    /* Step 2: translate all subcalls */
+    Function *functions = gc->functions.data();
+    for (auto call: subCalls) {
+        LOOPLOG("\tAnalysing sub function calls "<<functions[call].name<<endl);
+        //functions[call].translate();
+        functions[call].translateBasic();
+        functions[call].translateAdvance();
+    }
+
+    /* Step 3: variable analysis (find constant variables) */
+    variableAnalysis(this);
+
+    /* Step 4: dependence analysis for variables (only) */
+    dependenceAnalysis(this);
+
+    /* Step 5: iterator variable analysis */
+    iteratorAnalysis(this);
+
+    LOOPLOG("========================================================="<<endl<<endl);
+}
+
 
 //void Loop::analyse2(JanusContext *gc)
 void Loop::analyse2(LoopAnalysisReport loopAnalysisReport)

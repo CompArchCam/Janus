@@ -2,6 +2,7 @@
 #include "SchedGen.h"
 #include "ProgramDependenceAnalysis.h"
 #include "SourceCodeStructure.h"
+#include "LoopAnalysisReport.h"
 #include <string.h>
 
 using namespace std;
@@ -168,10 +169,10 @@ int main(int argc, char **argv) {
     // Updates external functions.
     janus::Function *fmain;
     //std::map<PCAddress, janus::Function *>* functionMap = &(jc->functionMap);
-    std::map<PCAddress, janus::Function *>* functionMap = sourceCodeStructure.getFunctionMap();
+    std::map<PCAddress, janus::Function *> functionMap = sourceCodeStructure.getFunctionMap();
     std::map<PCAddress, janus::Function *>* externalFunctions;
     // Program object to contain fmain, functionMap, externalFunctions
-    std::vector<janus::Function> functions = executableBinaryStructure.disassemble(fmain, functionMap, externalFunctions);
+    std::vector<janus::Function> functions = executableBinaryStructure.disassemble(fmain, &functionMap, externalFunctions);
 
 
 
@@ -188,7 +189,7 @@ int main(int argc, char **argv) {
     programDependenceAnalysis.constructControlDependenceGraph(functions);
 
     // Update the code structure with analysis results.
-    sourceCodeStructure.updateBinaryStructure(main, functions, functionMap)
+    sourceCodeStructure.updateBinaryStructure(fmain, functions, functionMap);
 
 	std::vector<janus::Loop> loops = sourceCodeStructure.getAllLoops();
 
@@ -197,32 +198,61 @@ int main(int argc, char **argv) {
 
 
 	// Identify loops from the control flow graph
-	programDependenceAnalysis.identifyLoopsFromCFG(std::vector<janus::Function> functions);
+    loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
 
 	// Analyze loop relations within one procedure
-	programDependenceAnalysis.analyseLoopRelationsWithinProcedure(std::vector<janus::Function> functions);
+    // Update loops
+	programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
 
 	// TODO: How to update loops independently and update them back to functions?
 	// Do not use pointers, because we want to keep functions structure consistent.
 	// Or maybe use pointers?
 
     // Analyze loop relations across procedures
-	programDependenceAnalysis.analyseLoopAndFunctionRelations(sourceCodeStructure.getAllLoops());
+	std::vector<std::set<LoopID>> loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
 
     //load loop selection from previous run
-	LoopAnalysisReport loopAnalysisReport = loadLoopSelection(codeStructure.getAllLoops(), sourceCodeStructure.getExecutableName());
+	LoopAnalysisReport loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, sourceCodeStructure.getExecutableName());
 
-	programDependenceAnalysis.performBasicLoopAnalysis(sourceCodeStructure.getAllLoops(), loopAnalysisReport);
+	if (mode != JPARALLEL &&
+	        mode != JPROF &&
+	        mode != JANALYSIS &&
+	        mode != JVECTOR &&
+	        mode != JOPT &&
+		    mode != JSECURE &&
+	        mode != JFETCH)
+	{
+		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport);
+	}
+	else
+	{
+		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport);
+	}
+
+	// TODO: The problem is in the analysis. Some analysis is exclusive for JPROF, while other analysis are exclusive for several flags.
+	// Currently, analysePass0 translateBasic, but it seems that it is called also from performAdvanceLoopAnalysis, which requires translateAdvance
 
 	// Only valid for JPROF.
 	// If a loop is removed, then nothing.
 	// therwise, this analysis will call
 	if (mode == JPROF)
-		programDependenceAnalysis.reduceLoopsAliasAnalysis(sourceCodeStructure.getAllLoops(), loopAnalysisReport);
+		programDependenceAnalysis.reduceLoopsAliasAnalysis(loops, loopAnalysisReport);
 	else
-		programDependenceAnalysis.performBasicPass(sourceCodeStructure.getAllLoops(), loopAnalysisReport);
+	{
 
-	programDependenceAnalysis.performLoopAnalysisPasses(sourceCodeStructure.getAllLoops(), loopAnalysisReport);
+		if (mode != JPARALLEL &&
+			        mode != JANALYSIS &&
+			        mode != JVECTOR &&
+			        mode != JOPT &&
+				    mode != JSECURE &&
+			        mode != JFETCH)
+			programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+		else
+			programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+	}
+
+
+	programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
 
     if(mode == JANALYSIS || mode == JGRAPH) {
         dumpCFG(jc);

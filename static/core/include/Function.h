@@ -19,7 +19,12 @@
 #include <set>
 #include <list>
 
+
+
 class JanusContext;
+class ExecutableBinaryStructure;
+
+using namespace janus;
 
 namespace janus {
     class Function
@@ -37,7 +42,7 @@ namespace janus {
         bool                                   isExecutable;
         bool                                   isExternal;
         bool                                   available;
-        JanusContext                           *context;
+        //JanusContext                           *context;
         ///If set, then it is safe to query the basic information of basic block/instructions/sub calls
         bool                                   translated;
         /* --------------------------------------------------------------
@@ -66,7 +71,8 @@ namespace janus {
          *                    query data structure
          * ------------------------------------------------------------- */
         ///A vector of loops IDs that are in this function.
-        std::set<LoopID>                       loops;
+        //std::set<LoopID>                       loops;
+        std::set<LoopID>                       loopIDs;
         ///instruction look up table by PC
         std::map<PCAddress, InstID>            minstrTable;
         ///All loop iterators
@@ -149,13 +155,18 @@ namespace janus {
         ~Function();
 
         //retrieve information from instructions
-        void translate();
+        //void translate();
+        // Basic retrieve of information from instructions
+        void translateBasic();
+        // Additional steps: buildASTGraph, variableAnalysis, livenessAnalysis
+        void translateAdvance();
         void visualize(void *outputStream); //output to dot format
         void printASTDot(void *outputStream); //AST output to dot format
         void print(void *outputStream);
         bool needSync();
         /** \brief Contruct the relations of the loop in this function */
-        void analyseLoopRelations();
+        //void analyseLoopRelations();
+        void analyseLoopRelations(std::vector<janus::Loop>* allLoops);
     };
 }
 

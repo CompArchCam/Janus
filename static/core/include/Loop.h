@@ -6,6 +6,7 @@
 #include "Variable.h"
 #include "MemoryLocation.h"
 #include "Iterator.h"
+#include "LoopAnalysisReport.h"
 
 #include <set>
 #include <map>
@@ -200,7 +201,22 @@ class Loop
     std::map<BlockID, double>       temperature;
     Loop(BasicBlock *start, Function *parent);
     /** \brief perform full Janus static analysis on this loop (first pass) */
-    void                 analyse(JanusContext *gc);
+    //void                 analyse(JanusContext *gc);
+    // The only difference between basic and advance analysis is that the advance analysis
+    // calls also translateAdvance on the parent function, while basic analysis
+    // calls only translateBasic.
+    void analyseBasic(LoopAnalysisReport loopAnalysisReport);
+    void analyseAdvance(LoopAnalysisReport loopAnalysisReport);
+    // Had to separate analyze into analyseBasic/analyseAdvance, analyseReduceLoopsAliasAnalysis, and
+    // analysePass0, due to dependencies on different steps.
+    void analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport);
+    //void Loop::analysePass0(LoopAnalysisReport loopAnalysisReport);
+    // The only difference between analysePass0_Basic and analysePass0_Advance is that
+    // analysePass0_Basic calls translateBasic on functions, while
+    // analysePass0_Advance calls translateBasic and translateAdvance.
+    void analysePass0_Basic(LoopAnalysisReport loopAnalysisReport);
+    void analysePass0_Advance(LoopAnalysisReport loopAnalysisReport);
+
     /** \brief perform full Janus static analysis on this loop (second pass) */
     void                 analyse2(JanusContext *gc);
     /** \brief perform full Janus static analysis on this loop (third pass) */
@@ -272,6 +288,6 @@ class Loop
 void
 linkParentLoops(janus::Function *function);
 
-void
-searchLoop(JanusContext *gc, janus::Function *function);
+//void searchLoop(JanusContext *gc, janus::Function *function);
+void searchLoop(janus::Function *function);
 #endif
