@@ -500,3 +500,92 @@ livenessAnalysis(Function *function)
     function->liveRegIn = iLiveRegIn;
     function->liveRegOut = iLiveRegOut;
 }
+void
+flagsAnalysis(Function *function)
+{
+    BasicBlock *entry = function->entry;
+    uint32_t numBlocks = function->numBlocks;
+    uint32_t numInstrs = function->instrs.size();
+    if (function->liveFlagIn != NULL ||
+        function->liveFlagOut != NULL) return;
+
+    /* Allocate register sets of outputs */
+    FlagSet *iLiveFlagIn = new FlagSet[numInstrs];
+    FlagSet *iLiveFlagOut = new FlagSet[numInstrs];
+
+    /* Allocate temporary register set arrays */
+    FlagSet *flagDefs = new FlagSet[numBlocks];
+    FlagSet *flagUses = new FlagSet[numBlocks];
+    FlagSet *liveFlagIn = new FlagSet[numBlocks];
+    FlagSet *liveFlagOut = new FlagSet[numBlocks];
+
+    /* init */
+    memset(flagDefs, 0, numBlocks * sizeof(FlagSet));
+    memset(flagUses, 0, numBlocks * sizeof(FlagSet));
+    memset(liveFlagIn, 0, numBlocks * sizeof(FlagSet));
+    memset(liveFlagOut, 0, numBlocks * sizeof(FlagSet));
+    /* Step 1: flags reads and writes for each instruction */
+    for (auto &instr : function->instrs) {
+       //instr.flagReads = (instr.minstr->readsOFlag()<<1) | instr.minstr->readsStatusFlags();
+       //instr.flagWrites = (instr.minstr->updatesOFlag()<<1) | instr.minstr->updatesStatusFlags();
+       instr.flagReads.insert(instr.minstr->readsArithFlags());
+       instr.flagWrites.insert(instr.minstr->updatesArithFlags());
+    }
+    /* Step 2: conclude the flag USE DEF sets */
+    for (int b=0; b<numBlocks; b++) {
+        BasicBlock &bb = entry[b];
+        for (int i=0; i<bb.size; i++) {
+            Instruction &instr = bb.instrs[i];
+            //skip invisible reads within the same block
+            flagUses[b].merge(instr.flagReads - flagDefs[b]);
+            flagDefs[b].merge(instr.flagWrites);
+        }
+    }
+        bool converge;
+
+    /* Step 3: live analysis at basic block granularity */
+    do {
+        converge = true;
+
+        for(int i=0; i<numBlocks; i++) {
+            //copy both register and stack in-out states
+            FlagSet flagInOld = liveFlagIn[i];
+            FlagSet flagOutOld = liveFlagOut[i];
+            //take reference
+            FlagSet &in = liveFlagIn[i];
+            FlagSet &out = liveFlagOut[i];
+
+            BasicBlock &bb = entry[i];
+            if(bb.succ1) out.merge(liveFlagIn[bb.succ1->bid]);
+            if(bb.succ2) out.merge(liveFlagIn[bb.succ2->bid]);
+
+            //for each node in CFG
+            //in[B] = use[B] + out[B] - def[B]
+            in = flagUses[i] + (out - flagDefs[i]);
+
+            if(!(flagInOld == in && flagOutOld == out)) {
+                converge = false;
+            }
+
+        }
+    //until it converges
+    } while(!converge);
+
+    /* Step 4: conclude liveIn and liveOut for each instruction */
+    for (int b=0; b<numBlocks; b++) {
+        BasicBlock &bb = entry[b];
+        //get liveOut at the end of the block
+        FlagSet liveOut = liveFlagOut[b];
+        FlagSet liveIn;
+        for (int i=bb.size-1; i>=0; i--) {
+            Instruction &instr = bb.instrs[i];
+            iLiveFlagOut[instr.id] = liveOut;
+            liveIn = liveOut - instr.flagWrites + instr.flagReads;
+            iLiveFlagIn[instr.id] = liveIn;
+            liveOut = liveIn;
+        }
+    }
+
+    function->liveFlagIn = iLiveFlagIn;
+    function->liveFlagOut = iLiveFlagOut;
+}

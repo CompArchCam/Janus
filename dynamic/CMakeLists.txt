@@ -7,7 +7,8 @@ set(DYN_SRC_DIR "${PROJECT_SOURCE_DIR}/dynamic")
 #find DynamoRIO library
 #set(DynamoRIO_DIR "${PROJECT_SOURCE_DIR}/../dynamorio/build/cmake")
 if (JANUS_X86_SUPPORT)
-set(DynamoRIO_DIR "${PROJECT_SOURCE_DIR}/external/DynamoRIO-Linux-7.0.0-RC1/cmake")
+#set(DynamoRIO_DIR "${PROJECT_SOURCE_DIR}/external/DynamoRIO-Linux-7.0.0-RC1/cmake")
+set(DynamoRIO_DIR "${PROJECT_SOURCE_DIR}/external/DynamoRIO-Linux-8.0.0-1/cmake")
 elseif(JANUS_ARM64_SUPPORT)
 set(DynamoRIO_DIR "${PROJECT_SOURCE_DIR}/external/DynamoRIO-AArch64-Linux-7.0.0-RC1/cmake")
 endif()
@@ -47,6 +48,8 @@ add_subdirectory(prefetcher)
 #automatic vector
 add_subdirectory(vector)
 add_subdirectory(planner)
+#JASAN - AddressSanitizer
+add_subdirectory(asan)
 #DLL
 add_subdirectory(dll)
 endif()

@@ -16,6 +16,9 @@ void
 livenessAnalysis(janus::Function *function);
 
 void
+flagsAnalysis(janus::Function *function);
+
+void
 reachingAnalysis(janus::Function *function);
 
 void

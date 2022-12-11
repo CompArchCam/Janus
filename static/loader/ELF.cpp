@@ -119,17 +119,20 @@ void Executable::parseELF64()
             Elf64_Sym sym = *(Elf64_Sym *)symtab;
 
             int type = sym.st_type;
-            if(type>STT_FILE) type = SYM_OTHER;
+            if(type == STT_GNU_IFUNC) type = SYM_FUNC;
+            else if(type>STT_FILE) type = SYM_OTHER;
             int binding = sym.st_bind;
             string symbolName = string(symtabStringTable + sym.st_name);
 
             if (int16_t(sym.st_shndx) > 0){
                 Section &mySection = sections[sym.st_shndx];
                 if (type != STT_SECTION) {
-                    Symbol symbol(symbolName, sym.st_value, &mySection, (SymbolType)type);
+                    //Symbol symbol(symbolName, sym.st_value, &mySection, (SymbolType)type);
+                    Symbol symbol(symbolName, sym.st_value, &mySection, (SymbolType)type,sym.st_size);
                     symbols.insert(symbol);
                 } else {
-                    Symbol symbol(symbolName, sym.st_value, &mySection, SYM_NONE);
+                    //Symbol symbol(symbolName, sym.st_value, &mySection, SYM_NONE);
+                    Symbol symbol(symbolName, sym.st_value, &mySection, SYM_NONE,sym.st_size);
                     symbols.insert(symbol);
                 }     
             } 
@@ -159,7 +162,8 @@ void Executable::parseELF64()
             Elf64_Sym sym = *(Elf64_Sym *)dynSymtab;
 
             int type = sym.st_type;
-            if(type>STT_FILE) type = SYM_OTHER;
+            if(type == STT_GNU_IFUNC) type = SYM_FUNC;
+            else if(type>STT_FILE) type = SYM_OTHER;
             int binding = sym.st_bind;
 
             string symbolName = string(dynSymtabStringTable + sym.st_name);
@@ -176,6 +180,7 @@ void Executable::parseELF64()
         if(pltSectionIndex > 0) {
             Section &plt = sections[pltSectionIndex];
             symbols.insert(Symbol(plt.name, plt.startAddr, &plt, SYM_FUNC));  
+            pltSectionStartAddr = plt.startAddr;
             //relocation symbols
             //since there is no plt symbols, we need to create it by ourselfs
             //borrows ideas from _bfd_get_synthetic_symbol
@@ -195,6 +200,7 @@ void Executable::parseELF64()
 
                     if (entrysize < expectedEntrySize) {entrysize = expectedEntrySize;}
 
+                    uint64_t addr = plt.startAddr;
                     // Loop through entries
                     for (; reltab < reltabend; reltab += entrysize) {
                         Elf64_Rela rel;  rel.r_addend = 0;
@@ -208,6 +214,8 @@ void Executable::parseELF64()
                         string symbolName = string(dynSymtabStringTable + relaTab[rel.r_sym].st_name);
                         
                         PCAddress relocatedAddress = rel.r_offset;
+                        //a hack to include functions from plt into external function set: for security code
+                         externalFuncNames.insert(symbolName+"@plt");
 
                         Symbol symbol(symbolName,relocatedAddress, &plt, SYM_RELA); 
                         symbols.insert(symbol);   

@@ -80,10 +80,11 @@ static void linkRelocation(JanusContext *jc, Function *pltFunc)
 
     if (!size) return;
 
-    if (size % 3) {
+    if (size % 3) { //TODO: this is not portable for binaries where .plt section may not be multiple of 3
         cout << "function "<<pltFunc->name<<" may not be a PLT section" << endl;
         return;
     }
+    jc->pltsection = true;
 
     uint32_t nPltSym = size / 3;
 
@@ -100,6 +101,11 @@ static void linkRelocation(JanusContext *jc, Function *pltFunc)
         //update in the function map
         jc->functionMap[synFunc->startAddress] = synFunc;
         i++;
+        //HACK: to build BB for plt stubs to be used for instrumentation 
+        int offset = synFunc->startAddress - pltFunc->startAddress;
+        synFunc->contents = pltFunc->contents + offset;
+        disassemble(synFunc);
+        
         if (i==nPltSym) break;
     }
 }

@@ -1,0 +1,62 @@
+#!/bin/bash     
+set -x
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Address Sanitizer"
+    echo "Usage: "
+    echo "./jasan <opt-option> <executable> [executable_args ...]"
+    echo "opt-option: base, live, opt, scev, null"
+}
+
+if [ $# -lt "2" ]
+then 
+    usage
+    exit
+fi
+
+stat_mode=$1
+binfile=$2
+shift
+shift
+hintfile="$binfile.jrs"
+
+if [ ! -f $binfile ];
+then
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
+datadir=/home/ma843/rwschedule
+asmfile="$datadir/$binname.s"
+if [ ! -f $asmfile ];
+then
+   objdump -d $binfile > $asmfile
+fi
+
+
+if [ $stat_mode == "opt" ];
+then
+    $JANUSBIN/analyze -aso $binfile
+elif [ $stat_mode == "base" ];
+then
+    $JANUSBIN/analyze -as $binfile
+elif [ $stat_mode == "live" ];
+then
+    $JANUSBIN/analyze -asl $binfile
+elif [ $stat_mode == "scev" ];
+then
+    $JANUSBIN/analyze -asc $binfile
+elif [ $stat_mode == "null" ];
+then
+    $JANUSBIN/analyze -asn $binfile
+fi
+
+#export LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so
+#gdb --args $TOOLDIR/bin64/drrun -debug -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
+#LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
+LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
+#$TOOLDIR/bin64/drrun -debug -checklevel 0 -loglevel 4 -no_vm_base_near_app -vm_base 0x200000000000 -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@

@@ -67,8 +67,10 @@ struct Symbol {
     SymbolType                  type;
     PCAddress                   startAddr;  //virtual addresses
     Section                     *section;
+    uint32_t                    size;
     Symbol(std::string name, PCAddress startAddr, Section *section, SymbolType type)
     :name(name),startAddr(startAddr),section(section),type(type){};
+    Symbol(std::string name, PCAddress startAddr, Section *section, SymbolType type, uint32_t size) :name(name),startAddr(startAddr),section(section),type(type), size(size){};
 };
 
 //sorting for the symbol structure
@@ -93,6 +95,8 @@ public:
     ExecutableType                  type;
 
     uint32_t                        fileSize;
+    PCAddress                        pltSectionStartAddr;
+    std::set<std::string>               externalFuncNames;
     ///load into the executable based on the file path
     void                            open(JanusContext *jc, const char *filename);
     ///lift to disassembly and functions

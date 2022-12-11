@@ -35,7 +35,7 @@ buildCFG(Function &function)
     function.entry = function.blocks.data();
     function.numBlocks = function.blocks.size();
 
-    if (function.numBlocks <= 1) return;
+    if (function.numBlocks <= 1 || function.isExternal) return;
 
     /* step 2: analyse the CFG and build dominance tree */
     buildDominanceTree(function);
@@ -110,6 +110,8 @@ buildBasicBlocks(Function &function)
 
             while(id < instrCount - 2 &&
                 instrs[id+offset].opcode == Instruction::Nop) {
+                //add nop instruction to nop set.
+                function.context->nopInstrs.insert(instrs[id+offset].pc);
                 offset++;
             }
 

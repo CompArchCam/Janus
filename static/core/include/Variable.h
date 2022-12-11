@@ -102,6 +102,9 @@ struct VarState : Variable {
      * or impossible alias analysis to avoid the false positives)
      */
     bool                    dependsOnMemory;
+    //to track a memory node to a malloc site
+    bool                    trackable;
+    PCAddress               mallocsite;
     /** \brief Constructs an empty variable */
     VarState();
     VarState(Variable var);

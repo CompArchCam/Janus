@@ -1,7 +1,8 @@
 #include "janus.h"
 
 #include <stdio.h>
-
+//location for storing rewrite schedule. change accordinly. //TODO: make this an input argument
+char rs_dir[] = "/local/scratch-2/ma843/rwdir-re/";
 const char *print_janus_mode(JMode mode) {
     switch(mode) {
         case JPARALLEL: return "Automatic Parallelisation";
@@ -15,6 +16,12 @@ const char *print_janus_mode(JMode mode) {
         case JFETCH: return "Automatic software prefetch";
         case JCUSTOM: return "Custom DSL Execution";
         case JDLL: return "DLL Instrumentation Testing";
+        case JASAN: return "Address Sanitizer";
+        case JASAN_OPT: return "Address Sanitizer with full opt";
+        case JASAN_SCEV: return "Address Sanitizer with scev opt";
+        case JASAN_LIVE: return "Address Sanitizer with liveness opt";
+        case JASAN_DYN: return "Address Sanitizer dynamic version";
+        case JASAN_NULL: return "Address Sanitizer null version";
         default: return "Free Mode";
     }
 }
@@ -172,6 +179,14 @@ const char *print_rule_opcode(RuleOp op)
         case VECT_BROADCAST: return "VECT_BROADCAST";
         case VECT_REDUCE_AFTER: return "VECT_REDUCE_AFTER";
         case VECT_REVERT: return "VECT_REVERT";
+        case MEM_R_ACCESS: return "MEM_R_ACCESS";
+        case MEM_W_ACCESS: return "MEM_W_ACCESS";
+        case MEM_RW_ACCESS: return "MEM_RW_ACCESS";
+        case STORE_CANARY_SLOT: return "STORE_CANARY";
+        case POISON_CANARY_SLOT: return "POISON_CANARY";
+        case UNPOISON_CANARY_SLOT: return "UNPOISON_CANARY";
+        case NO_RULE: return "NO_RULE";
+        case ENABLE_MONITORING: return "ENABLE_MONITORING";
         default: return "Null";
     }
 }
