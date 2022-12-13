@@ -9,6 +9,10 @@ static void usage()
     cout<<"Usage: analyze + <option> + <executable> + [profile_info]"<<endl;
     cout<<"Option:"<<endl;
     cout<<"  -a: static analysis without generating rules"<<endl;
+    cout<<"  -as: AddressSanitizer"<<endl;
+    cout<<"  -asl: AddressSanitizer with Liveness Opt"<<endl;
+    cout<<"  -asc: AddressSanitizer with SCEV Opt"<<endl;
+    cout<<"  -asn: Address Sanitizer with NULL rule for shared object"<<endl;
     cout<<"  -c: generate custom analysis and rules from Cinnamon DSL"<<endl;
     cout<<"  -cfg: generate CFG from the binary"<<endl;
     cout<<"  -s: generate rules for secure execution"<<endl;
@@ -40,7 +44,33 @@ int main(int argc, char **argv) {
     {
         char option = argv[1][1];
         switch(option) {
-            case 'a': mode = JANALYSIS; IF_VERBOSE(cout<<"Static analysis mode enabled"<<endl); break;
+            case 'a':
+                if(argv[1][2]=='s'){
+                   if(argv[1][3] == 'l'){
+                       mode = JASAN_LIVE;
+                       IF_VERBOSE(cout<<"Address Sanitizer (Reg and Flag Liveness Opt) enabled"<<endl);
+                   }
+                   else if(argv[1][3] == 'c'){
+                       mode = JASAN_SCEV;
+                       IF_VERBOSE(cout<<"Address Sanitizer (SCEV Opt) enabled"<<endl);
+                   }
+                   else if(argv[1][3] == 'o'){
+                       mode = JASAN_OPT;
+                       IF_VERBOSE(cout<<"Address Sanitizer (Full Opt) enabled"<<endl);
+                   }
+                   else if(argv[1][3] == 'n'){
+                       mode = JASAN_NULL;
+                       IF_VERBOSE(cout<<"Address Sanitizer with NULL rules for shared obj enabled"<<endl);
+                   }
+                   else{
+                       mode = JASAN;
+                       IF_VERBOSE(cout<<"Address Sanitizer (baseline) enabled"<<endl);
+                   }
+                }
+                else{
+                    mode = JANALYSIS; IF_VERBOSE(cout<<"Static analysis mode enabled"<<endl);
+                }
+                break;
             case 'c':
                 if (argv[1][2] == 'f' && argv[1][3] == 'g') {
                     mode = JGRAPH;
@@ -116,8 +146,12 @@ int main(int argc, char **argv) {
     //build CFG
     jc->buildProgramDependenceGraph();
 
-    //analyse
-    jc->analyseLoop();
+    if(mode != JASAN &&  mode != JASAN_LIVE && mode != JASAN_NULL){ //do loop analysis for JASAN only for SCEV and full opt
+        jc->analyseLoop();
+    }
+    if( mode == JASAN || mode == JASAN_OPT || mode == JASAN_LIVE || mode == JASAN_SCEV || mode == JASAN_NULL)
+        jc->translateFunctions();
+
 
     if(mode == JANALYSIS || mode == JGRAPH) {
         dumpCFG(jc);

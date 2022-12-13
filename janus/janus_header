@@ -7,7 +7,8 @@ JANUSLIB="$DIR/../lib"
 JANUSBIN="$DIR/../bin"
 
 if [ $(uname -m) == 'x86_64' ]; then
-  TOOLDIR="$DIR/../external/DynamoRIO-Linux-7.0.0-RC1/"
+  #TOOLDIR="$DIR/../external/DynamoRIO-Linux-7.0.0-RC1/"
+  TOOLDIR="$DIR/../external/DynamoRIO-Linux-8.0.0-1/"
 elif [ $(uname -m) == 'aarch64' ]; then
   TOOLDIR="$DIR/../external/DynamoRIO-AArch64-Linux-7.0.0-RC1/"
 fi

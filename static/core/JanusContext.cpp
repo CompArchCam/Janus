@@ -18,13 +18,19 @@ JanusContext::JanusContext(const char* name, JMode mode)
     useProfiles = false;
     manualLoopSelection = false;
     sharedOn = true;
+    pltsection = false;
     //open the executable and parse according to the header
     program.open(this, name);
 
     //lift the binary to disassembly
     program.disassemble(this);
 }
-
+void JanusContext::translateFunctions(){
+    for(auto &func: functions){
+        if(!func.isExternal)
+            func.translate();        //this is to ensure we analyse all functions and stack even if no loop inside
+    }
+}
 void JanusContext::buildProgramDependenceGraph()
 {
     GSTEP("Building basic blocks: ");
@@ -32,6 +38,10 @@ void JanusContext::buildProgramDependenceGraph()
     /* Step 1: build CFG for each function */
     for (auto &func: functions) {
         if (func.isExecutable) {
+            buildCFG(func);
+            numBlocks += func.blocks.size();
+        }
+        else if(func.isExternal && func.minstrs.size()){//to ensure we construct BB external function stubs in plt section 
             buildCFG(func);
             numBlocks += func.blocks.size();
         }

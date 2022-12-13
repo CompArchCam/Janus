@@ -119,6 +119,87 @@ janus::operator==(RegSet a, RegSet b)
     return a.bits == b.bits;
 }
 
+/*--- Methods for FlagSet-----*/
+
+void
+FlagSet::insert(uint32_t flag)
+{
+    bits = bits | flag;
+}
+
+void
+FlagSet::remove(uint32_t flag)
+{
+    bits = bits & ~(flag);
+}
+
+void
+FlagSet::complement()
+{
+    bits = ~bits;
+}
+
+bool
+FlagSet::contains(uint32_t flag)
+{
+    return (bits & flag);
+}
+
+void
+FlagSet::merge(FlagSet set)
+{
+    bits |= set.bits;
+}
+
+void
+FlagSet::subtract(FlagSet &set)
+{
+    bits &= (~(set.bits));
+}
+
+void
+FlagSet::intersect(FlagSet &set)
+{
+    bits &= set.bits;
+}
+uint32_t
+FlagSet::size()
+{
+    if (!bits) return 0;
+    uint32_t size = 0;
+    uint32_t mask = 1;
+    for (int i=0; i<8; i++) {
+        if (bits & mask)
+            size++;
+        mask = mask << 1;
+    }
+    return size;
+}
+
+
+FlagSet
+janus::operator+(FlagSet a, FlagSet b)
+{
+    return FlagSet(a.bits | b.bits);
+}
+
+FlagSet
+janus::operator-(FlagSet a, FlagSet b)
+{
+    return FlagSet(a.bits & (~b.bits));
+}
+FlagSet
+janus::operator&(FlagSet a, FlagSet b)
+{
+    return FlagSet(a.bits & b.bits);
+}
+
+bool
+janus::operator==(FlagSet a, FlagSet b)
+{
+    return a.bits == b.bits;
+}
+
 /* Methods for BitVector */
 BitVector::BitVector()
 {

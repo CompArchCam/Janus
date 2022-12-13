@@ -86,6 +86,11 @@ public:
     ///Register bitset of all the register it writes (implicitly and explicitly)
     RegSet                          regWrites;
 
+    ///Flag bitset of flag it reads (status flag: CF,SF, AF, ZF, PF in one bit, OF in another
+    FlagSet                          flagReads;
+    ///Flag bitset of flag it updates (status flag: CF,SF, AF, ZF, PF in one bit, OF in another
+    FlagSet                          flagWrites;
+
     Instruction();
     Instruction(MachineInstruction *minstr);
 

@@ -6,6 +6,20 @@
 #include "janus.h"
 #include "Operand.h"
 
+#define STATUS_FLAG_MODIFIED 31ULL //00011111
+#define STATUS_FLAG_SET (15ULL<<53 | 1ULL<<30)//00001111 <<53 | 1<<30
+#define STATUS_FLAG_RESET (1ULL<<22 | 3ULL<<25 | 1ULL<<29 | 1ULL<<51) //CF| SF+AF | PF | ZF
+#define STATUS_FLAG_READ (15ULL<<34 | 1ULL <<50)
+#define OF_FLAG_SET 1ULL<<52
+#define OF_FLAG_RESET 1ULL<<21
+#define OF_FLAG_MODIFIED 32ULL//00100000
+#define OF_FLAG_READ 1ULL<<33
+#define ARITH_FLAGS_SET (STATUS_FLAG_SET | OF_FLAG_SET) //  CF | OF+SF+ZF+AF+PF
+#define ARITH_FLAGS_RESET (STATUS_FLAG_RESET | OF_FLAG_RESET) //OF+CF| SF+AF | PF | ZF
+#define ARITH_FLAGS_MODIFIED (STATUS_FLAG_MODIFIED | OF_FLAG_MODIFIED)
+#define ARITH_FLAGS_READ (STATUS_FLAG_READ | OF_FLAG_READ) //00011111<<33 | 1<<50 , OF+SF+ZF+PF+CF|AF
+
+
 namespace janus {
     typedef uint32_t InstID;
     typedef uint32_t InstOp;
@@ -58,6 +72,7 @@ namespace janus {
         GBitMask                        regReads;       //64-bit bit mask
         GBitMask                        regWrites;      //including GPR and SIMD
 
+        uint64_t                        eflags;
         /* XXX: having double free problem if using std::string on newer version of c++ */
         char                            *name;
         //we make the cast internally
@@ -73,12 +88,14 @@ namespace janus {
         bool                            hasMemoryReference();
         /* instruction query functions */
         int                             isMoveStackPointer();
+        int                             isAddStackPointer();
         bool                            isIndirectCall();
         bool                            isMakingStackBase();
         bool                            isRecoveringStackBase();
         bool                            isConditionalMove();
         bool                            isCall();
         bool                            isReturn();
+        bool                            isLeave();
 
         /** \brief returns true if the instruction modifies EFLAG registers */
         bool                            writeControlFlag();
@@ -139,6 +156,16 @@ namespace janus {
         bool                            hasImplicitOperands();
         /** \brief returns true if this instruction is not supported by Janus runtime */
         bool                            isNotSupported();
+
+        bool                            readsStackCanary(); //MOV FS:[0x28] to teg
+        bool                            checksStackCanary(); //xor FS:[0x28], rcx
+        uint32_t                        updatesOFlag(); //overflow flag
+        uint32_t                        readsOFlag(); //overflow flag
+        uint32_t                        updatesStatusFlags(); //AF, CF, ZF, SF, PF flag
+        uint32_t                        readsStatusFlags();
+        uint32_t                        updatesArithFlags(); //AF, CF, ZF, SF, PF, OF
+        uint32_t                        readsArithFlags();
+        void                            printEFlags();
     };
 
     std::ostream& operator<<(std::ostream& out, const MachineInstruction& instr);

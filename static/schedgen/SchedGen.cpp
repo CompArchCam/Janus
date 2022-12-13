@@ -13,6 +13,7 @@
 #include "PrefetchRule.h"
 #endif
 #include "PlanRule.h"
+#include "asanRule.h"
 #include <cstdlib>
 #include <cstdio>
 
@@ -24,6 +25,9 @@ vector<RuleCluster>                 rewriteRules;
 /* If we wish to insert as application, the basic block
  * structure would be changed */
 BasicBlock                          *reshapeBlock;
+bool                                redirect = true;
+string                              rulefile;
+
 
 static uint32_t
 compileRewriteRulesToFile(JanusContext *gc);
@@ -37,8 +41,11 @@ generateRules(JanusContext *gc)
     if (!gc) return;
 
     uint32_t numLoops = gc->loops.size();
+    
 
-    if (gc->mode != JFCOV && !numLoops) {
+    //skip generating rules if there are no loops. for jasan, we still want to generate rules so we move forward
+    if (gc->mode != JFCOV && !numLoops 
+        && (gc->mode!=JDLL && gc->mode!=JASAN && gc->mode!=JASAN_SCEV && gc->mode!=JASAN_LIVE &&  gc->mode!=JASAN_OPT && gc->mode != JASAN_NULL)) {
         GSTEP("No rules generated"<<endl);
         return;
     }
@@ -83,6 +90,13 @@ generateRules(JanusContext *gc)
     case JDLL:
         generateDLLRules(gc);
         break;
+    case JASAN:
+    case JASAN_OPT:
+    case JASAN_LIVE:
+    case JASAN_SCEV:
+    case JASAN_NULL:
+        generateASANRule(gc);
+        break;
     default:
         break;
     }
@@ -94,7 +108,8 @@ generateRules(JanusContext *gc)
         size = compileParallelRulesToFile(gc);
     else
         size = compileRewriteRulesToFile(gc);
-    GSTEP("Rewrite schedule file: "<<gc->name<<".jrs generated, "<<size<<" bytes "<<endl);
+    //GSTEP("Rewrite schedule file: "<<gc->name<<".jrs generated, "<<size<<" bytes "<<endl);
+    GSTEP("Rewrite schedule file: "<<rulefile<<" generated, "<<size<<" bytes "<<endl);
 }
 
 /* We have *fake* basic blocks which
@@ -125,6 +140,17 @@ void insertRule(uint32_t channel, RewriteRule rule, BasicBlock *block)
     }
 }
 
+/*RewriteRule::RewriteRule(RuleOp op, PCAddress blockAddr, PCAddress ruleAddr, uint32_t instr_id)
+:opcode(op),blockAddr(blockAddr),ruleAddr(ruleAddr),id(instr_id)
+{
+    reg0 = 0;
+    reg1 = 0;
+}*/
+void insertRule_null(uint32_t channel, RewriteRule rule)
+{
+    RuleCluster &cluster = rewriteRules[channel];
+    cluster.insert(rule);
+}
 void replaceRule(uint32_t channel, RewriteRule rule, BasicBlock *block)
 {
     RuleCluster &cluster = rewriteRules[channel];
@@ -154,12 +180,42 @@ void removeRule(uint32_t channel, RewriteRule rule, BasicBlock *block)
         }
     }
 }
-
+string get_binfile_name(string filepath){
+    // Returns first token
+    char *token = strtok(const_cast<char*>(filepath.c_str()), "/");
+    char *filename = token;
+    // Keep printing tokens while one of the
+    // delimiters present in str.
+    while (token != NULL)
+    {
+        token = strtok(NULL, "/");
+        if(token == NULL)
+            break;
+        else
+            filename = token;
+    }
+    string finalname =filename;
+    printf("final rewrite schedule file: %s\n", filename);
+    return finalname;
+}
 /* Emit all relevant info in the rule file */
 static uint32_t
 compileRewriteRulesToFile(JanusContext *gc)
 {
-    FILE *op = fopen(string((gc->name)+".jrs").c_str(),"w");
+    FILE *op;
+    if(redirect){
+        //char * binfile = get_binfile_name(gc->name);
+        string binfile = get_binfile_name(gc->name);
+        //string outdir = "/home/ma843/rwschedule/";
+        string outdir = string(rs_dir);
+        rulefile = outdir+binfile+".jrs";
+        op = fopen(rulefile.c_str(),"w");
+    }
+    else{
+        rulefile = gc->name + ".jrs";
+        op = fopen(rulefile.c_str(),"w");
+        //op = fopen(string((gc->name)+".jrs").c_str(),"w");
+    }
     fpos_t pos;
     RSchedHeader header;
     uint32_t numRules = 0;

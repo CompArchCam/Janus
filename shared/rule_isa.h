@@ -6,6 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+extern char rs_dir[];
 
 /* Rewrite Rules Specification */
 typedef enum _rr_type {
@@ -241,7 +242,16 @@ typedef enum _rr_type {
     OPT_RESTORE_REG_FROM_STACK,
     OPT_RUNCODE,
     //debug instructions
-    JANUS_DEBUG
+    JANUS_DEBUG,
+    /*------ ASAN ------*/
+    ENABLE_MONITORING,
+    UNPOISON_CANARY_SLOT,
+    MEM_R_ACCESS,
+    MEM_W_ACCESS,
+    MEM_RW_ACCESS,
+    STORE_CANARY_SLOT,
+    POISON_CANARY_SLOT,
+    NO_RULE
 } RuleOp;
 
 typedef struct rule_reg_t {

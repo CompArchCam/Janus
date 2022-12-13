@@ -42,6 +42,9 @@ Function::Function(JanusContext *gc,FuncID fid, const Symbol &symbol, uint32_t s
 
     liveRegIn = NULL;
     liveRegOut = NULL;
+
+    liveFlagIn = NULL;
+    liveFlagOut = NULL;
 }
 
 Function::~Function()
@@ -86,18 +89,28 @@ Function::translate()
         context->mode != JANALYSIS &&
         context->mode != JVECTOR &&
         context->mode != JOPT &&
-	    context->mode != JSECURE &&
+        context->mode != JSECURE &&
+        context->mode != JASAN &&
+        context->mode != JASAN_NULL &&
+        context->mode != JASAN_OPT &&
+        context->mode != JASAN_LIVE &&
+        context->mode != JASAN_SCEV &&
         context->mode != JFETCH)
         return;
 
     /* Construct the abstract syntax tree of the function */
     buildASTGraph(this);
 
+    if(context->mode == JASAN_NULL) return;
     /* Perform variable analaysis */
     variableAnalysis(this);
 
     /* Peform liveness analysis */
-    livenessAnalysis(this);
+    if(context->mode != JASAN && context->mode != JASAN_SCEV)
+        livenessAnalysis(this);
+
+    if(context->mode == JASAN_LIVE || context->mode == JASAN_OPT) //only needed for asan-liveness or full opt
+        flagsAnalysis(this);
 }
 
 static void

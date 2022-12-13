@@ -74,7 +74,19 @@ typedef enum _jmode {
     ///custom tool mode for Cinnamon domain specific language 
     JCUSTOM,
     //testing mode for DLL instrumentation
-    JDLL
+    JDLL,
+    //address sanitizer (baseline)
+    JASAN,
+    //address sanitizer (full opt)
+    JASAN_OPT,
+    //address sanitizer (liveness opt)
+    JASAN_LIVE,
+    //address sanitizer (scev opt)
+    JASAN_SCEV,
+    //address sanitizer (dynamic only)
+    JASAN_DYN,
+    //address sanitizer (null for shared object standard lib)
+    JASAN_NULL
 } JMode;
 
 /* Rule ISA header defines the supported static rules */

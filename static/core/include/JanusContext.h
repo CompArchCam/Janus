@@ -44,6 +44,12 @@ public:
     bool                                        useProfiles;
     bool                                        manualLoopSelection;
 
+    //set of all NOP instructions in the start of a basic block
+    std::set<PCAddress>                         nopInstrs;
+    //address of pltsection
+    bool                                        pltsection;
+    PCAddress                                   pltSectionAddr;
+
     JanusContext(const char* name, JMode mode);
 
     ///Construct the CFG and SSA graph for the executable
@@ -54,6 +60,8 @@ public:
     void                            analyseLoopAndFunctionRelations();
     ///Only recognise loops from the program dependence graph
     void                            analyseLoopLite();
+    ///translate functions to calculate stack sizes etc
+    void                            translateFunctions();
 };
 
 #endif

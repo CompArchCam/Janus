@@ -210,6 +210,8 @@ set(SCHEDGEN_SOURCES
     schedgen/dsl/StaticGenCode.cpp
     #dll -
     schedgen/dll/dllRule.cpp
+    schedgen/asan/asanRule.cpp
+    schedgen/asan/offsetAnalysis.cpp
     #schedgen/vector/FindInduction.cpp
     #schedgen/vector/MemoryCheck.cpp
     #schedgen/vector/FindReduction.cpp
@@ -229,6 +231,7 @@ set(SCHEDGEN_INCLUDE
     schedgen/security
     schedgen/dsl/
     schedgen/dll/
+    schedgen/asan/
 )
 
 set(SCHEDUMP_SOURCES

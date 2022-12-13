@@ -1,9 +1,9 @@
 //
-//  frontend.c
+//  frontend.cpp
 //  JANUS
 //
 //  Created by Kevin Zhou on 17/12/2014.
-//
+//  Modified by Mahwish Arif
 //
 #include "janus_api.h"
 #include "hashtable.h"
@@ -45,12 +45,17 @@ typedef struct node{
 }base_tree;
 base_tree *root_tree;
 PCAddress curr_base;
+
+int nmodules = 0;
+module_data_t* loaded_modules[MAX_MODULES];
+static char        dummy_schedule[] = "dummy.jrs";
+
 /* load static rules from static rule file */
 void         load_static_rules(char *rule_path, uint64_t base);
+void         load_static_rules_asan(char *rule_path, const module_data_t *info);
+static void  fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t size, JMode mode, uint64_t base);
 
-static void         fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t size, JMode mode, uint64_t base);
-
-static void         check_options(client_id_t id);
+static void  check_options(client_id_t id);
 
 static bool search_base_key(base_tree* node, PCAddress addr);
 
@@ -65,7 +70,12 @@ janus_init(client_id_t id)
     //if options are correct, load the rule headers and static rules into the hashtable
     load_static_rules(rulepath, KEYBASE);
 }
-
+void
+janus_init_asan(client_id_t id)
+{
+    //check DR client options
+    check_options(id);
+}
 /* Check options from the strings provided by DynamoRIO */
 static void 
 check_options(client_id_t id)
@@ -112,15 +122,26 @@ check_options(client_id_t id)
 /* Returns a static rule structure based on the basic block address */
 RRule *
 get_static_rule(PCAddress addr)
-{
-    uint64_t base;
-    if(!search_base_key(root_tree, addr)){
-        dr_fprintf(STDERR,"ERROR!! Module base not found or loaded yet\n");
-        return NULL;
-    }
-    return (RRule *)hashtable_lookup(&rule_table[curr_base],(void *)(addr-curr_base));
+{   
+    return (RRule *)hashtable_lookup(&rule_table[0],(void *)(addr-KEYBASE));
 }
-
+RRule *
+get_static_rule_asan(PCAddress addr)
+{
+    int count=0;
+    int id;
+    uint64_t base=0;
+    for (id = 0; id < nmodules; ++id) {
+        if (dr_module_contains_addr(loaded_modules[id],(app_pc)addr)) {
+            if(addrmap.count((PCAddress)loaded_modules[id]->start)){ //rules available
+                base = (PCAddress)loaded_modules[id]->start;
+                break;
+            }
+        }
+    }
+    if(base == 0) return NULL;  //for the case of dynamically generated code
+    return (RRule *)hashtable_lookup(&rule_table[id],(void *)(addr-base));
+}
 /* Static rule format 
  * Rule Type: 4-byte int
  * Rule Size: 4-byte int specifies the number of rule instructions in rule blocks
@@ -184,17 +205,104 @@ load_static_rules(char *rule_path, uint64_t base)
     else
         rule_buffer= (RRule *)(file_buffer + sizeof(RSchedHeader));
 
-    //add base into the set  
-    root_tree = insert_base(root_tree, base);
     //initialise hash table
-    hashtable_init(&rule_table[base], HASH_KEY_WIDTH, HASH_INTPTR , false);
+    hashtable_init(&rule_table[0], HASH_KEY_WIDTH, HASH_INTPTR , false);
     //fill all rules into the hashtable
-    fill_in_hashtable(&rule_table[base], channel, rule_buffer, header->numRules, rsched_info.mode, base);
+    fill_in_hashtable(&rule_table[0], channel, rule_buffer, header->numRules, rsched_info.mode, base);
     
     //copy to shared structure
     rsched_info.header = header;
     fclose(file);
 }
+void
+load_static_rules_asan(char *rule_path, const module_data_t *info)
+{
+    long file_size;
+    uint32_t rule_size;
+    uint8_t status = 1;
+
+    uint64_t base = (PCAddress)info->start;
+
+    if(addrmap.find(base) != addrmap.end()) return;
+
+    int index = nmodules - 1;
+    //loaded_modules[nmodules++] =  dr_copy_module_data(info);
+
+    FILE *file = fopen(rule_path, "r");
+    RRule *rule_buffer;
+    RSchedHeader *header;
+    static char *       file_buffer;
+
+    //this will be done only first time when called from janus_init
+    char *dummy_found = NULL;
+    dummy_found = strstr (rule_path,dummy_schedule);
+    if(dummy_found){
+        rsched_info.mode = JASAN_DYN;
+        cout<<"dynamic mode"<<endl;
+        return;
+    }
+    if(file == NULL) {
+        dr_fprintf(STDERR,"Error: static rule file %s not found\n",rule_path);
+        exit(-1);
+    }
+           //obtain file size
+    fseek(file,0,SEEK_END);
+    file_size = ftell(file);
+    rewind(file);
+
+#ifdef JANUS_VERBOSE
+    dr_fprintf(STDERR,"Rule file \"%s\" loaded: %ld bytes\n",rule_path,file_size);
+#endif
+
+    //read the file
+    file_buffer= (char *)malloc(file_size);
+    status = fread(file_buffer, file_size, 1, file);
+    header = (RSchedHeader *) file_buffer;
+
+#ifdef JANUS_VERBOSE
+    dr_fprintf(STDERR,"Rule type %s\n",print_janus_mode((JMode)header->ruleFileType));
+    dr_fprintf(STDERR,"No. of rule block %d\n",header->numRules);
+    dr_fprintf(STDERR,"No. of loops %d\n",header->numLoops);
+#endif
+
+    rsched_info.mode = (JMode)header->ruleFileType;
+    rsched_info.number_of_functions = header->numFuncs;
+
+    //if it is in parallel mode, we need to get the number of actual cores
+#ifdef BIND_THREAD_WITH_CORE
+    if(rsched_info.mode == JPARALLEL) {
+            rsched_info.number_of_cores = sysconf(_SC_NPROCESSORS_ONLN);
+
+        if(rsched_info.number_of_threads>rsched_info.number_of_cores) {
+            printf("Specified number of threads %d is greater than the actual hardware core %d\n",
+                rsched_info.number_of_threads,rsched_info.number_of_cores);
+        }
+    }
+#endif
+
+    if (rsched_info.mode == JPARALLEL) {
+        rule_buffer= (RRule *)(file_buffer + header->ruleInstOffset);
+        rsched_info.loop_header = (RSLoopHeader *)((uint64_t)header + header->loopHeaderOffset);
+    }
+    else
+        rule_buffer= (RRule *)(file_buffer + sizeof(RSchedHeader));
+
+    //add base into the set
+    addrmap.insert(base);
+
+    //initialise hash table
+    hashtable_init(&rule_table[index], HASH_KEY_WIDTH, HASH_INTPTR , false);
+    //fill all rules into the hashtable
+    fill_in_hashtable(&rule_table[index], channel, rule_buffer, header->numRules, rsched_info.mode, base);
+
+    //copy to shared structure
+    rsched_info.header = header;
+    fclose(file);
+}
+
+
+
+
 
 static void
 fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t size, JMode mode, uint64_t base)
@@ -325,10 +433,13 @@ fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t s
 }
 
 void front_end_exit() {
-    for(auto it : rule_table){
+    /*for(auto it : rule_table){
         hashtable_delete(&rule_table[it.first]);
+    }*/
+    for(int i=0; i< nmodules; i++){
+        hashtable_delete(&rule_table[i]);
     }
-    free(file_buffer);
+    //free(file_buffer);
 }
 bool search_base_key(base_tree* node, PCAddress addr){
     bool found = false;

@@ -1,0 +1,44 @@
+#!/bin/bash     
+set -x
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Address Sanitizer"
+    echo "Usage: "
+    echo "./jasan-dyn <javascript-engine> <executable> [executable_args ...]"
+}
+
+if [ $# -lt "2" ]
+then 
+    usage
+    exit
+fi
+
+engine=$1
+binfile=$2
+shift
+shift
+
+if [ ! -f $binfile ];
+then
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+hintfile="$binfile.jrs" 
+
+if [ ! -f $hintfile ];
+then 
+   echo "rewrite schedule not found. proceeding to dynamic only mode"
+   hintfile="dummy.jrs"
+fi
+
+
+#echo "$TOOLDIR/bin64/drrun -c $JANUSLIB/libjsbcets.so @$hintfile @1 @0 -- $binfile $*"
+#gdb --args $TOOLDIR/bin64/drrun -debug -c $JANUSLIB/libjsbcets.so @$hintfile @1 @0 -- $binfile $@
+#gdb --args $TOOLDIR/bin64/drrun -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
+#LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
+LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $engine $binfile $@
+#LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -opt_cleancall 2  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@

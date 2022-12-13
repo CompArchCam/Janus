@@ -1,0 +1,53 @@
+#!/bin/bash     
+#set -x
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "Address Sanitizer"
+    echo "Usage: "
+    echo "./jasan-stat <opt-option> <executable> [executable_args ...]"
+}
+
+if [ $# -lt "2" ]
+then 
+    usage
+    exit
+fi
+
+stat_mode=$1
+#shift
+binfile=$2
+#shift
+
+hintfile="$binfile.jrs"
+
+if [ ! -f $binfile ];
+then
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+echo $binfile | rev | cut -d/ -f1 | rev
+binfile_name=$(echo $binfile | rev | cut -d/ -f1 | rev)
+echo "BINFILE: $binfile_name"
+outfile_s=/home/ma843/rwschedule/${binfile_name}.s
+objdump -d $binfile > $outfile_s
+if [ $stat_mode == "opt" ];
+then
+    $JANUSBIN/analyze -aso $binfile
+elif [ $stat_mode == "base" ];
+then
+    $JANUSBIN/analyze -as $binfile
+elif [ $stat_mode == "live" ];
+then
+    $JANUSBIN/analyze -asl $binfile
+elif [ $stat_mode == "scev" ];
+then
+    $JANUSBIN/analyze -asc $binfile
+elif [ $stat_mode == "null" ];
+then
+    $JANUSBIN/analyze -asn $binfile
+fi
+#echo "$TOOLDIR/bin64/drrun -c $JANUSLIB/libjsbcets.so @$hintfile @1 @0 -- $binfile $*"
+#gdb --args $TOOLDIR/bin64/drrun -debug -c $JANUSLIB/libjsbcets.so @$hintfile @1 @0 -- $binfile $@

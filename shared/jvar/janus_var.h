@@ -34,6 +34,8 @@ typedef enum _jvar_type
     JVAR_SHIFTEDREG,
     ///Unknown variable type
     JVAR_UNKOWN,
+    //seg mem
+    JVAR_SEG_MEMORY
 } JVarType;
 
 /** \brief Janus Variable Definition

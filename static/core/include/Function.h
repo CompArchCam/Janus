@@ -101,12 +101,23 @@ namespace janus {
         bool                                   hasBasePointer;
         bool                                   implicitStack;
         bool                                   hasIndirectStackAccesses;
+        PCAddress                              prologueEnd;
+
         /** \brief True iff the function has a constant stack pointer.
          *
          * True iff the function only modifies the stack pointer in entry nodes and termination
          * nodes and hence the stack pointer remains constant throughout the body of the function.
          */
         bool                                   hasConstantStackPointer;
+        bool                                   hasConstantSP_AddSub;
+        bool                                   hasConstantSP_total;
+        bool                                   hasConstantSP_PushPop;
+        int                                    changeSizeAddSub;
+        int                                    changeSizePushPop;
+        int                                    changeSizeTotal;
+        bool                                   hasCanary;       //protected by Canary Value
+        PCAddress                              canaryReadIns;
+        PCAddress                              canaryCheckIns;
         /* Scratch Register info */
         ScratchSet                             stmRegs;
         RegSet                                 spillRegs;
@@ -123,6 +134,9 @@ namespace janus {
          * To query the liveOut register for a given instruction:
          * liveReg(instr) = function.liveRegOut[instr.id] */
         RegSet                                 *liveRegOut;
+
+        FlagSet                                 *liveFlagIn;
+        FlagSet                                 *liveFlagOut;
 
         /* --------------------------------------------------------------
          *                    intra-procedure information
