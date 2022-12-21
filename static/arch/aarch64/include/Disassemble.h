@@ -9,7 +9,9 @@
 #include <map>
 
 ///Disassemble all functions contained in jc
-void disassembleAll(JanusContext *jc);
+//void disassembleAll(JanusContext *jc);
+void disassembleAll(uint64_t capstoneHandle, janus::Function* fmainRet, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *>*  functionMap,
+		std::map<PCAddress, janus::Function *>* externalFunctions);
 ///Disassemble for the given function
 void disassemble(janus::Function *function);
 ///Given the raw machine instruction, return the opcode of the architecture independent Instruction

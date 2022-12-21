@@ -25,7 +25,7 @@ private:
     //janus::Executable  program;
 
     // Analyzed binary structure, after lifting
-    janus::ExecutableBinaryStructure executableBinaryStructure;
+    //janus::ExecutableBinaryStructure executableBinaryStructure;
 
     ///A vector of recognised functions in the executable
     //std::vector<janus::Function>                functions;

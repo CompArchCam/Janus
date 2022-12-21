@@ -9,8 +9,8 @@
 #include "SchedGenInt.h"
 
 /** \brief Generate parallel related rules */
-void
-generateParallelRules(JanusContext *gc);
+//void generateParallelRules(JanusContext *gc);
+void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap);
 
 /** \brief Compile all generated rules to a rule file */
 uint32_t

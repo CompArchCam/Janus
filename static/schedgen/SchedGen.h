@@ -39,8 +39,8 @@ public:
 };
 }
 
-void
-generateRules(JanusContext *gc);
+//void generateRules(JanusContext *gc);
+void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap);
 
 /* Generic rule insertion API from outside rule generation module */
 void

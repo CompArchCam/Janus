@@ -13,6 +13,12 @@ private:
 
 
 public:
+	LoopAnalysisReport()
+	{
+		this->passedLoopId=0;
+		this->manualLoopSelection = false;
+	}
+
 	LoopAnalysisReport(int passedLoopId, bool manualLoopSelection);
 
 	int getPassedLoopId()

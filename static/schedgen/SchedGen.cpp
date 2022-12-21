@@ -30,8 +30,8 @@ compileRewriteRulesToFile(JanusContext *gc);
 static uint32_t
 compileRewriteRuleDataToFile(JanusContext *gc);
 
-void
-generateRules(JanusContext *gc)
+//void generateRules(JanusContext *gc)
+void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap)
 {
     uint32_t size;
     if (!gc) return;
@@ -55,7 +55,7 @@ generateRules(JanusContext *gc)
         //generateOptRules(gc);
         break;
     case JPARALLEL:
-        generateParallelRules(gc);
+        generateParallelRules(gc, functionMap);
         break;
     case JVECTOR:
 #ifdef JANUS_X86

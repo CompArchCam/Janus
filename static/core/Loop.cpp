@@ -81,11 +81,13 @@ void searchLoop(std::vector<janus::Loop>* loops, Function *function)
         }
     }
 
-    loopArray.reserve(loopPool.size()+1);
+    //loopArray.reserve(loopPool.size()+1);
+    loopArray->reserve(loopPool.size()+1);
     /* Now all loop stack blocks have been recognised
      * contruct loops */
     for (auto block_id : loopPool) {
-        loopArray.emplace_back(entry+block_id, function);
+        //loopArray.emplace_back(entry+block_id, function);
+    	loopArray->emplace_back(entry+block_id, function);
     }
 }
 
@@ -105,7 +107,8 @@ Loop::Loop(BasicBlock *start, Function *parent)
     vectorWordSize = 0;
 
     /* Record this id in parent function */
-    parent->loops.insert(id);
+    //parent->loops.insert(id);
+    parent->loopIDs.insert(id);
 
     BlockID startBID = start->bid;
 
@@ -211,7 +214,7 @@ Loop::Loop(BasicBlock *start, Function *parent)
 
 //void Loop::analyse(JanusContext *gc)
 //void Loop::analyse(LoopAnalysisReport loopAnalysisReport)
-void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport)
+void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
     if (analysed) return;
 
@@ -237,13 +240,13 @@ void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport)
     //Analyse sub-loop first
     //So that information in the inner loop should be available for analysis of the outer loop
     for (auto *l : subLoops)
-    	l->analyseBasic(loopAnalysisReport);
+    	l->analyseBasic(loopAnalysisReport, allFunctions);
         //l->analyse(gc);
 
-    analysePass0_Basic(loopAnalysisReport);
+    analysePass0_Basic(loopAnalysisReport, allFunctions);
 }
 
-void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport)
+void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
     if (analysed) return;
 
@@ -270,16 +273,16 @@ void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport)
     //Analyse sub-loop first
     //So that information in the inner loop should be available for analysis of the outer loop
     for (auto *l : subLoops)
-    	l->analyseBasic(loopAnalysisReport);
+    	l->analyseAdvance(loopAnalysisReport, allFunctions);
         //l->analyse(gc);
 
-    analysePass0_Advance(loopAnalysisReport);
+    analysePass0_Advance(loopAnalysisReport, allFunctions);
 }
 
 // Should only be called by JPROF
 // If a loop is removed, then do nothing.
 // Else, call analysePass0.
-void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport)
+void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
     //if (gc->mode == JPROF && removed) {
 	if (removed)
@@ -295,11 +298,11 @@ void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport
         return;
     }
 
-	analysePass0_Advance(loopAnalysisReport);
+	analysePass0_Advance(loopAnalysisReport, allFunctions);
 }
 
 // Not called by JPROF for removed loops.
-void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport)
+void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" in "<<parent->name<<endl);
@@ -314,6 +317,7 @@ void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport)
             continue;
         }
         //examine sub calls
+        BasicBlock *entry = parent->entry;
         if (entry[bid].lastInstr()->opcode == Instruction::Call) {
             Function *func = parent->calls[entry[bid].lastInstr()->id];
             if (func) {
@@ -327,7 +331,8 @@ void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport)
     }
 
     /* Step 2: translate all subcalls */
-    Function *functions = gc->functions.data();
+    //Function *functions = gc->functions.data();
+    Function *functions = allFunctions.data();
     for (auto call: subCalls) {
         LOOPLOG("\tAnalysing sub function calls "<<functions[call].name<<endl);
         //functions[call].translate();
@@ -347,7 +352,7 @@ void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport)
 }
 
 // Not called by JPROF for removed loops.
-void Loop::analysePass0_Advance(LoopAnalysisReport loopAnalysisReport)
+void Loop::analysePass0_Advance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" in "<<parent->name<<endl);
@@ -362,6 +367,7 @@ void Loop::analysePass0_Advance(LoopAnalysisReport loopAnalysisReport)
             continue;
         }
         //examine sub calls
+        BasicBlock *entry = parent->entry;
         if (entry[bid].lastInstr()->opcode == Instruction::Call) {
             Function *func = parent->calls[entry[bid].lastInstr()->id];
             if (func) {
@@ -375,7 +381,8 @@ void Loop::analysePass0_Advance(LoopAnalysisReport loopAnalysisReport)
     }
 
     /* Step 2: translate all subcalls */
-    Function *functions = gc->functions.data();
+    //Function *functions = gc->functions.data();
+    Function *functions = allFunctions.data();
     for (auto call: subCalls) {
         LOOPLOG("\tAnalysing sub function calls "<<functions[call].name<<endl);
         //functions[call].translate();
@@ -679,3 +686,4 @@ Loop::printDot(void *outputStream)
     }
     os << "} "<<endl;
 }
+

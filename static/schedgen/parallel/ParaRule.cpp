@@ -21,16 +21,16 @@ using namespace janus;
 static void
 prepareLoopHeader(JanusContext *gc, Loop &loop);
 ///Generate rewrite rules for DOALL parallelisation in the given loop
-static void
-generateDOALLRules(JanusContext *gc, Loop &loop);
+//static void generateDOALLRules(JanusContext *gc, Loop &loop, std::map<PCAddress)
+static void generateDOALLRules(JanusContext *gc, Loop &loop, std::map<PCAddress, janus::Function *> functionMap);
 ///Generate rewrite rules for the sub functions in the given loop
 static void
 generateSubFunctionRules(JanusContext *gc, Loop &loop, Function &func);
 static int
 getEncodedArrayIndex(Loop *loop, Expr var);
 
-void
-generateParallelRules(JanusContext *gc)
+//void generateParallelRules(JanusContext *gc)
+void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap)
 {
 
     set<LoopID> selected_loop;
@@ -53,7 +53,7 @@ generateParallelRules(JanusContext *gc)
         /* Assign dynamic loop id */
         loop.header.id = dynamic_id++;
         /* Generate DOALL parallelisation rules for each loop */
-        generateDOALLRules(gc, gc->loops[loopID-1]);
+        generateDOALLRules(gc, gc->loops[loopID-1], functionMap);
     }
 
     /* Step 3: select and generate speculative loops */
@@ -124,8 +124,8 @@ prepareLoopHeader(JanusContext *gc, Loop &loop)
     header.schedule = PARA_DOALL_BLOCK;
 }
 
-static void
-generateDOALLRules(JanusContext *gc, Loop &loop)
+//static void generateDOALLRules(JanusContext *gc, Loop &loop, std::map<PCAddress)
+static void generateDOALLRules(JanusContext *gc, Loop &loop, std::map<PCAddress, janus::Function *> functionMap)
 {
     Function *parent = loop.parent;
     /* Get entry block of the CFG */
@@ -364,7 +364,8 @@ generateDOALLRules(JanusContext *gc, Loop &loop)
             insertRule(id, rule, bb);
 
             /* Generate rewrite rules for this function */
-            Function *func = bb->lastInstr()->getTargetFunction();
+            //Function *func = bb->lastInstr()->getTargetFunction();
+            Function *func = bb->lastInstr()->getTargetFunction(functionMap);
             if (func && !func->isExternal)
                 generateSubFunctionRules(gc, loop, *func);
             else {

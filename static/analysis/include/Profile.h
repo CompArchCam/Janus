@@ -16,8 +16,8 @@ LoopAnalysisReport loadLoopSelection(std::vector<janus::Loop>& loops, std::strin
 void
 loadDDGProfile(JanusContext *gc);
 
-void
-loadLoopCoverageProfiles(JanusContext *gc);
+//void loadLoopCoverageProfiles(JanusContext *gc);
+void loadLoopCoverageProfiles(std::string name, std::vector<janus::Loop>& loops);
 
 //filter out the loops that are not beneficial
 void

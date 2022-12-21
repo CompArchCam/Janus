@@ -14,7 +14,8 @@ bool janus::operator<(const Symbol &a, const Symbol &b)
     return a.startAddr < b.startAddr;
 }
 
-void Executable::parseELF64()
+//void Executable::parseELF64()
+void janus::ExecutableBinaryStructure::parseELF64()
 {
     vector<Elf64_Shdr> sectionHeaders;
     char *sectionStringTable;

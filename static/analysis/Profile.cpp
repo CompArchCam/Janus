@@ -12,10 +12,11 @@
 using namespace std;
 using namespace janus;
 
-void
-filterParallelisableLoop(JanusContext *gc);
+//void filterParallelisableLoop(JanusContext *gc);
+void filterParallelisableLoop(std::vector<janus::Loop>& loops);
 #ifdef DDG
 static void
+//loadDDG(JanusContext *gc, Loop &loop, char *rawDDG, uint32_t size);
 loadDDG(JanusContext *gc, Loop &loop, char *rawDDG, uint32_t size);
 #endif
 
@@ -24,15 +25,17 @@ typedef struct _tempUnit {
     double temperature;
 } TempUnit;
 
-void
-loadLoopCoverageProfiles(JanusContext *gc)
+//void loadLoopCoverageProfiles(JanusContext *gc)
+void loadLoopCoverageProfiles(std::string name, std::vector<janus::Loop>& loops)
 {
     /* Read loop coverage files from loop coverage profiling */
     ifstream lcov;
     string line;
-    lcov.open(gc->name+".lcov", ios::in);
+    //lcov.open(gc->name+".lcov", ios::in);
+    lcov.open(name+".lcov", ios::in);
     if (lcov.good()) {
-        GSTEPCONT("\tReading "<<gc->name<<".lcov for coverage filtering"<<endl);
+        //GSTEPCONT("\tReading "<<gc->name<<".lcov for coverage filtering"<<endl);
+    	GSTEPCONT("\tReading "<<name<<".lcov for coverage filtering"<<endl);
         /* Skip the top four lines */
         getline(lcov, line);
         getline(lcov, line);
@@ -43,7 +46,8 @@ loadLoopCoverageProfiles(JanusContext *gc)
         float coverage;
         string name;
         while (lcov >> loopID >> coverage >> invocation>>iteration>>inaccurate>>name) {
-            Loop &loop = gc->loops[loopID-1];
+            //Loop &loop = gc->loops[loopID-1];
+        	Loop &loop = loops[loopID-1];
             loop.coverage = coverage;
             loop.invocation_count = invocation;
             loop.total_iteration_count = iteration;
@@ -53,13 +57,15 @@ loadLoopCoverageProfiles(JanusContext *gc)
     }
     lcov.close();
 
-    filterParallelisableLoop(gc);
+    //filterParallelisableLoop(gc);
+    filterParallelisableLoop(loops);
 }
 
-void
-filterParallelisableLoop(JanusContext *gc)
+//void filterParallelisableLoop(JanusContext *gc)
+void filterParallelisableLoop(std::vector<janus::Loop>& loops)
 {
-    for (auto &loop: gc->loops) {
+    //for (auto &loop: gc->loops) {
+	for (auto &loop: loops) {
         if (loop.coverage > JANUS_LOOP_COVERAGE_THRESHOLD &&
             loop.invocation_count > 0 &&
            (loop.total_iteration_count/loop.invocation_count) > JANUS_LOOP_MIN_ITER_COUNT) {

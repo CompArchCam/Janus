@@ -19,19 +19,19 @@
 using namespace std;
 using namespace janus;
 
-ExecutableBinaryStructure::ExecutableBinaryStructure(const char *executableName)
+janus::ExecutableBinaryStructure::ExecutableBinaryStructure(std::string executableName)
 {
-	this->executableName = string(executableName);
-    open(executableName);
+	this->executableName = executableName;
+    open(this->executableName.c_str());
 }
 
-ExecutableBinaryStructure::~ExecutableBinaryStructure()
+janus::ExecutableBinaryStructure::~ExecutableBinaryStructure()
 {
     delete[] buffer;
 }
 
 //void Executable::open(JanusContext *jc, const char *filename)
-void ExecutableBinaryStructure::open(const char *filename)
+void janus::ExecutableBinaryStructure::open(const char *filename)
 {
     ifstream binFile(filename, ios::in|ios::ate|ios::binary);
 
@@ -57,7 +57,7 @@ void ExecutableBinaryStructure::open(const char *filename)
 }
 
 //void Executable::disassemble(JanusContext *jc)
-std::vector<janus::Function> ExecutableBinaryStructure::disassemble(Function* fmain, std::map<PCAddress, janus::Function *>*  functionMap, std::map<PCAddress, janus::Function *>* externalFunctions)
+std::vector<janus::Function> janus::ExecutableBinaryStructure::disassemble(Function* fmain, std::map<PCAddress, janus::Function *>*  functionMap, std::map<PCAddress, janus::Function *>* externalFunctions)
 {
     //lift all the recognised symbols to function
     //liftSymbolToFunction(jc);
@@ -69,7 +69,7 @@ std::vector<janus::Function> ExecutableBinaryStructure::disassemble(Function* fm
 	return functions;
 }
 
-void ExecutableBinaryStructure::parseHeader()
+void janus::ExecutableBinaryStructure::parseHeader()
 {
     if(strncmp((char *)buffer,ELFMAG,4)==0) {
         type = BINARY_ELF;
@@ -90,7 +90,7 @@ void ExecutableBinaryStructure::parseHeader()
     }
 }
 
-void ExecutableBinaryStructure::parseFlat()
+void janus::ExecutableBinaryStructure::parseFlat()
 {
     GSTEP("This is a flat "<<(isExecutable?"executable":"library")<<\
           " , recovering hidden symbols"<<endl);
@@ -103,7 +103,7 @@ void ExecutableBinaryStructure::parseFlat()
 }
 
 //void Executable::liftSymbolToFunction(JanusContext *jc)
-std::vector<janus::Function> ExecutableBinaryStructure::liftSymbolToFunction()
+std::vector<janus::Function> janus::ExecutableBinaryStructure::liftSymbolToFunction()
 {
 	std::vector<janus::Function> functions;
     uint32_t      fid = 0;
@@ -135,7 +135,7 @@ std::vector<janus::Function> ExecutableBinaryStructure::liftSymbolToFunction()
     }
 }
 
-void ExecutableBinaryStructure::retrieveHiddenSymbol(Section &section)
+void janus::ExecutableBinaryStructure::retrieveHiddenSymbol(Section &section)
 {
     /* Setup disassembly */
     csh cs_handle;
@@ -209,7 +209,7 @@ bool compareProc(Symbol &a, Symbol &b)
     return (a.startAddr) < (b.startAddr);
 }
 
-void ExecutableBinaryStructure::printSection()
+void janus::ExecutableBinaryStructure::printSection()
 {
     for(auto s:sections) {
         cout <<s.name<<endl;

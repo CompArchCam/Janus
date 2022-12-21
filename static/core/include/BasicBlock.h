@@ -58,7 +58,11 @@ public:
      *
      * Each element of the array points to an existing instruction that contains memory access.
      */
+    // TODO: there is a potential inconsistency here:
+    // In Function.h minstrs are MachineInstruction.
+    // Here, minstrs are MemoryInstructions
     std::vector<MemoryInstruction>  minstrs;
+
     /** \brief Last states of each variable changed (written to) in this block (including
      *         phi nodes)
      */

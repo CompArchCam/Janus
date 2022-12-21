@@ -102,15 +102,15 @@ Instruction::getTargetInstID()
     return -1;
 }
 
-Function*
-Instruction::getTargetFunction()
+//Function* Instruction::getTargetFunction()
+Function* Instruction::getTargetFunction(std::map<PCAddress, janus::Function *> functionMap)
 {
     if (!minstr) return NULL;
     if (opcode != Instruction::Call) return NULL;
     PCAddress targetAddr = minstr->getTargetAddress();
     if (targetAddr == 0) return NULL;
     /* Lookup in the instr table */
-    auto functionMap = block->parentFunction->context->functionMap;
+    //auto functionMap = block->parentFunction->context->functionMap;
     if (functionMap.find(targetAddr) != functionMap.end()) {
         return functionMap[targetAddr];
     } else return NULL;

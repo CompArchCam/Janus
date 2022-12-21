@@ -6,6 +6,10 @@
 #include "ControlFlow.h"
 #include "Loop.h"
 #include "Profile.h"
+#include "Disassemble.h"
+#include "SSA.h"
+
+using namespace janus;
 
 ProgramDependenceAnalysis::ProgramDependenceAnalysis()
 {
@@ -123,15 +127,15 @@ LoopAnalysisReport ProgramDependenceAnalysis::loadLoopSelectionReport(std::vecto
 	return loadLoopSelection(loops, executableName);
 }
 
-void ProgramDependenceAnalysis::performBasicLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport)
+void ProgramDependenceAnalysis::performBasicLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
     GSTEP("Analysing loops - Basic"<<endl);
     for (auto &loop: loops) {
-        loop.analyseBasic(loopAnalysisReport);
+        loop.analyseBasic(loopAnalysisReport, allFunctions);
     }
 }
 
-void ProgramDependenceAnalysis::performAdvanceLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport)
+void ProgramDependenceAnalysis::performAdvanceLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
     GSTEP("Analysing loops - Basic"<<endl);
     for (auto &loop: loops) {
@@ -139,11 +143,11 @@ void ProgramDependenceAnalysis::performAdvanceLoopAnalysis(std::vector<janus::Lo
     }
 }
 
-void ProgramDependenceAnalysis::reduceLoopsAliasAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport)
+void ProgramDependenceAnalysis::reduceLoopsAliasAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
     GSTEP("Analysing loops - PROF - reduce considered loops with alias analysis"<<endl);
     for (auto &loop: loops) {
-        loop.analyseReduceLoopsAliasAnalysis(loopAnalysisReport);
+        loop.analyseReduceLoopsAliasAnalysis(loopAnalysisReport, allFunctions);
     }
 }
 

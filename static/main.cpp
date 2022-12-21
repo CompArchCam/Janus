@@ -3,6 +3,7 @@
 #include "ProgramDependenceAnalysis.h"
 #include "SourceCodeStructure.h"
 #include "LoopAnalysisReport.h"
+#include "Profile.h"
 #include <string.h>
 
 using namespace std;
@@ -120,6 +121,7 @@ int main(int argc, char **argv) {
     		;
     		break;
     	case JLCOV:
+    		IF_VERBOSE(cout<<"Loop coverage profiling mode enabled"<<endl); break;
     		;
     		break;
     	case JFCOV:
@@ -155,12 +157,17 @@ int main(int argc, char **argv) {
     	case JDLL:
     		;
     		break;
+        default:
+        {
+            usage();
+            return 1;
+        }
     }
 
     //janus::Executable  program;
     // program.disassemble(this);
     char *executableName = argv[argNo];
-    janus::ExecutableBinaryStructure executableBinaryStructure = janus::ExecutableBinaryStructure(executableName);
+    janus::ExecutableBinaryStructure executableBinaryStructure = janus::ExecutableBinaryStructure(string(executableName));
 
     SourceCodeStructure sourceCodeStructure;
 
@@ -198,21 +205,32 @@ int main(int argc, char **argv) {
 
 
 	// Identify loops from the control flow graph
-    loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+	if (mode != JFCOV)
+		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
 
 	// Analyze loop relations within one procedure
     // Update loops
-	programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+	if (mode != JFCOV || mode != JLCOV || mode != JGRAPH)
+		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
 
 	// TODO: How to update loops independently and update them back to functions?
 	// Do not use pointers, because we want to keep functions structure consistent.
 	// Or maybe use pointers?
 
     // Analyze loop relations across procedures
-	std::vector<std::set<LoopID>> loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+	if (mode != JFCOV || mode != JLCOV || mode != JGRAPH)
+		std::vector<std::set<LoopID>> loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
 
+	// Load profiling information
+    if (mode == JPROF) {
+        /* For automatic profiler mode, load loop coverage before analysis */
+    	loadLoopCoverageProfiles(executableBinaryStructure.getExecutableName(), loops);
+    }
+
+    LoopAnalysisReport loopAnalysisReport;
     //load loop selection from previous run
-	LoopAnalysisReport loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, sourceCodeStructure.getExecutableName());
+    if (mode == JPARALLEL || mode == JANALYSIS)
+    	loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, sourceCodeStructure.getExecutableName());
 
 	if (mode != JPARALLEL &&
 	        mode != JPROF &&
@@ -222,11 +240,11 @@ int main(int argc, char **argv) {
 		    mode != JSECURE &&
 	        mode != JFETCH)
 	{
-		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport);
+		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
 	}
 	else
 	{
-		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport);
+		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
 	}
 
 	// TODO: The problem is in the analysis. Some analysis is exclusive for JPROF, while other analysis are exclusive for several flags.
@@ -254,6 +272,8 @@ int main(int argc, char **argv) {
 
 	programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
 
+	// TODO: Eliminate JanusContext completely from the below.
+
     if(mode == JANALYSIS || mode == JGRAPH) {
         dumpCFG(jc);
         dumpSSA(jc);
@@ -262,7 +282,8 @@ int main(int argc, char **argv) {
         generateExeReport(jc);
         generateExeReport(jc, &cout);
     } else {
-        generateRules(jc);
+    	//generateRules(jc);
+        generateRules(jc, functionMap);
     }
 
     delete jc;

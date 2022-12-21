@@ -24,8 +24,6 @@
 class JanusContext;
 class ExecutableBinaryStructure;
 
-using namespace janus;
-
 namespace janus {
     class Function
     {
@@ -49,9 +47,27 @@ namespace janus {
          *                       information storage
          * ------------------------------------------------------------- */
         ///Actual storage of all the function's machine instructions, read-only
-        //std::vector<MachineInstruction>        minstrs;
+        std::vector<MachineInstruction>        minstrs;
+        // TODO: Ideally, we would use a getter for minstrs (as below).
+        /*std::vector<MachineInstruction> getAllMachineInstructions() {
+        	// TODO: Implement
+        	std::vector<MachineInstruction> machineInstructions;
+        	return machineInstructions;
+        }*/
+
         ///Actual storage of all the function's abstract instructions, read-only
-        //std::vector<Instruction>               instrs;
+        std::vector<Instruction>               instrs;
+        // TODO: Ideally, we would use a getter for instrs (as below).
+        // However, basic blocks have a pointer to all instructions instead of a vector. How to make the conversion?
+        /*std::vector<Instruction> getAllInstructions()
+        {
+        	std::vector<Instruction> instructions;
+
+        	for(BasicBlock bb : blocks)
+        		instructions.insert( instructions.end(), bb.getMinstrs().begin(), bb.getMinstrs().end());
+
+        	return instructions;
+        }*/
         ///Set of variables used in this function
         std::set<Variable>                     allVars;
         ///Set of all SSA variables ever defined (or used) in this function
@@ -94,17 +110,6 @@ namespace janus {
         ///The initial states for all variables found in this function
         std::map<Variable, VarState*>          inputStates;
 
-        std::vector<MachineInstruction> getAllMachineInstructions() {
-        	// TODO: Implement
-        	std::vector<MachineInstruction> machineInstructions;
-        	return machineInstructions;
-        }
-
-        std::vector<Instruction> getAllInstructions() {
-        	// TODO: Implement
-        	std::vector<Instruction> instructions;
-        	return instructions;
-        }
         /* --------------------------------------------------------------
          *                Architecture specific information
          * ------------------------------------------------------------- */

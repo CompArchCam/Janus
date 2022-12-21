@@ -2,19 +2,23 @@
 #define Janus_EXECUTABLE_BINARY_STRUCTURE_H
 
 #include "janus.h"
-#include "Function.h"
+//#include "Function.h"
 #include <string>
 #include <vector>
 #include <set>
+#include <map>
 
 #include "elf.h"
 
 class JanusContext;
 
+
 namespace janus {
 // ----------------------------------------------------------
 //      Definition of a Janus executable
 // ----------------------------------------------------------
+
+class Function;
 
 enum SectionType
 {
@@ -83,7 +87,7 @@ private:
     ///The name of the executable
     std::string executableName;
 public:
-    ExecutableBinaryStructure(const char *executableName);
+    ExecutableBinaryStructure(std::string executableName);
     ~ExecutableBinaryStructure();
     uint64_t                        capstoneHandle;
     bool                            isExecutable;

@@ -19,17 +19,17 @@ JanusContext::JanusContext(const char* name, JMode mode)
     manualLoopSelection = false;
     sharedOn = true;
     //open the executable and parse according to the header
-    program.open(this, name);
+    //program.open(this, name);
 
     //lift the binary to disassembly
     //ExecutableBinaryStructure executableBinaryStructure = program.disassemble(this);
 }
 
-void JanusContext::buildProgramDependenceGraph()
+/*void JanusContext::buildProgramDependenceGraph()
 {
     GSTEP("Building basic blocks: ");
     uint32_t numBlocks = 0;
-    /* Step 1: build CFG for each function */
+    //Step 1: build CFG for each function
     for (auto &func: functions) {
         if (func.isExecutable) {
             buildCFG(func);
@@ -38,7 +38,7 @@ void JanusContext::buildProgramDependenceGraph()
     }
     GSTEPCONT(numBlocks<<" blocks"<<endl);
 
-    /* Step 2: lift the disassembly to IR (the CFG must be ready) */
+    // Step 2: lift the disassembly to IR (the CFG must be ready)
     GSTEP("Lifting disassembly to IR: ");
     uint32_t numInstrs = 0;
     for (auto &func: functions) {
@@ -48,7 +48,7 @@ void JanusContext::buildProgramDependenceGraph()
     }
     GSTEPCONT(numInstrs<<" instructions lifted"<<endl);
 
-    /* Step 3: construct SSA graph */
+    // Step 3: construct SSA graph
     GSTEP("Building SSA graphs"<<endl);
     for (auto &func: functions) {
         if (func.isExecutable && func.blocks.size()) {
@@ -56,23 +56,23 @@ void JanusContext::buildProgramDependenceGraph()
         }
     }
 
-    /* Step 4: construct Control Dependence Graph */
+    // Step 4: construct Control Dependence Graph
     GSTEP("Building control dependence graphs"<<endl);
     for (auto &func: functions) {
         if (func.isExecutable && func.blocks.size()) {
             buildCDG(func);
         }
     }
-}
+}*/
 
-void JanusContext::analyseLoop()
+/*void JanusContext::analyseLoop()
 {
-    /* Function timer doesn't need to recognise loop */
+    // Function timer doesn't need to recognise loop
     if (mode == JFCOV) return;
 
     GSTEP("Recognising loops: ");
 
-    /* Step 1: identify loops from the control flow graph */
+    // Step 1: identify loops from the control flow graph
     for (auto &func: functions) {
         searchLoop(this, &func);
     }
@@ -84,18 +84,18 @@ void JanusContext::analyseLoop()
 
     GSTEP("Analysing loop relations"<<endl);
 
-    /* Step 2: analyse loop relations within one procedure */
+    // Step 2: analyse loop relations within one procedure
     for (auto &func : functions) {
         func.analyseLoopRelations();
     }
 
-    /* Step 3: analyse loop relations across procedures */
+    // Step 3: analyse loop relations across procedures
     analyseLoopAndFunctionRelations(std::vector<janus::Loop> loops);
 
-    /* Step 4: load profiling information */
+    // Step 4: load profiling information
     if (mode == JPROF) {
-        /* For automatic profiler mode, load loop coverage before analysis */
-        loadLoopCoverageProfiles(this);
+        // For automatic profiler mode, load loop coverage before analysis
+        //loadLoopCoverageProfiles(this);
     }
 
     if (mode == JPARALLEL || mode == JANALYSIS) {
@@ -103,26 +103,26 @@ void JanusContext::analyseLoop()
         loadLoopSelection(this);
     }
 
-    /* Step 5: analyse each loop more in depth (Pass 1) */
+    // Step 5: analyse each loop more in depth (Pass 1)
     GSTEP("Analysing loops"<<endl);
     for (auto &loop: loops) {
         loop.analyse(this);
     }
 
-    /* When analysis done for all loops, perform post analysis
-     * So we can construct inter-loop relations for further analysis */
-    /* Step 6: analyse each loop more in depth (Pass 2) */
+    // When analysis done for all loops, perform post analysis
+    // So we can construct inter-loop relations for further analysis
+    // Step 6: analyse each loop more in depth (Pass 2)
     GSTEP("Analysing loops - second pass"<<endl);
     for (auto &loop: loops)
         loop.analyse2(this);
 
-    /* Step 7: analyse each loop more in depth (Pass 3) */
+    // Step 7: analyse each loop more in depth (Pass 3)
     GSTEP("Analysing loops - third pass"<<endl);
     for (auto &loop: loops)
         loop.analyse3(this);
-}
+}*/
 
-void JanusContext::analyseLoopLite()
+/*void JanusContext::analyseLoopLite()
 {
     GSTEP("Recognising loops: ");
 
@@ -137,7 +137,7 @@ void JanusContext::analyseLoopLite()
     for (auto &func : functions) {
         func.analyseLoopRelations();
     }
-}
+}*/
 
 void JanusContext::analyseLoopAndFunctionRelations()
 {

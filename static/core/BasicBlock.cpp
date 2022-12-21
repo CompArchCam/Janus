@@ -23,6 +23,7 @@ BasicBlock::BasicBlock(Function *func, BlockID bid, InstID startInstID, InstID e
     size = endInstID - startInstID + 1;
 
     instrs = (parentFunction->instrs.data()) + startInstID;
+    //instrs = (parentFunction->getAllInstructions().data()) + startInstID;
 
     idom = NULL;
     ipdom = NULL;

@@ -52,6 +52,7 @@ Function::~Function()
 {
     /* Now we free all the instructions */
     for (auto &instr: minstrs) {
+	//for (auto &instr: this->getMinstrs()) {
         if (instr.operands)
             free(instr.operands);
         if (instr.name)

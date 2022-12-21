@@ -30,8 +30,8 @@ public:
 
 	// The difference between these two analysis types is that performBasicLoopAnalysis calls analyseBasic,
 	// while performAdvanceLoopAnalysis calls analyseAdvance.
-	void performBasicLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
-	void performAdvanceLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
+	void performBasicLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
+	void performAdvanceLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
 
 	void reduceLoopsAliasAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
 	//void performBasicPass(std::vector<janus::Loop> loops, LoopAnalysisReport loopAnalysisReport);
@@ -44,3 +44,4 @@ public:
 } /* END Janus namespace */
 
 #endif
+
