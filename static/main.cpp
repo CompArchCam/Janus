@@ -115,77 +115,31 @@ int main(int argc, char **argv) {
     //Load executables
     JanusContext *jc = new JanusContext(argv[argNo], mode);
 
-    switch(mode)
-    {
-    	case JNONE:
-    		;
-    		break;
-    	case JLCOV:
-    		IF_VERBOSE(cout<<"Loop coverage profiling mode enabled"<<endl); break;
-    		;
-    		break;
-    	case JFCOV:
-    		;
-    		break;
-    	case JPROF:
-    		;
-    		break;
-    	case JPARALLEL:
-    		;
-    		break;
-    	case JVECTOR:
-    		;
-    		break;
-    	case JFETCH:
-    		;
-    		break;
-    	case JANALYSIS:
-    		;
-    		break;
-    	case JGRAPH:
-    		;
-    		break;
-    	case JOPT:
-    		;
-    		break;
-    	case JSECURE:
-    		;
-    		break;
-    	case JCUSTOM:
-    		;
-    		break;
-    	case JDLL:
-    		;
-    		break;
-        default:
-        {
-            usage();
-            return 1;
-        }
-    }
-
     //janus::Executable  program;
     // program.disassemble(this);
     char *executableName = argv[argNo];
+
     janus::ExecutableBinaryStructure executableBinaryStructure = janus::ExecutableBinaryStructure(string(executableName));
 
     SourceCodeStructure sourceCodeStructure;
 
-    // Returns a list of functions.
-    // Updates main function and function map.
-    // Updates external functions.
+
+    // The main function of the program (not entry)
     janus::Function *fmain;
     //std::map<PCAddress, janus::Function *>* functionMap = &(jc->functionMap);
     std::map<PCAddress, janus::Function *> functionMap = sourceCodeStructure.getFunctionMap();
     std::map<PCAddress, janus::Function *>* externalFunctions;
-    // Program object to contain fmain, functionMap, externalFunctions
+    // TODO: Program object to contain fmain, functionMap, externalFunctions
+    // Updates fmain, &functionMap, externalFunctions, and returns functions
+    // Returns a list of functions.
+    // Updates main function and function map.
+    // Updates external functions.
     std::vector<janus::Function> functions = executableBinaryStructure.disassemble(fmain, &functionMap, externalFunctions);
-
-
-
+    // Update the code structure with analysis results.
+    sourceCodeStructure.updateBinaryStructure(fmain, functions, functionMap);
     //
     jc->sharedOn= sharedOn;
-    
+
     //build CFG
     //jc->buildProgramDependenceGraph();
     janus::ProgramDependenceAnalysis programDependenceAnalysis;
@@ -195,15 +149,126 @@ int main(int argc, char **argv) {
     programDependenceAnalysis.constructSSA(functions);
     programDependenceAnalysis.constructControlDependenceGraph(functions);
 
-    // Update the code structure with analysis results.
-    sourceCodeStructure.updateBinaryStructure(fmain, functions, functionMap);
 
-	std::vector<janus::Loop> loops = sourceCodeStructure.getAllLoops();
+
+	//std::vector<janus::Loop> loops = sourceCodeStructure.getAllLoops();
+    std::vector<janus::Loop> loops;
+    // TODO: Is it necessary to keep loops anywhere as part of any structure or we can use them as a local variable,
+    // to be updated by different analyses?
+	LoopAnalysisReport loopAnalysisReport;
+
+	std::vector<std::set<LoopID>> loopNests;
+
+    switch(mode)
+    {
+    	case JNONE:
+    		;
+    		break;
+    	case JLCOV:
+    		IF_VERBOSE(cout<<"Loop coverage profiling mode enabled"<<endl); break;
+    		// Get the loops from CFG
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		break;
+    	case JFCOV:
+    		// Because no identification of loops is applied on this one,
+    		// it does not make any sense to perform any analysis.
+    		// I hope that I am not missing anything?
+    		//programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
+    		break;
+    	case JPROF:
+    		// Get the loops from CFG
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		loadLoopCoverageProfiles(executableBinaryStructure.getExecutableName(), loops);
+    		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.reduceLoopsAliasAnalysis(loops, loopAnalysisReport);
+    		break;
+    	case JPARALLEL:
+    		// Get the loops from CFG
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, sourceCodeStructure.getExecutableName());
+    		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
+    		break;
+    	case JVECTOR:
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
+    		break;
+    	case JFETCH:
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
+    		break;
+    	case JANALYSIS:
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, sourceCodeStructure.getExecutableName());
+    		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
+    		break;
+    	case JGRAPH:
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		break;
+    	case JOPT:
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		break;
+    	case JSECURE:
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
+    		break;
+    	case JCUSTOM:
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
+    		break;
+    	case JDLL:
+    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
+    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
+    		break;
+        default:
+        {
+            usage();
+            return 1;
+        }
+    }
 
     //analyse
     //jc->analyseLoop();
 
 
+    /*
 	// Identify loops from the control flow graph
 	if (mode != JFCOV)
 		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
@@ -213,17 +278,13 @@ int main(int argc, char **argv) {
 	if (mode != JFCOV || mode != JLCOV || mode != JGRAPH)
 		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
 
-	// TODO: How to update loops independently and update them back to functions?
-	// Do not use pointers, because we want to keep functions structure consistent.
-	// Or maybe use pointers?
-
     // Analyze loop relations across procedures
 	if (mode != JFCOV || mode != JLCOV || mode != JGRAPH)
 		std::vector<std::set<LoopID>> loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
 
 	// Load profiling information
     if (mode == JPROF) {
-        /* For automatic profiler mode, load loop coverage before analysis */
+        //For automatic profiler mode, load loop coverage before analysis
     	loadLoopCoverageProfiles(executableBinaryStructure.getExecutableName(), loops);
     }
 
@@ -247,9 +308,6 @@ int main(int argc, char **argv) {
 		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
 	}
 
-	// TODO: The problem is in the analysis. Some analysis is exclusive for JPROF, while other analysis are exclusive for several flags.
-	// Currently, analysePass0 translateBasic, but it seems that it is called also from performAdvanceLoopAnalysis, which requires translateAdvance
-
 	// Only valid for JPROF.
 	// If a loop is removed, then nothing.
 	// therwise, this analysis will call
@@ -271,7 +329,7 @@ int main(int argc, char **argv) {
 
 
 	programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
-
+	*/
 	// TODO: Eliminate JanusContext completely from the below.
 
     if(mode == JANALYSIS || mode == JGRAPH) {

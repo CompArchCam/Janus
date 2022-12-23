@@ -137,7 +137,7 @@ void ProgramDependenceAnalysis::performBasicLoopAnalysis(std::vector<janus::Loop
 
 void ProgramDependenceAnalysis::performAdvanceLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
-    GSTEP("Analysing loops - Basic"<<endl);
+    GSTEP("Analysing loops - Advance"<<endl);
     for (auto &loop: loops) {
         loop.analyseAdvance(loopAnalysisReport);
     }
