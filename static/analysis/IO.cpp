@@ -47,12 +47,15 @@ GIO_Exit()
 #endif
 }
 
-void dumpCFG(JanusContext *context)
+//void dumpCFG(JanusContext *context)
+void dumpCFG(std::vector<janus::Function> functions)
 {
-    if(!context) return;
+    //if(!context) return;
+	//if(!functions) return;
     ofstream fcfg;
     fcfg.open(filename + ".proc.cfg",ios::out);
-    for (auto &f: context->functions) {
+    //for (auto &f: context->functions) {
+    for (auto &f: functions) {
         if(f.isExecutable) {
             f.visualize(&fcfg);
             fcfg<<endl;
@@ -61,25 +64,29 @@ void dumpCFG(JanusContext *context)
     fcfg.close();
 }
 
-void dumpLoopCFG(JanusContext *context)
+//void dumpLoopCFG(JanusContext *context)
+void dumpLoopCFG(std::vector<janus::Loop> loops)
 {
-    if(!context) return;
+    //if(!context) return;
     ofstream fcfg;
     fcfg.open(filename + ".loop.cfg",ios::out);
-    for (auto &loop: context->loops) {
+    //for (auto &loop: context->loops) {
+    for (auto &loop: loops) {
         loop.printDot(&fcfg);
         fcfg<<endl;
     }
     fcfg.close();
 }
 
-void dumpSSA(JanusContext *context)
+//void dumpSSA(JanusContext *context)
+void dumpSSA(std::vector<janus::Function>& functions)
 {
-    if(!context) return;
+    //if(!context) return;
     ofstream fssa;
     fssa.open(filename + ".proc.ssa",ios::out);
 
-    for (auto &f: context->functions)
+    //for (auto &f: context->functions)
+    for (auto &f: functions)
         if(f.isExecutable) {
             printSSADot(f,&fssa);
             fssa.flush();
@@ -88,12 +95,14 @@ void dumpSSA(JanusContext *context)
     fssa.close();
 }
 
-void dumpLoopSSA(JanusContext *context)
+//void dumpLoopSSA(JanusContext *context)
+void dumpLoopSSA(std::vector<janus::Loop> loops)
 {
     ofstream lssa;
     lssa.open(filename + ".loop.ssa",ios::out);
 
-    for (auto &l: context->loops) {
+    //for (auto &l: context->loops) {
+    for (auto &l: loops) {
         printSSADot(l,&lssa);
     }
 
@@ -314,32 +323,37 @@ void printSSADot(janus::Loop &loop, void *outputStream)
 
 
 
-void
-generateExeReport(JanusContext *context)
+//void generateExeReport(JanusContext *context)
+void generateExeReport(JanusContext *context, std::string name, std::vector<janus::Function> functions, std::vector<janus::Loop> loops)
 {
     ofstream report;
     report.open(filename + ".report.txt",ios::out);
-    generateExeReport(context, &report);
+    //generateExeReport(context, &report);
+    generateExeReport(context, &report, name, functions, loops);
     report.close();
 }
 
-void
-generateExeReport(JanusContext *context, void *outputStream)
+//void generateExeReport(JanusContext *context, void *outputStream)
+void generateExeReport(JanusContext *context, void *outputStream, std::string name, std::vector<janus::Function> functions, std::vector<janus::Loop> loops)
 {
     ofstream &report = *(ofstream *)outputStream;
 
     report<<"---------------------------------------------------------------------------"<<endl;
-    report<<"Janus Static Analysis Report for Executable : "<<context->name<<endl;
+    //report<<"Janus Static Analysis Report for Executable : "<<context->name<<endl;
+    report<<"Janus Static Analysis Report for Executable : "<<name<<endl;
     report<<"---------------------------------------------------------------------------"<<endl;
 
     report<<"\tAnalysis Summary:"<<endl;
 
 
-    report<<"\tNo. of recognised functions: "<<context->functions.size()<<endl;
+    //report<<"\tNo. of recognised functions: "<<context->functions.size()<<endl;
+    report<<"\tNo. of recognised functions: "<<functions.size()<<endl;
     int num_func_with_loops = 0;
     int num_leaf_func = 0;
-    for (auto &func: context->functions) {
-        if (func.loops.size()) {
+    //for (auto &func: context->functions) {
+    for (auto &func: functions) {
+        //if (func.loops.size()) {
+    	if (func.loopIDs.size()) {
             num_func_with_loops++;
             if (func.subCalls.size() == 0)
                 num_leaf_func++;
@@ -348,7 +362,8 @@ generateExeReport(JanusContext *context, void *outputStream)
     report<<"\tNo. of functions that contain loops: "<<dec<<num_func_with_loops<<endl;
     report<<"\tNo. of leaf functions that contain loops: "<<num_leaf_func<<endl;
 
-    report<<"\n\tNo. of recognised loops: "<<context->loops.size()<<endl;
+    //report<<"\n\tNo. of recognised loops: "<<context->loops.size()<<endl;
+    report<<"\n\tNo. of recognised loops: "<<loops.size()<<endl;
     int num_loops_nests = 0;
     int num_loops_with_iter = 0;
     int num_unsafe_loops = 0;
@@ -361,7 +376,8 @@ generateExeReport(JanusContext *context, void *outputStream)
     int num_loops_with_shared_call = 0;
     int num_doall_loops_with_runtime_check = 0;
     set<FuncID> shared_call_ids;
-    for (auto &loop: context->loops) {
+    //for (auto &loop: context->loops) {
+    for (auto &loop: loops) {
         if (loop.ancestors.size() == 0)
             num_loops_nests++;
         if (loop.mainIterator)
@@ -389,7 +405,8 @@ generateExeReport(JanusContext *context, void *outputStream)
 
         shared_call_found = false;
         for (auto sub: loop.subCalls) {
-            if (context->functions[sub].isExternal) {
+            //if (context->functions[sub].isExternal) {
+        	if (functions[sub].isExternal) {
                 shared_call_found = true;
                 shared_call_ids.insert(sub);
             }
@@ -404,7 +421,8 @@ generateExeReport(JanusContext *context, void *outputStream)
     report<<"\tNo. of loops with sub function calls "<<num_loops_with_subcall<<endl;
     report<<"\tNo. of loops with sub shared library calls "<<num_loops_with_shared_call<<endl;
     for (auto sb: shared_call_ids)
-        report<<"\t\t"<<context->functions[sb].name<<endl;
+        //report<<"\t\t"<<context->functions[sb].name<<endl;
+    	report<<"\t\t"<<functions[sb].name<<endl;
 
     report<<"\n\tNo. of static DOALL loops "<<num_doall_loops<<endl;
     report<<"\tNo. of DOALL loops that requires runtime array base check "<<num_doall_loops_with_runtime_check<<endl;

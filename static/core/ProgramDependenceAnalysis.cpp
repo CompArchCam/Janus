@@ -17,14 +17,15 @@ ProgramDependenceAnalysis::ProgramDependenceAnalysis()
 }
 
 
-void ProgramDependenceAnalysis::buildCFGForEachFunction(std::vector<janus::Function>& functions)
+void ProgramDependenceAnalysis::buildCFGForEachFunction(std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap)
 {
     GSTEP("Building basic blocks: ");
     uint32_t numBlocks = 0;
     /* Step 1: build CFG for each function */
     for (auto &func: functions) {
         if (func.isExecutable) {
-            buildCFG(func);
+            //buildCFG(func);
+        	buildCFG(func, functionMap);
             numBlocks += func.blocks.size();
         }
     }
@@ -77,7 +78,7 @@ std::vector<janus::Loop> ProgramDependenceAnalysis::identifyLoopsFromCFG(std::ve
     for (auto &func: functions) {
         //searchLoop(this, &func);
     	// Updates the loops
-    	loops = searchLoop(&loops, &func);
+    	searchLoop(&loops, &func);
     }
 
     GSTEPCONT(loops.size()<<" loops recognised"<<endl);
@@ -100,7 +101,8 @@ std::vector<std::set<LoopID>> ProgramDependenceAnalysis::analyseLoopAndFunctionR
 
     for (auto &loop: loops) {
         if (loop.ancestors.size() == 0) {
-            set<LoopID> nest;
+            //set<LoopID> nest;
+        	std::set<LoopID> nest;
             nest.insert(loop.id);
 
             for (auto l: loop.descendants) {
@@ -139,7 +141,7 @@ void ProgramDependenceAnalysis::performAdvanceLoopAnalysis(std::vector<janus::Lo
 {
     GSTEP("Analysing loops - Advance"<<endl);
     for (auto &loop: loops) {
-        loop.analyseAdvance(loopAnalysisReport);
+        loop.analyseAdvance(loopAnalysisReport, allFunctions);
     }
 }
 
@@ -147,23 +149,28 @@ void ProgramDependenceAnalysis::reduceLoopsAliasAnalysis(std::vector<janus::Loop
 {
     GSTEP("Analysing loops - PROF - reduce considered loops with alias analysis"<<endl);
     for (auto &loop: loops) {
-        loop.analyseReduceLoopsAliasAnalysis(loopAnalysisReport, allFunctions);
+        //loop.analyseReduceLoopsAliasAnalysis(loopAnalysisReport, allFunctions);
+    	loop.analyseReduceLoopsAliasAnalysis(allFunctions);
     }
 }
 
-void ProgramDependenceAnalysis::performBasicPassWithBasicFunctionTranslate(std::vector<janus::Loop>& loops, loopAnalysisReport)
+//void ProgramDependenceAnalysis::performBasicPassWithBasicFunctionTranslate(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport)
+void ProgramDependenceAnalysis::performBasicPassWithBasicFunctionTranslate(std::vector<janus::Loop>& loops, std::vector<janus::Function>& allFunctions)
 {
     GSTEP("Analysing loops - PROF - reduce considered loops with alias analysis"<<endl);
     for (auto &loop: loops) {
-        loop.analysePass0_Basic(loopAnalysisReport);
+        //loop.analysePass0_Basic(loopAnalysisReport);
+    	loop.analysePass0_Basic(allFunctions);
     }
 }
 
-void ProgramDependenceAnalysis::performBasicPassWithAdvanceFunctionTranslate(std::vector<janus::Loop>& loops, loopAnalysisReport)
+//void ProgramDependenceAnalysis::performBasicPassWithAdvanceFunctionTranslate(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport)
+void ProgramDependenceAnalysis::performBasicPassWithAdvanceFunctionTranslate(std::vector<janus::Loop>& loops, std::vector<janus::Function>& allFunctions)
 {
     GSTEP("Analysing loops - PROF - reduce considered loops with alias analysis"<<endl);
     for (auto &loop: loops) {
-        loop.analysePass0_Advance(loopAnalysisReport);
+        //loop.analysePass0_Advance(loopAnalysisReport);
+    	loop.analysePass0_Advance(allFunctions);
     }
 }
 

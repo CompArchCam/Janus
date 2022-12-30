@@ -8,14 +8,17 @@
 #include "JanusContext.h"
 
 /** \brief build the control flow graph*/
-void buildCFG(janus::Function &function);
+//void buildCFG(janus::Function &function);
+void buildCFG(janus::Function &function, std::map<PCAddress, janus::Function *>& functionMap);
 
 /** \brief build the control dependence graph (Better to be called after SSA).*/
 void buildCDG(janus::Function &function);
 
 void traverseCFG(janus::Function &function);
 
-void buildCallGraphs(JanusContext *gc);
+//void buildCallGraphs(JanusContext *gc);
+// TODO: It seems that no one is calling this function?
+void buildCallGraphs(std::vector<janus::Function>& functions);
 
 /** \brief builds the dominance frontier of each block the given function.
 

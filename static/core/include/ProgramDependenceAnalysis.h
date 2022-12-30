@@ -12,7 +12,8 @@ class ProgramDependenceAnalysis
 public:
 	ProgramDependenceAnalysis();
 
-	void buildCFGForEachFunction(std::vector<janus::Function>& functions);
+	//void buildCFGForEachFunction(std::vector<janus::Function>& functions);
+	void buildCFGForEachFunction(std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap);
 	void liftDisassemblyToIR(std::vector<janus::Function>& functions);
 	void constructSSA(std::vector<janus::Function>& functions);
 	void constructControlDependenceGraph(std::vector<janus::Function>& functions);
@@ -33,10 +34,12 @@ public:
 	void performBasicLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
 	void performAdvanceLoopAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
 
-	void reduceLoopsAliasAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
+	void reduceLoopsAliasAnalysis(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
 	//void performBasicPass(std::vector<janus::Loop> loops, LoopAnalysisReport loopAnalysisReport);
-	void performBasicPassWithBasicFunctionTranslate(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
-	void performBasicPassWithAdvanceFunctionTranslate(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
+	//void performBasicPassWithBasicFunctionTranslate(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
+	void performBasicPassWithBasicFunctionTranslate(std::vector<janus::Loop>& loops, std::vector<janus::Function>& allFunctions);
+	//void performBasicPassWithAdvanceFunctionTranslate(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
+	void performBasicPassWithAdvanceFunctionTranslate(std::vector<janus::Loop>& loops, std::vector<janus::Function>& allFunctions);
 
 	void performLoopAnalysisPasses(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
 };

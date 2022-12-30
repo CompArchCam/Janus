@@ -209,13 +209,16 @@ class Loop
     void analyseAdvance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
     // Had to separate analyze into analyseBasic/analyseAdvance, analyseReduceLoopsAliasAnalysis, and
     // analysePass0, due to dependencies on different steps.
-    void analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
+    //void analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
+    void analyseReduceLoopsAliasAnalysis(std::vector<janus::Function>& allFunctions);
     //void Loop::analysePass0(LoopAnalysisReport loopAnalysisReport);
     // The only difference between analysePass0_Basic and analysePass0_Advance is that
     // analysePass0_Basic calls translateBasic on functions, while
     // analysePass0_Advance calls translateBasic and translateAdvance.
-    void analysePass0_Basic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
-    void analysePass0_Advance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
+    //void analysePass0_Basic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
+    void analysePass0_Basic(std::vector<janus::Function>& allFunctions);
+    //void analysePass0_Advance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
+    void analysePass0_Advance(std::vector<janus::Function>& allFunctions);
 
     /** \brief perform full Janus static analysis on this loop (second pass) */
     //void                 analyse2(JanusContext *gc);
@@ -292,5 +295,5 @@ linkParentLoops(janus::Function *function);
 
 //void searchLoop(JanusContext *gc, janus::Function *function);
 //void searchLoop(janus::Function *function);
-void searchLoop(std::vector<janus::Loop>* loops, janus::Function *function)
+void searchLoop(std::vector<janus::Loop>* loops, janus::Function *function);
 #endif

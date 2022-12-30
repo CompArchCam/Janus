@@ -3,7 +3,9 @@
 #include "ProgramDependenceAnalysis.h"
 #include "SourceCodeStructure.h"
 #include "LoopAnalysisReport.h"
+
 #include "Profile.h"
+
 #include <string.h>
 
 using namespace std;
@@ -144,7 +146,8 @@ int main(int argc, char **argv) {
     //jc->buildProgramDependenceGraph();
     janus::ProgramDependenceAnalysis programDependenceAnalysis;
 
-    programDependenceAnalysis.buildCFGForEachFunction(functions);
+    //programDependenceAnalysis.buildCFGForEachFunction(functions);
+    programDependenceAnalysis.buildCFGForEachFunction(functions, functionMap);
     programDependenceAnalysis.liftDisassemblyToIR(functions);
     programDependenceAnalysis.constructSSA(functions);
     programDependenceAnalysis.constructControlDependenceGraph(functions);
@@ -169,7 +172,8 @@ int main(int argc, char **argv) {
     		// Get the loops from CFG
     		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
     		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, functions);
     		break;
     	case JFCOV:
     		// Because no identification of loops is applied on this one,
@@ -184,7 +188,7 @@ int main(int argc, char **argv) {
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		loadLoopCoverageProfiles(executableBinaryStructure.getExecutableName(), loops);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.reduceLoopsAliasAnalysis(loops, loopAnalysisReport);
+    		programDependenceAnalysis.reduceLoopsAliasAnalysis(loops, loopAnalysisReport, functions);
     		break;
     	case JPARALLEL:
     		// Get the loops from CFG
@@ -193,7 +197,8 @@ int main(int argc, char **argv) {
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, sourceCodeStructure.getExecutableName());
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
     		break;
     	case JVECTOR:
@@ -201,7 +206,8 @@ int main(int argc, char **argv) {
     		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
     		break;
     	case JFETCH:
@@ -209,7 +215,8 @@ int main(int argc, char **argv) {
     		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
     		break;
     	case JANALYSIS:
@@ -218,27 +225,31 @@ int main(int argc, char **argv) {
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, sourceCodeStructure.getExecutableName());
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
     		break;
     	case JGRAPH:
     		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
     		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, functions);
     		break;
     	case JOPT:
     		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
     		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		break;
     	case JSECURE:
     		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
     		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
     		break;
     	case JCUSTOM:
@@ -246,7 +257,8 @@ int main(int argc, char **argv) {
     		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
     		break;
     	case JDLL:
@@ -254,7 +266,8 @@ int main(int argc, char **argv) {
     		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
     		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
     		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		//programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
+    		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport);
     		break;
         default:
@@ -333,12 +346,17 @@ int main(int argc, char **argv) {
 	// TODO: Eliminate JanusContext completely from the below.
 
     if(mode == JANALYSIS || mode == JGRAPH) {
-        dumpCFG(jc);
-        dumpSSA(jc);
-        dumpLoopCFG(jc);
-        dumpLoopSSA(jc);
-        generateExeReport(jc);
-        generateExeReport(jc, &cout);
+        //dumpCFG(jc);
+    	dumpCFG(functions);
+        //dumpSSA(jc);
+        dumpSSA(functions);
+        //dumpLoopCFG(jc);
+        dumpLoopCFG(loops);
+        //dumpLoopSSA(jc);
+        dumpLoopSSA(loops);
+        //generateExeReport(jc);
+        generateExeReport(jc, executableBinaryStructure.getExecutableName(), functions, loops);
+        generateExeReport(jc, &cout, executableBinaryStructure.getExecutableName(), functions, loops);
     } else {
     	//generateRules(jc);
         generateRules(jc, functionMap);

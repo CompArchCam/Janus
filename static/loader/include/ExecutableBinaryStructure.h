@@ -86,6 +86,14 @@ class ExecutableBinaryStructure {
 private:
     ///The name of the executable
     std::string executableName;
+    void                            parseHeader();
+    void                            parseFlat();
+    //create Function classes from the symbols
+    std::vector<janus::Function>  	liftSymbolToFunction();
+    //void                            liftSymbolToFunction(JanusContext *jc);
+    void                            retrieveHiddenSymbol(Section &section);
+    void                            parseELF64();
+
 public:
     ExecutableBinaryStructure(std::string executableName);
     ~ExecutableBinaryStructure();
@@ -106,10 +114,14 @@ public:
     void                            open(const char *filename);
     ///lift to disassembly and functions
     //void                            disassemble(JanusContext *jc);
-    std::vector<janus::Function>    disassemble(Function *fmain,
+    std::vector<janus::Function>    disassemble(janus::Function *fmain,
     								std::map<PCAddress, janus::Function *>*  functionMap,
 									std::map<PCAddress, janus::Function *>* externalFunctions);
     void                            printSection();
+
+    uint64_t getCapstoneHandle() {
+    	return capstoneHandle;
+    }
 
     // Getters/setters
     std::string getExecutableName()
@@ -120,15 +132,6 @@ public:
 protected:
     uint8_t                         *buffer;        //executable storage
     uint32_t                        bufferSize;
-
-private:
-    void                            parseHeader();
-    void                            parseFlat();
-    //create Function classes from the symbols
-    std::vector<janus::Function>  	liftSymbolToFunction();
-    //void                            liftSymbolToFunction(JanusContext *jc);
-    void                            retrieveHiddenSymbol(Section &section);
-    void                            parseELF64();
 };
 
 }//end namespace janus

@@ -15,8 +15,8 @@ using namespace janus;
 #define BB_LEADER 2
 #define BB_TERMINATOR 1
 
-static void
-buildBasicBlocks(Function &function);
+//static void buildBasicBlocks(Function &function);
+static void buildBasicBlocks(Function &function, std::map<PCAddress, janus::Function *>& functionMap);
 
 static void
 buildDominanceTree(Function &function);
@@ -25,12 +25,13 @@ static void
 buildPostDominanceTree(Function &function);
 
 //Construct control flow graph for each function
-void 
-buildCFG(Function &function)
+//void buildCFG(Function &function)
+void buildCFG(Function &function, std::map<PCAddress, janus::Function *>& functionMap)
 {
     /* step 1: construct a vector of basic blocks
      * and link them together */
-    buildBasicBlocks(function);
+    //buildBasicBlocks(function);
+    buildBasicBlocks(function, functionMap);
     /* set function entry */
     function.entry = function.blocks.data();
     function.numBlocks = function.blocks.size();
@@ -71,13 +72,13 @@ buildCDG(Function &function)
     }
 }
 
-static void
-buildBasicBlocks(Function &function)
+//static void buildBasicBlocks(Function &function)
+static void buildBasicBlocks(Function &function, std::map<PCAddress, janus::Function *>& functionMap)
 {
     int cornerCase = false;
     auto &instrs = function.instrs;
     auto &instrTable = function.minstrTable;
-    auto &functionMap = function.context->functionMap;
+    //auto &functionMap = function.context->functionMap;
     auto &blocks = function.blocks;
 
     /* Each function has a vector of machine instructions, each insn has an ID
@@ -330,8 +331,10 @@ buildBasicBlocks(Function &function)
             BasicBlock *block = blockArray + i;
             if (block->lastInstr()->opcode == Instruction::Call) {
                 PCAddress target = block->lastInstr()->minstr->getTargetAddress();
-                if (function.context->functionMap.find(target) != function.context->functionMap.end())
-                    if (function.context->functionMap[target]->name == "_gfortran_stop_string@plt")
+                //if (function.context->functionMap.find(target) != function.context->functionMap.end())
+                if (functionMap.find(target) != functionMap.end())
+                    //if (function.context->functionMap[target]->name == "_gfortran_stop_string@plt")
+                	if (functionMap[target]->name == "_gfortran_stop_string@plt")
                         function.terminations.insert(i);
             }
         }
@@ -582,11 +585,13 @@ traverseCFG(Function &function)
 }
 
 /* Study the link between functions and build call graphs */
-void
-buildCallGraphs(JanusContext *gc)
+//void buildCallGraphs(JanusContext *gc)
+void buildCallGraphs(std::vector<janus::Function>& allFunctions)
 {
-    Function *functions = gc->functions.data();
-    uint32_t numFunc = gc->functions.size();
+    //Function *functions = gc->functions.data();
+	Function *functions = allFunctions.data();
+    //uint32_t numFunc = gc->functions.size();
+	uint32_t numFunc = allFunctions.size();
 
     GSTEP("Building call graphs: "<<endl);
 

@@ -52,14 +52,14 @@ void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<jan
     for (auto &func: functions) {
         //disassemble the function and register the function lookup table
         if (func.isExecutable) {
-            disassemble(&func);
+            disassemble(&func, capstoneHandle);
             //jc->functionMap[func.startAddress] = &func;
-            *functionMap[func.startAddress] = &func;
+            (*functionMap)[func.startAddress] = &func;
         }
         //if the function is calling shared library call
         else {
             //jc->externalFunctions[func.startAddress] = &func;
-        	*externalFunctions[func.startAddress] = &func;
+        	(*externalFunctions)[func.startAddress] = &func;
         }
     }
     //GSTEPCONT(jc->functions.size()<<" functions recognised"<<endl);
@@ -133,7 +133,8 @@ static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunct
 }
 
 ///Disassemble for the given function
-void disassemble(Function *function)
+//void disassemble(Function *function)
+void disassemble(janus::Function *function, uint64_t handle);
 {
     //if already disassembled, return
     if(function->minstrs.size()) return;

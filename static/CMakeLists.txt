@@ -166,6 +166,8 @@ set(CS_HEADERS
 set(CORE_SOURCES
     core/JanusContext.cpp
     core/Utility.cpp
+    # Added by jahic
+    core/ProgramDependenceAnalysis.cpp
     core/Function.cpp
     core/Loop.cpp
     core/BasicBlock.cpp
@@ -174,8 +176,7 @@ set(CORE_SOURCES
     core/Expression.cpp
     core/Slice.cpp
     core/MemoryLocation.cpp
-    # Added by jahic
-    core/ProgramDependenceAnalysis.cpp
+	# Added by jahic
     core/SourceCodeStructure.cpp
 )
 
@@ -190,6 +191,8 @@ set(ANALYSIS_SOURCES
     analysis/Dependence.cpp
     analysis/Iterator.cpp
     analysis/Alias.cpp
+    # Added by jahic
+    analysis/LoopAnalysisReport.cpp
 )
 
 set(LOADER_SOURCES

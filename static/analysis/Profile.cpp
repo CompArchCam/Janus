@@ -79,12 +79,14 @@ void filterParallelisableLoop(std::vector<janus::Loop>& loops)
 //void loadLoopSelection(JanusContext *jc)
 LoopAnalysisReport loadLoopSelection(std::vector<janus::Loop>& loops, std::string executableName)
 {
+	LoopAnalysisReport loopAnalysisReport;
     /* Read ddg files from manual specification */
     ifstream iselect;
     //iselect.open(jc->name+".loop.select", ios::in);
     iselect.open(executableName+".loop.select", ios::in);
 
-    if (!iselect.good()) return;
+    //if (!iselect.good()) return;
+    if (!iselect.good()) return loopAnalysisReport;
     //GSTEPCONT("\tReading "<<jc->name<<".loop.select for loop selection"<<endl);
     GSTEPCONT("\tReading "<<executableName<<".loop.select for loop selection"<<endl);
 
@@ -106,7 +108,7 @@ LoopAnalysisReport loadLoopSelection(std::vector<janus::Loop>& loops, std::strin
     }
     //jc->passedLoop = id;
     //jc->manualLoopSelection = true;
-    LoopAnalysisReport loopAnalysisReport = LoopAnalysisReport(id, true);
+    loopAnalysisReport = LoopAnalysisReport(id, true);
     return loopAnalysisReport;
 }
 

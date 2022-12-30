@@ -2,6 +2,8 @@
 #define _Janus_HINTGEN_
 
 #include "janus.h"
+#include "Function.h"
+#include <map>
 
 class JanusContext;
 

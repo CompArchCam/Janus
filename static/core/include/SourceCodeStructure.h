@@ -30,7 +30,7 @@ public:
 	// For consistency reason, only update of the full structure is possible.
 	void updateBinaryStructure(janus::Function *main, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *> functionMap);
 
-	std::vector<janus::Loop> getAllLoops();
+	//std::vector<janus::Loop> getAllLoops();
 
 	janus::Function getMainFunction();
 

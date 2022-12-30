@@ -42,14 +42,14 @@ void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<jan
     for (auto &func: functions) {
         //disassemble the function and register the function lookup table
         if (func.isExecutable) {
-            disassemble(&func);
+            disassemble(&func, capstoneHandle);
             //jc->functionMap[func.startAddress] = &func;
-            *functionMap[func.startAddress] = &func;
+            (*functionMap)[func.startAddress] = &func;
         }
         //if the function is calling shared library call
         else {
             //jc->externalFunctions[func.startAddress] = &func;
-        	*externalFunctions[func.startAddress] = &func;
+        	(*externalFunctions)[func.startAddress] = &func;
         }
     }
     //GSTEPCONT(jc->functions.size()<<" functions recognised"<<endl);
@@ -64,7 +64,7 @@ void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<jan
         if (func.name == string(".plt") || func.name == string("_plt")) {
             func.isExecutable = false;
             //linkRelocation(jc, &func);
-            linkRelocation(externalFunctions, functionMap, &func
+            linkRelocation(externalFunctions, functionMap, &func);
             continue;
         }
         if (func.name == string("main") && !foundFortranMain) {
@@ -116,19 +116,20 @@ static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunct
         synFunc->isExternal = true;
         //update in the function map
         //jc->functionMap[synFunc->startAddress] = synFunc;
-        *functionMap[synFunc->startAddress] = synFunc;
+        (*functionMap)[synFunc->startAddress] = synFunc;
         i++;
         if (i==nPltSym) break;
     }
 }
 
 ///Disassemble for the given function
-void disassemble(Function *function)
+//void disassemble(Function *function)
+void disassemble(Function *function, uint64_t handle)
 {
     //if already disassembled, return
     if(function->minstrs.size()) return;
 
-    uint64_t handle = function->context->program.capstoneHandle;
+    //uint64_t handle = function->context->program.capstoneHandle;
     cs_insn             *instr;
     InstID              id = 0;
 

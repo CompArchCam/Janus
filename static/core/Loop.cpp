@@ -243,7 +243,8 @@ void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport, std::vector<janus
     	l->analyseBasic(loopAnalysisReport, allFunctions);
         //l->analyse(gc);
 
-    analysePass0_Basic(loopAnalysisReport, allFunctions);
+    //analysePass0_Basic(loopAnalysisReport, allFunctions);
+    analysePass0_Basic(allFunctions);
 }
 
 void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
@@ -276,13 +277,15 @@ void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport, std::vector<jan
     	l->analyseAdvance(loopAnalysisReport, allFunctions);
         //l->analyse(gc);
 
-    analysePass0_Advance(loopAnalysisReport, allFunctions);
+    //analysePass0_Advance(loopAnalysisReport, allFunctions);
+    analysePass0_Advance(allFunctions);
 }
 
 // Should only be called by JPROF
 // If a loop is removed, then do nothing.
 // Else, call analysePass0.
-void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
+//void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
+void Loop::analyseReduceLoopsAliasAnalysis(std::vector<janus::Function>& allFunctions)
 {
     //if (gc->mode == JPROF && removed) {
 	if (removed)
@@ -298,11 +301,13 @@ void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport
         return;
     }
 
-	analysePass0_Advance(loopAnalysisReport, allFunctions);
+	//analysePass0_Advance(loopAnalysisReport, allFunctions);
+	analysePass0_Advance(allFunctions);
 }
 
 // Not called by JPROF for removed loops.
-void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
+//void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
+void Loop::analysePass0_Basic(std::vector<janus::Function>& allFunctions)
 {
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" in "<<parent->name<<endl);
@@ -352,7 +357,8 @@ void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport, std::vector
 }
 
 // Not called by JPROF for removed loops.
-void Loop::analysePass0_Advance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
+//void Loop::analysePass0_Advance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
+void Loop::analysePass0_Advance(std::vector<janus::Function>& allFunctions)
 {
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" in "<<parent->name<<endl);

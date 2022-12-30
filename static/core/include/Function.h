@@ -22,7 +22,7 @@
 
 
 class JanusContext;
-class ExecutableBinaryStructure;
+//class ExecutableBinaryStructure;
 
 namespace janus {
     class Function
