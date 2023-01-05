@@ -3,8 +3,10 @@
 using namespace std;
 using namespace janus;
 
-void generateDLLRules(JanusContext *jc) {
-    for(auto &f: jc->functions){
+//void generateDLLRules(JanusContext *jc) {
+void generateDLLRules(std::vector<janus::Function>& functions) {
+//    for(auto &f: jc->functions){
+    for(auto &f: functions){
         for(auto &bb: f.blocks){
             int local_inst_count =0;
             for(auto &I: bb.minstrs){

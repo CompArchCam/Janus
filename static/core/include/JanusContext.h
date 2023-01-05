@@ -47,14 +47,14 @@ public:
     ///A vector of recognised loops in the executable
     //std::vector<janus::Loop>                    loops;
     ///A vector of recognised loop nests - inter-procedural
-    std::vector<std::set<LoopID>>               loopNests;
+    //std::vector<std::set<LoopID>>               loopNests;
 
     //call graphs
     std::map<FuncID, std::set<FuncID>>          callGraph;
     //data structure for look up
-    std::map<PCAddress, janus::Function *>      functionMap;
+    //std::map<PCAddress, janus::Function *>      functionMap;
     //shared library calls or external functions
-    std::map<PCAddress, janus::Function *>      externalFunctions;
+    //std::map<PCAddress, janus::Function *>      externalFunctions;
 
     ///Shared library profiling, enabled by default. Disable with -noshared switch
     bool					sharedOn;

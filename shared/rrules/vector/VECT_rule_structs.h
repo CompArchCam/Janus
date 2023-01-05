@@ -5,19 +5,29 @@
 #include "janus_var.h"
 #include <cstdlib>
 
+#ifdef _STATIC_ANALYSIS_COMPILED
+    //only compile these parts if we are compiling the static analysis tool
+    #include "SchedGen.h"
+#endif
+
+namespace janus {
+    class Variable;
+    class BasicBlock;
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 
-#ifdef _STATIC_ANALYSIS_COMPILED
+//#ifdef _STATIC_ANALYSIS_COMPILED
     //only compile these parts if we are compiling the static analysis tool
-    #include "SchedGen.h"
-#endif
-namespace janus {
-    class Variable;
-    class BasicBlock;
-}
+//    #include "SchedGen.h"
+//#endif
+//namespace janus {
+//    class Variable;
+//    class BasicBlock;
+//}
 
 /** \brief Abstract class defining the basic methods and fields of all VECT_ rules.
  *

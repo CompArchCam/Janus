@@ -9,10 +9,12 @@
 using namespace std;
 using namespace janus;
 
-void ruleGenerationTemplate(JanusContext &jc) {
+//void ruleGenerationTemplate(JanusContext &jc) {
+void ruleGenerationTemplate(std::vector<janus::Function>& functions) {
 
 /*--- Static RuleGen Start ---*/
-for (auto &func: jc.functions){
+//for (auto &func: jc.functions){
+for (auto &func: functions){
     for (auto &B: func.blocks){
         uint64_t local_inst_count = 0;
         Instruction *End = B.instrs+ B.size;

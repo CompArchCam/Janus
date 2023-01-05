@@ -30,7 +30,7 @@ static int
 getEncodedArrayIndex(Loop *loop, Expr var);
 
 //void generateParallelRules(JanusContext *gc)
-void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap, std::vector<janus::Function>& functions,
+void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Function>& functions,
 		LoopAnalysisReport loopAnalysisReport, janus::Function *fmain, std::vector<janus::Loop>& loops, std::string name)
 {
 
@@ -38,7 +38,7 @@ void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function
 
     /* Step 1: select DOALL loops for parallelisation */
     //selectDOALLLoops(gc, selected_loop);
-    selectDOALLLoops(selected_loop, functions, loops, loopAnalysisReport, fmain, name);
+    selectDOALLLoops(selected_loop, functions, functionMap, loops, loopAnalysisReport, fmain, name);
 
     //gc->passedLoop = selected_loop.size();
     loopAnalysisReport = LoopAnalysisReport(selected_loop.size(), true);

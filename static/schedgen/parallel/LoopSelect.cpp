@@ -116,7 +116,7 @@ bool checkSafetyForParallelisation(janus::Loop &loop, std::vector<janus::Functio
  * 6. Remove redudant loops in the same loop nest (last step)
  */
 //void selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
-void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops,
+void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Loop>& loops,
 		LoopAnalysisReport loopAnalysisReport, janus::Function *fmain, std::string name)
 {
     LOOPLOG("Performing automatic DOALL loop selection:"<<endl);
@@ -185,7 +185,7 @@ void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& 
         }
 
         //if (!checkSafetyForParallelisation(loop)) {
-        if (!checkSafetyForParallelisation(loop, functions)) {
+        if (!checkSafetyForParallelisation(loop, functions, functionMap)) {
             LOOPLOG("\tThis loop is not safe for DOALL parallelisation"<<endl);
             passed = false;
         }

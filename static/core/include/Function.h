@@ -3,7 +3,7 @@
 #ifndef _Janus_FUNCTION_
 #define _Janus_FUNCTION_
 
-#include "janus.h"
+//#include "janus.h"
 //#include "Executable.h"
 #include "ExecutableBinaryStructure.h"
 #include "MachineInstruction.h"
@@ -21,7 +21,7 @@
 
 
 
-class JanusContext;
+//class JanusContext;
 //class ExecutableBinaryStructure;
 
 namespace janus {

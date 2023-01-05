@@ -39,10 +39,12 @@ get_target_name(Instruction &instr){
     }
     return trgname;
 }
-int 
-get_num_loops(JanusContext &jc){
+
+// TODO: seems to be dead code.
+/*int get_num_loops(JanusContext &jc){
    return jc.loops.size();
-}
+}*/
+
 int 
 get_opcode(Instruction &instr){
 

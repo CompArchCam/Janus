@@ -8,6 +8,11 @@
 	return loops;
 }*/
 
+SourceCodeStructure::SourceCodeStructure()
+{
+
+}
+
 janus::Function SourceCodeStructure::getMainFunction()
 {
 	return *main;

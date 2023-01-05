@@ -87,10 +87,12 @@ void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> func
     	generatePrefetchRules(gc, loops);
         break;
     case JCUSTOM:
-        generateCustomRules(gc);
+        //generateCustomRules(gc);
+    	generateCustomRules(functions);
         break;
     case JDLL:
-        generateDLLRules(gc);
+        //generateDLLRules(gc);
+        generateDLLRules(functions);
         break;
     default:
         break;
