@@ -148,10 +148,12 @@ checkLoopIterators(Loop &loop)
     return true;
 }
 
-void
-selectVectorisableLoop(JanusContext *gc, set<Loop *> &selected_loops, set<InstOp> &supported_opcode, set<InstOp> &singles, set<InstOp> &doubles)
+//void selectVectorisableLoop(JanusContext *gc, set<Loop *> &selected_loops, set<InstOp> &supported_opcode, set<InstOp> &singles, set<InstOp> &doubles)
+void selectVectorisableLoop(set<Loop *> &selected_loops, set<InstOp> &supported_opcode,
+		set<InstOp> &singles, set<InstOp> &doubles, std::vector<janus::Loop>& loops)
 {
-    for (auto &loop : gc->loops) {
+    //for (auto &loop : gc->loops) {
+	for (auto &loop : loops) {
         //Condition 1: we only look at innermost loops
         if (loop.descendants.size()) {
             LOOPLOGLINE("loop "<<dec<<loop.id<<" not innermost.");

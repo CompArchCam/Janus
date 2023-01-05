@@ -8,7 +8,6 @@
 #define PREFETCH_CONSTANT 64
 
 /** \brief Generate prefetching rewrite rules */
-void
-generatePrefetchRules(JanusContext *jc);
-
+//void generatePrefetchRules(JanusContext *jc);
+void generatePrefetchRules(JanusContext *jc, std::vector<janus::Loop>& loops);
 #endif

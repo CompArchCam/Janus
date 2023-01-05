@@ -23,8 +23,8 @@ static AliasType lamportTest(ExpandedSCEV &diff);
 static AliasType GCDTest(ExpandedSCEV &e1, ExpandedSCEV &e2, ExpandedSCEV &diff, Loop &loop);
 static AliasType banerjeeTest(ExpandedSCEV &diff);
 
-void
-aliasAnalysis(janus::Loop *loop)
+//void aliasAnalysis(janus::Loop *loop)
+void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests)
 {
     Function *parent = loop->parent;
     BasicBlock *entry = parent->entry;
@@ -44,11 +44,13 @@ aliasAnalysis(janus::Loop *loop)
     LOOPLOG2("\n\tStep 0: Extracting loop ranges in the loop nest:"<<endl);
     LOOPLOG2("\t\tMain Loop "<<dec<<loop->id<<" range "<<*loop->mainIterator<<" trip count "<<loop->staticIterCount<<endl);
 
-    auto myNest = parent->context->loopNests[loop->nestID];
+    //auto myNest = parent->context->loopNests[loop->nestID];
+    auto myNest = loopNests[loop->nestID];
 
     for (auto l: myNest) {
         if (l != loop->id) {
-            Loop *nl = parent->context->loops.data() + (l-1);
+            //Loop *nl = parent->context->loops.data() + (l-1);
+        	Loop *nl = allLoops.data() + (l-1);
             if (nl->mainIterator) {
                 LOOPLOG2("\t\tLoop "<<nl->id<<" range "<<*nl->mainIterator<<" trip count "<<nl->staticIterCount<<endl);
             }

@@ -10,8 +10,8 @@
 #include "Loop.h"
 
 /** \brief Generate VECTOR related rules */
-void
-generateVectorRules(JanusContext *gc);
+//void generateVectorRules(JanusContext *gc);
+void generateVectorRules(JanusContext *gc, std::vector<janus::Loop>& loops);
 /** \brief Check if all loops memory accesses are aligned */
 bool alignmentAnalysis(janus::Loop &loop);
 /** \brief Whether this instruction is after the induction variable update */

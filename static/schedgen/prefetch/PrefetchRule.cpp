@@ -17,10 +17,11 @@ static void prepareLoopIterators(Loop *loop);
 static bool instrContainIterator(Instruction *instr, Loop *loop);
 static void emitInstrCloneRules(list<Instruction*> &instrs, Instruction *front, Loop &loop);
 
-void
-generatePrefetchRules(JanusContext *jc) {
+//void generatePrefetchRules(JanusContext *jc) {
+void generatePrefetchRules(JanusContext *jc, std::vector<janus::Loop>& loops) {
     map<VarState*, Iterator *> passed;
-    for (auto &loop: jc->loops) {
+    //for (auto &loop: jc->loops) {
+    for (auto &loop: loops) {
         if (findPrefetch(loop, passed)) {
             generatePrefetchRulesForLoop(jc, loop, passed);
             passed.clear();

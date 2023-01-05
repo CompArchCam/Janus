@@ -18,8 +18,8 @@
 using namespace std;
 using namespace janus;
 
-static void
-prepareLoopHeader(JanusContext *gc, Loop &loop);
+//static void prepareLoopHeader(JanusContext *gc, Loop &loop);
+static void prepareLoopHeader(Loop &loop);
 ///Generate rewrite rules for DOALL parallelisation in the given loop
 //static void generateDOALLRules(JanusContext *gc, Loop &loop, std::map<PCAddress)
 static void generateDOALLRules(JanusContext *gc, Loop &loop, std::map<PCAddress, janus::Function *> functionMap);
@@ -30,15 +30,18 @@ static int
 getEncodedArrayIndex(Loop *loop, Expr var);
 
 //void generateParallelRules(JanusContext *gc)
-void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap)
+void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap, std::vector<janus::Function>& functions,
+		LoopAnalysisReport loopAnalysisReport, janus::Function *fmain, std::vector<janus::Loop>& loops, std::string name)
 {
 
     set<LoopID> selected_loop;
 
     /* Step 1: select DOALL loops for parallelisation */
-    selectDOALLLoops(gc, selected_loop);
+    //selectDOALLLoops(gc, selected_loop);
+    selectDOALLLoops(selected_loop, functions, loops, loopAnalysisReport, fmain, name);
 
-    gc->passedLoop = selected_loop.size();
+    //gc->passedLoop = selected_loop.size();
+    loopAnalysisReport = LoopAnalysisReport(selected_loop.size(), true);
 
     /* Step 2: generate rewrite rules for each selected loop
      * assign a dynamic id */
@@ -46,24 +49,29 @@ void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function
     int dynamic_id = 0;
 
     for (auto loopID : selected_loop) {
-        Loop &loop = gc->loops[loopID-1];
+        //Loop &loop = gc->loops[loopID-1];
+    	Loop &loop = loops[loopID-1];
         loop.pass = true;
         /* Generate headers based on the type of the loop */
-        prepareLoopHeader(gc, loop);
+        //prepareLoopHeader(gc, loop);
+        prepareLoopHeader(loop);
         /* Assign dynamic loop id */
         loop.header.id = dynamic_id++;
         /* Generate DOALL parallelisation rules for each loop */
-        generateDOALLRules(gc, gc->loops[loopID-1], functionMap);
+        //generateDOALLRules(gc, gc->loops[loopID-1], functionMap);
+        generateDOALLRules(gc, loops[loopID-1], functionMap);
     }
 
     /* Step 3: select and generate speculative loops */
 
     /* Step 4: generate thread create/exit rules on main function */
-    GASSERT(gc->main, "main function not found in this program");
-    Function *main = gc->main;
+    //GASSERT(gc->main, "main function not found in this program");
+    GASSERT(fmain, "main function not found in this program");
+    Function *main = fmain;
 
     RewriteRule rule = RewriteRule(THREAD_CREATE, main->entry, FIRST_INSTRUCTION);
-    rule.reg0 = gc->functions.size();
+    //rule.reg0 = gc->functions.size();
+    rule.reg0 = functions.size();
     rewriteRules[MAIN_CHANNEL].insert(rule);
     /* Thread create explicitly changes the basic block termination
      * The basic block structure has been changed */
@@ -75,8 +83,8 @@ void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function
     }
 }
 
-static void
-prepareLoopHeader(JanusContext *gc, Loop &loop)
+//static void prepareLoopHeader(JanusContext *gc, Loop &loop)
+static void prepareLoopHeader(Loop &loop)
 {
     RSLoopHeader &header = loop.header;
     header.staticID = loop.id;
@@ -539,19 +547,22 @@ generateSubFunctionRules(JanusContext *gc, Loop &loop, Function &func)
 }
 
 /* Emit all relevant info in the rule file */
-uint32_t
-compileParallelRulesToFile(JanusContext *gc)
+//uint32_t compileParallelRulesToFile(JanusContext *gc)
+uint32_t compileParallelRulesToFile(JanusContext *gc, std::string name, std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function> functions)
 {
-    FILE *op = fopen(string((gc->name)+".jrs").c_str(),"w");
+    //FILE *op = fopen(string((gc->name)+".jrs").c_str(),"w");
+	FILE *op = fopen(string((name)+".jrs").c_str(),"w");
     fpos_t pos;
     RSchedHeader header;
     uint32_t numRules = 0;
     int offset = 0;
     int fileSize;
-    uint32_t numLoops = gc->loops.size();
+    //uint32_t numLoops = gc->loops.size();
+    uint32_t numLoops = loops.size();
 
     int id = 0;
-    for (auto &loop: gc->loops) {
+    //for (auto &loop: gc->loops) {
+    for (auto &loop: loops) {
         if (loop.pass) {
             loop.header.id = id++;
         }
@@ -559,19 +570,23 @@ compileParallelRulesToFile(JanusContext *gc)
 
     /* Step 1: prepare Rule Program  headers */
     header.ruleFileType = (uint32_t)(gc->mode);
-    header.numFuncs = gc->functions.size();
-    header.numLoops = gc->passedLoop;
+    //header.numFuncs = gc->functions.size();
+    header.numFuncs = functions.size();
+    //header.numLoops = gc->passedLoop;
+    header.numLoops = loopAnalysisReport.getPassedLoopId();
     header.multiMode = 1;
     /* Calculate the offset of loop and rule header */
     header.loopHeaderOffset = sizeof(RSchedHeader);
-    header.ruleInstOffset = sizeof(RSchedHeader) + (gc->passedLoop) * sizeof(RSLoopHeader);
+    //header.ruleInstOffset = sizeof(RSchedHeader) + (gc->passedLoop) * sizeof(RSLoopHeader);
+    header.ruleInstOffset = sizeof(RSchedHeader) + (loopAnalysisReport.getPassedLoopId()) * sizeof(RSLoopHeader);
     /* Calculate the offset of individual loop header */
     /* Add rules for channel 0 */
     for(auto set:(rewriteRules[0].ruleMap)) {
         numRules += set.second.size();
     }
     offset = header.ruleInstOffset + (numRules * sizeof(RRule));
-    for (auto &loop : gc->loops) {
+    //for (auto &loop : gc->loops) {
+    for (auto &loop : loops) {
         if (loop.pass) {
             /* Get the number of static rules */
             int size = 0;
@@ -589,7 +604,8 @@ compileParallelRulesToFile(JanusContext *gc)
     header.ruleDataOffset = header.ruleInstOffset + numRules * sizeof(RRule);
 
     offset = header.ruleDataOffset;
-    for (auto &loop : gc->loops) {
+    //for (auto &loop : gc->loops) {
+    for (auto &loop : loops) {
         if (loop.pass) {
             int size = loop.encodedVariables.size();
             loop.header.ruleDataOffset = offset;
@@ -604,7 +620,8 @@ compileParallelRulesToFile(JanusContext *gc)
     offset += sizeof(RSchedHeader);
 
     /* Emit loop headers */
-    for (auto &loop : gc->loops) {
+    //for (auto &loop : gc->loops) {
+    for (auto &loop : loops) {
         if (loop.pass) {
             fwrite(&(loop.header),sizeof(RSLoopHeader),1,op);
         }
@@ -613,7 +630,8 @@ compileParallelRulesToFile(JanusContext *gc)
     /* Emit rule instructions */
     RRule rule;
     for(int channel=0; channel<=numLoops; channel++) {
-        if (!channel || gc->loops[channel-1].pass) {
+        //if (!channel || gc->loops[channel-1].pass) {
+    	if (!channel || loops[channel-1].pass) {
             for(auto set:(rewriteRules[channel].ruleMap)) {
                 for(auto srule:set.second) {
                     rule = srule.toRRule(channel);
@@ -625,7 +643,8 @@ compileParallelRulesToFile(JanusContext *gc)
     }
 
     /* Emit rule induction variables */
-    for (auto &loop : gc->loops) {
+    //for (auto &loop : gc->loops) {
+    for (auto &loop : loops) {
         if (loop.pass) {
             for (auto &ind: loop.encodedVariables) {
                 fwrite(&ind,sizeof(JVarProfile),1,op);

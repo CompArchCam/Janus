@@ -41,7 +41,8 @@ public:
 	//void performBasicPassWithAdvanceFunctionTranslate(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
 	void performBasicPassWithAdvanceFunctionTranslate(std::vector<janus::Loop>& loops, std::vector<janus::Function>& allFunctions);
 
-	void performLoopAnalysisPasses(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
+	//void performLoopAnalysisPasses(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport);
+	void performLoopAnalysisPasses(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<std::set<LoopID>>& loopNests);
 };
 
 } /* END Janus namespace */

@@ -225,7 +225,8 @@ class Loop
     void                 analyse2(LoopAnalysisReport loopAnalysisReport);
     /** \brief perform full Janus static analysis on this loop (third pass) */
     //void                 analyse3(JanusContext *gc);
-    void                 analyse3(LoopAnalysisReport loopAnalysisReport);
+    //void                 analyse3(LoopAnalysisReport loopAnalysisReport);
+    void 				 analyse3(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests);
     /** \brief return true if the loop body contains the basic block */
     bool                 contains(BlockID bid);
     /** \brief return true if the loop body contains the instruction */

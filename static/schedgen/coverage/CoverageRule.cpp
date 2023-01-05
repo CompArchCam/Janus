@@ -4,8 +4,8 @@
 
 using namespace janus;
 using namespace std;
-void
-generateLoopCoverageProfilingRules(JanusContext *gc) {
+//void generateLoopCoverageProfilingRules(JanusContext *gc) {
+void generateLoopCoverageProfilingRules(std::vector<janus::Loop>& loops, std::string name) {
     /* Get the array of CFG */
     BasicBlock *entry;
     /* Place holder for a static rule for copy */
@@ -13,10 +13,12 @@ generateLoopCoverageProfilingRules(JanusContext *gc) {
 
     /* File to map loopID to function name*/
     FILE *mapFile;
-    mapFile = fopen(string((gc->name)+"_map.out").c_str(), "w");
+    //mapFile = fopen(string((gc->name)+"_map.out").c_str(), "w");
+    mapFile = fopen(string((name)+"_map.out").c_str(), "w");
     
     /* Generate rules for each loops */
-    for(auto &loop: gc->loops)
+    //for(auto &loop: gc->loops)
+    for(auto &loop: loops)
     {
         entry = loop.parent->entry;
 	
@@ -72,14 +74,15 @@ generateLoopCoverageProfilingRules(JanusContext *gc) {
     fclose(mapFile); /* close the file*/
 }
 
-void
-generateFunctionCoverageProfilingRules(JanusContext *gc) {
+//void generateFunctionCoverageProfilingRules(JanusContext *gc) {
+void generateFunctionCoverageProfilingRules(std::vector<janus::Function>& functions) {
     /* Get the array of CFG */
     BasicBlock *entry;
     /* Place holder for a static rule for copy */
     RewriteRule rule;
     /* Generate rules for each function */
-    for (auto &func: gc->functions) {
+    //for (auto &func: gc->functions) {
+    for (auto &func: functions) {
         if (!func.entry || !func.minstrs.size()) continue;
         /* CTIMER_FUNC_START is inserted at all entry blocks */
         rule = RewriteRule(CTIMER_FUNC_START, func.entry, PRE_INSERT);

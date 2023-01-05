@@ -9,10 +9,9 @@ using namespace janus;
 
 static bool
 encodeLoopVariables(JanusContext *jc, Loop &loop);
-static void
-rejectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected);
-static bool
-selectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected);
+static void rejectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected, std::string name);
+//static bool selectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected);
+static bool selectLoopFromRuntimeFeedback(std::set<LoopID> &selected, std::string name, std::vector<janus::Loop>& loops);
 
 //currently we only checks the name only
 static bool
@@ -23,12 +22,13 @@ checkSafeCall(Function &func)
     return false;
 }
 
-static bool
-checkSafeSubCalls(Loop &loop)
+//static bool checkSafeSubCalls(Loop &loop)
+static bool checkSafeSubCalls(Loop &loop, std::vector<janus::Function>& functions)
 {
-    JanusContext *context = loop.parent->context;
+    //JanusContext *context = loop.parent->context;
     for (auto fid: loop.subCalls) {
-        Function &func = context->functions[fid];
+        //Function &func = context->functions[fid];
+    	Function &func = functions[fid];
         if (!checkSafeCall(func)) return false;
         IF_LOOPLOG(else loopLog<<"\tFunction call"<<func.name<<" indentified safe"<<endl);
     }
@@ -37,7 +37,7 @@ checkSafeSubCalls(Loop &loop)
 
 bool loopHasFPUInstructions(Loop &loop){
     Function *function = loop.parent;
-    JanusContext *jc = function->context;
+    //JanusContext *jc = function->context;
     for (auto bid: loop.body) {
         BasicBlock &bb = function->entry[bid];
         for (int i=0; i<bb.size; i++) {
@@ -50,16 +50,17 @@ bool loopHasFPUInstructions(Loop &loop){
     return false;
 }
 
-bool
-checkSafetyForParallelisation(Loop &loop)
+//bool checkSafetyForParallelisation(Loop &loop)
+bool checkSafetyForParallelisation(janus::Loop &loop, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap)
 {
     Function *function = loop.parent;
-    JanusContext *jc = function->context;
+    //JanusContext *jc = function->context;
     PCAddress target = 0;
 
 #ifdef NEED_MORE_TEST
     if (loop.calls.size()) {
-        if (!checkSafeSubCalls(loop))
+        //if (!checkSafeSubCalls(loop))
+    	if (!checkSafeSubCalls(loop, functions))
             return false;
     }
 #endif
@@ -90,7 +91,8 @@ checkSafetyForParallelisation(Loop &loop)
 
         else if (bb.lastInstr()->fineType == INSN_CALL) {
             target = bb.lastInstr()->getTargetAddress();
-            if (jc->functionMap.find(target) == jc->functionMap.end()) {
+            //if (jc->functionMap.find(target) == jc->functionMap.end()) {
+            if (functionMap.find(target) == functionMap.end()) {
                 LOOPLOG("\tFound unsafe external call: "<<hex<<bb.lastInstr()->getTargetAddress()<<endl);
                 return false;
             }
@@ -113,13 +115,16 @@ checkSafetyForParallelisation(Loop &loop)
  * 5. Safety checks, see checkSafetyForParallelisation()
  * 6. Remove redudant loops in the same loop nest (last step)
  */
-void
-selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
+//void selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
+void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops,
+		LoopAnalysisReport loopAnalysisReport, janus::Function *fmain, std::string name)
 {
     LOOPLOG("Performing automatic DOALL loop selection:"<<endl);
 
-    for (auto &loop : jc->loops) {
-        if (jc->manualLoopSelection && !loop.pass) continue;
+    //for (auto &loop : jc->loops) {
+    for (auto &loop : loops) {
+        //if (jc->manualLoopSelection && !loop.pass) continue;
+    	if (loopAnalysisReport.getManualLoopSelection() && !loop.pass) continue;
         LOOPLOG("Loop "<<dec<<loop.id<<":");
         if (loop.unsafe) {
             LOOPLOG("is unsafe, therefore rejected"<<endl);
@@ -130,7 +135,8 @@ selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
         bool passed = true;
 
         //Condition 0: Loop doesn't have init in same BB as start of main
-        BasicBlock *mainEntry = jc->main->entry;
+        //BasicBlock *mainEntry = jc->main->entry;
+        BasicBlock *mainEntry = fmain->entry;
         Function *parent = loop.parent;
         BasicBlock *parentEntry = parent->entry;
         for (auto bid: loop.init) {
@@ -163,7 +169,8 @@ selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
         }
 
         //condition 3: no undecided memory accesses
-        if (!jc->manualLoopSelection) {
+        //if (!jc->manualLoopSelection) {
+        if (!loopAnalysisReport.getManualLoopSelection()) {
             if (loop.undecidedMemAccesses.size()) {
                 LOOPLOG("\tFound undecided memory accesses"<<endl);
                 passed = false;
@@ -177,7 +184,8 @@ selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
 
         }
 
-        if (!checkSafetyForParallelisation(loop)) {
+        //if (!checkSafetyForParallelisation(loop)) {
+        if (!checkSafetyForParallelisation(loop, functions)) {
             LOOPLOG("\tThis loop is not safe for DOALL parallelisation"<<endl);
             passed = false;
         }
@@ -208,8 +216,10 @@ selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
     }
 
     /* unset all the loops for manual selected loops */
-    if (jc->manualLoopSelection) {
-        for (auto &loop : jc->loops)
+    //if (jc->manualLoopSelection) {
+	if (loopAnalysisReport.getManualLoopSelection()) {
+        //for (auto &loop : jc->loops)
+		for (auto &loop : loops)
             loop.pass = false;
     }
 
@@ -221,10 +231,12 @@ selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
     );
  
     /* Step 7: select loops from manual specification */
-    selectLoopFromRuntimeFeedback(jc, selected);
+    //selectLoopFromRuntimeFeedback(jc, selected);
+    selectLoopFromRuntimeFeedback(selected, name, loops);
 
     /* Step 8: Filter loop ness for manual selection- Added by MA*/
-    filterLoopNests(jc, selected);
+    //filterLoopNests(jc, selected);
+    filterLoopNests(selected, loops);
 
     LOOPLOG("-- Final selected DOALL loops: "<<endl);
     IF_LOOPLOG(
@@ -239,10 +251,11 @@ selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
     cout <<endl;
 }
 
-void
-filterLoopNests(JanusContext *jc, std::set<LoopID> &selected)
+//void filterLoopNests(JanusContext *jc, std::set<LoopID> &selected)
+void filterLoopNests(std::set<LoopID> &selected, std::vector<janus::Loop>& allLoops)
 {
-    Loop *loops = jc->loops.data();
+    //Loop *loops = jc->loops.data();
+	Loop *loops = allLoops.data();
     map<FuncID,set<Loop*>> buckets;
     set<Loop*> toRemove;
 
@@ -279,10 +292,12 @@ filterLoopNests(JanusContext *jc, std::set<LoopID> &selected)
     }
 }
 
-void
-filterLoopHeuristicBased(JanusContext *jc, std::set<LoopID> &selected)
+//void filterLoopHeuristicBased(JanusContext *jc, std::set<LoopID> &selected)
+// TODO: Is this a dead function? No one seems to call it.
+/*void filterLoopHeuristicBased(JanusContext *jc, std::set<LoopID> &selected, std::vector<janus::Loop>& allLoops)
 {
-    auto &loopPool = jc->loops;
+    //auto &loopPool = jc->loops;
+	auto &loopPool = allLoops;
     set<LoopID> toRemove;
 
     //sort loops into buckets
@@ -294,18 +309,18 @@ filterLoopHeuristicBased(JanusContext *jc, std::set<LoopID> &selected)
             toRemove.insert(loopID);
 
         //condition 2: low iteration count
-        /*
-        if (loop.staticIterCount != -1) {
-            if (loop.staticIterCount < 16) {
-                LOOPLOG("Loop "<<dec<<loop.id<<" is removed because it has an iteration count of "<<loop.staticIterCount<<endl);
-                toRemove.insert(loopID);
-            }
-        }*/
+        /
+        //if (loop.staticIterCount != -1) {
+            //if (loop.staticIterCount < 16) {
+                //LOOPLOG("Loop "<<dec<<loop.id<<" is removed because it has an iteration count of "<<loop.staticIterCount<<endl);
+                //toRemove.insert(loopID);
+            //}
+        //}
     }
 
     for (auto id: toRemove)
         selected.erase(id);
-}
+}*/
 
 static bool
 encodeLoopVariables(JanusContext *jc, Loop &loop)
@@ -326,10 +341,10 @@ encodeLoopVariables(JanusContext *jc, Loop &loop)
     return !loop.unsafe;
 }
 
-void
-checkRuntimeQuestion(JanusContext *jc, std::set<LoopID> &selected)
-{
-    auto &loopPool = jc->loops;
+//void checkRuntimeQuestion(JanusContext *jc, std::set<LoopID> &selected)
+// TODO: Seems like dead code.
+//{
+//    auto &loopPool = jc->loops;
 
     //sort loops into buckets
     /*
@@ -357,18 +372,20 @@ checkRuntimeQuestion(JanusContext *jc, std::set<LoopID> &selected)
         num_int = loop.arrayBases.size() - num_int;
         if (singleIndex && num_int > 1) loop.needRuntimeCheck = true;
     }*/
-}
+//}
 
-static void
-rejectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
+//static void rejectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
+static void rejectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected, std::string name)
 {
     /* Read ddg files from manual specification */
     ifstream iselect;
-    iselect.open(jc->name+".loop.reject", ios::in);
+    //iselect.open(jc->name+".loop.reject", ios::in);
+    iselect.open(name+".loop.reject", ios::in);
     set<LoopID> toRemove;
 
     if (!iselect.good()) return;
-    LOOPLOG("\tReading "<<jc->name<<".loop.reject for loop reject"<<endl);
+    //LOOPLOG("\tReading "<<jc->name<<".loop.reject for loop reject"<<endl);
+    LOOPLOG("\tReading "<<name<<".loop.reject for loop reject"<<endl);
 
     int loopID,type;
     while (iselect >> loopID >> type) {
@@ -387,14 +404,16 @@ rejectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
     }
 }
 
-static bool
-selectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
+//static bool selectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
+static bool selectLoopFromRuntimeFeedback(std::set<LoopID> &selected, std::string name, std::vector<janus::Loop>& loops)
 {
     ifstream iselect;
-    iselect.open(jc->name+".loop.select", ios::in);
+    //iselect.open(jc->name+".loop.select", ios::in);
+    iselect.open(name+".loop.select", ios::in);
 
     if (!iselect.good()) return false;
-    LOOPLOG("\tReading "<<jc->name<<".loop.select for manual loop selection"<<endl);
+    //LOOPLOG("\tReading "<<jc->name<<".loop.select for manual loop selection"<<endl);
+    LOOPLOG("\tReading "<<name<<".loop.select for manual loop selection"<<endl);
 
     selected.clear();
     int loopID,type;
@@ -407,7 +426,8 @@ selectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
 
     //remove unsafe loops
     for (auto lidIter = selected.begin(); lidIter != selected.end() ; ){
-        if (jc->loops[(*lidIter)-1].unsafe)
+        //if (jc->loops[(*lidIter)-1].unsafe)
+    	if (loops[(*lidIter)-1].unsafe)
             selected.erase(lidIter++);
         else
             ++lidIter;

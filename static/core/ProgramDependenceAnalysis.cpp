@@ -174,7 +174,7 @@ void ProgramDependenceAnalysis::performBasicPassWithAdvanceFunctionTranslate(std
     }
 }
 
-void ProgramDependenceAnalysis::performLoopAnalysisPasses(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport)
+void ProgramDependenceAnalysis::performLoopAnalysisPasses(std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<std::set<LoopID>>& loopNests)
 {
     /* When analysis done for all loops, perform post analysis
      * So we can construct inter-loop relations for further analysis */
@@ -187,6 +187,6 @@ void ProgramDependenceAnalysis::performLoopAnalysisPasses(std::vector<janus::Loo
     /* Step 7: analyse each loop more in depth (Pass 3) */
     GSTEP("Analysing loops - third pass"<<endl);
     for (auto &loop: loops)
-    	loop.analyse3(loopAnalysisReport);
+    	loop.analyse3(loopAnalysisReport, loops, loopNests);
         //loop.analyse3(this);
 }

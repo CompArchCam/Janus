@@ -25,18 +25,21 @@ vector<RuleCluster>                 rewriteRules;
  * structure would be changed */
 BasicBlock                          *reshapeBlock;
 
-static uint32_t
-compileRewriteRulesToFile(JanusContext *gc);
+//static uint32_t compileRewriteRulesToFile(JanusContext *gc);
+static uint32_t compileRewriteRulesToFile(JanusContext *gc, std::vector<janus::Function> functions, std::vector<janus::Loop> loops, std::string name);
+
 static uint32_t
 compileRewriteRuleDataToFile(JanusContext *gc);
 
 //void generateRules(JanusContext *gc)
-void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap)
+void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap, std::vector<janus::Function>& functions, std::vector<janus::Loop> loops,
+		LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::string name)
 {
     uint32_t size;
     if (!gc) return;
 
-    uint32_t numLoops = gc->loops.size();
+    //uint32_t numLoops = gc->loops.size();
+    uint32_t numLoops = loops.size();
 
     if (gc->mode != JFCOV && !numLoops) {
         GSTEP("No rules generated"<<endl);
@@ -55,27 +58,33 @@ void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> func
         //generateOptRules(gc);
         break;
     case JPARALLEL:
-        generateParallelRules(gc, functionMap);
+    	//generateParallelRules(gc);
+        generateParallelRules(gc, functionMap, functions, loopAnalysisReport, fmain, loops, name);
         break;
     case JVECTOR:
 #ifdef JANUS_X86
-        generateVectorRules(gc);
+        //generateVectorRules(gc);
+    	generateVectorRules(gc, loops);
 #endif
         break;
     case JLCOV:
-        generateLoopCoverageProfilingRules(gc);
+        //generateLoopCoverageProfilingRules(gc);
+        generateLoopCoverageProfilingRules(loops, name);
         break;
     case JFCOV:
-        generateFunctionCoverageProfilingRules(gc);
+        //generateFunctionCoverageProfilingRules(gc);
+        generateFunctionCoverageProfilingRules(functions);
         break;
     case JPROF:
-        generateLoopPlannerRules(gc);
+        //generateLoopPlannerRules(gc);
+    	generateLoopPlannerRules(gc, functions, loops, name);
         break;
     //case JSECURE:
         //generateSecurityRule(gc);
         //break;
     case JFETCH:
-        generatePrefetchRules(gc);
+        //generatePrefetchRules(gc);
+    	generatePrefetchRules(gc, loops);
         break;
     case JCUSTOM:
         generateCustomRules(gc);
@@ -91,9 +100,11 @@ void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> func
      * to a rule file */
     GSTEP("Writing rewrite schedules to file: "<<endl);
     if (gc->mode == JPARALLEL)
-        size = compileParallelRulesToFile(gc);
+        //size = compileParallelRulesToFile(gc);
+    	compileParallelRulesToFile(gc, name, loops, loopAnalysisReport, functions);
     else
-        size = compileRewriteRulesToFile(gc);
+        //size = compileRewriteRulesToFile(gc);
+    	size = compileRewriteRulesToFile(gc, functions, loops, name);
     GSTEP("Rewrite schedule file: "<<gc->name<<".jrs generated, "<<size<<" bytes "<<endl);
 }
 
@@ -156,21 +167,24 @@ void removeRule(uint32_t channel, RewriteRule rule, BasicBlock *block)
 }
 
 /* Emit all relevant info in the rule file */
-static uint32_t
-compileRewriteRulesToFile(JanusContext *gc)
+//static uint32_t compileRewriteRulesToFile(JanusContext *gc)
+static uint32_t compileRewriteRulesToFile(JanusContext *gc, std::vector<janus::Function> functions, std::vector<janus::Loop> loops, std::string name)
 {
-    FILE *op = fopen(string((gc->name)+".jrs").c_str(),"w");
+    //FILE *op = fopen(string((gc->name)+".jrs").c_str(),"w");
+	FILE *op = fopen(string((name)+".jrs").c_str(),"w");
     fpos_t pos;
     RSchedHeader header;
     uint32_t numRules = 0;
     int offset = 0;
 
     header.ruleFileType = (uint32_t)(gc->mode);
-    uint32_t numLoops = gc->loops.size();
+    //uint32_t numLoops = gc->loops.size();
+    uint32_t numLoops = loops.size();
 
     /* For single loop mode, simply append rules */
     header.numLoops = numLoops;
-    header.numFuncs = gc->functions.size();
+    //header.numFuncs = gc->functions.size();
+    header.numFuncs = functions.size();
     header.multiMode = 0;
 
     for(int channel=0; channel<=numLoops; channel++) {

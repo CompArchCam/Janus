@@ -17,7 +17,8 @@ enum AliasType {
 
 /** \brief Alias analysis for a given loop
  */
-void aliasAnalysis(janus::Loop *loop);
+//void aliasAnalysis(janus::Loop *loop);
+void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests);
 
 /** \brief Check alias relation for two memory locations
  */

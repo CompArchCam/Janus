@@ -429,7 +429,7 @@ void Loop::analyse2(LoopAnalysisReport loopAnalysisReport)
 
 //void
 //Loop::analyse3(JanusContext *gc)
-void Loop::analyse3(LoopAnalysisReport loopAnalysisReport)
+void Loop::analyse3(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests)
 {
     if (unsafe) return;
     //if (gc->manualLoopSelection && !pass) return;
@@ -439,7 +439,7 @@ void Loop::analyse3(LoopAnalysisReport loopAnalysisReport)
     LOOPLOG("Analysing Loop "<<dec<<id<<" Third Pass"<<endl);
 
     /* Step 7: alias analysis */
-    aliasAnalysis(this);
+    aliasAnalysis(this, allLoops, loopNests);
 
     /* Step 8: scratch register analysis */
     scratchAnalysis(this);

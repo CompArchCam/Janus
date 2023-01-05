@@ -10,8 +10,8 @@ setSupportedVectorOpcodes(set<InstOp> &supported_opcodes, set<InstOp> &singles, 
 bool
 isVectorRuntimeCompatible(Loop &loop, set<InstOp> &supported_opcode, set<InstOp> &singles, set<InstOp> &doubles);
 
-void
-selectVectorisableLoop(JanusContext *gc, set<Loop *> &selected_loops, set<InstOp> &supported_opcode, set<InstOp> &singles, set<InstOp> &doubles);
+//void selectVectorisableLoop(JanusContext *gc, set<Loop *> &selected_loops, set<InstOp> &supported_opcode, set<InstOp> &singles, set<InstOp> &doubles);
+void selectVectorisableLoop(set<Loop *> &selected_loops, set<InstOp> &supported_opcode,	set<InstOp> &singles, set<InstOp> &doubles, std::vector<janus::Loop>& loops);
 
 void
 printVectorisableLoops(set<Loop *> &selected_loops);

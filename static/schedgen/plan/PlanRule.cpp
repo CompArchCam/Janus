@@ -8,8 +8,8 @@
 using namespace janus;
 using namespace std;
 
-static void
-generateRulesForEachLoop(JanusContext *gc, Loop &loop)
+//static void generateRulesForEachLoop(JanusContext *gc, Loop &loop)
+static void generateRulesForEachLoop(JanusContext *gc, Loop &loop, std::vector<janus::Function>& functions)
 {
     /* Get the array of CFG */
     BasicBlock *entry = loop.parent->entry;
@@ -76,7 +76,8 @@ generateRulesForEachLoop(JanusContext *gc, Loop &loop)
 
     /* Add PROF_MEM_ACCESS in sub calls */
     for (auto fid: loop.subCalls) {
-        Function &func = gc->functions[fid];
+        //Function &func = gc->functions[fid];
+    	Function &func = functions[fid];
         for (auto &bb: func.blocks) {
             /* PROF_MEM_ACCESS is inserted before every memory access
             * TODO: reduce the number of checks using alias analysis */
@@ -92,7 +93,8 @@ generateRulesForEachLoop(JanusContext *gc, Loop &loop)
 	/* PROF_CALL_{START,END} is inserted {before,after} each shared library call */
 	for (auto it : loop.calls) {
 	    BasicBlock *block =  entry + it.first;
-	    Function &func = gc->functions[it.second];
+	    //Function &func = gc->functions[it.second];
+	    Function &func = functions[it.second];
 	    if (func.isExternal){
 		if (!block) continue;
 		/* PROF_CALL_START */
@@ -125,18 +127,22 @@ if (loop.removed) return false;
 return true;
 }
 
-void
-generateLoopPlannerRules(JanusContext *gc) {
+//void generateLoopPlannerRules(JanusContext *gc) {
+void generateLoopPlannerRules(JanusContext *gc, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops, std::string name)
+{
 /* Create a plan file */
 ofstream planFile;
-planFile.open(gc->name + ".plan", ios::out);
+//planFile.open(gc->name + ".plan", ios::out);
+planFile.open(name + ".plan", ios::out);
 
     /* Generate rules for each loops */
-    for(auto &loop: gc->loops)
+    //for(auto &loop: gc->loops)
+	for(auto &loop: loops)
     {
         if (loopNeedProfiling(loop)) {
             planFile << loop.id<<" "<<loop.coverage<<" "<<loop.total_iteration_count/loop.invocation_count<<" "<<loop.parent->name<<endl;
-            generateRulesForEachLoop(gc, loop);
+            //generateRulesForEachLoop(gc, loop);
+            generateRulesForEachLoop(gc, loop, functions);
         }
     }
 

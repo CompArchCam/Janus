@@ -9,8 +9,8 @@
 
 static bool needBroadcast(Loop &loop, Instruction &instr);
 
-static void
-prepareLoopHeader(JanusContext *gc, Loop &loop)
+//static void prepareLoopHeader(JanusContext *gc, Loop &loop)
+static void prepareLoopHeader(Loop &loop)
 {
     RSLoopHeader &header = loop.header;
     header.staticID = loop.id;
@@ -178,8 +178,8 @@ generateVectorRulesForLoop(JanusContext *gc, Loop *loop)
 #endif
 }
 
-void
-generateVectorRules(JanusContext *gc)
+//void generateVectorRules(JanusContext *gc)
+void generateVectorRules(JanusContext *gc, std::vector<janus::Loop>& loops)
 {
     set<InstOp> supported_opcodes;
     set<InstOp> singles;
@@ -190,7 +190,8 @@ generateVectorRules(JanusContext *gc)
     setSupportedVectorOpcodes(supported_opcodes, singles, doubles);
 
     /* Step 1: select loops for vectorisation based on the selected opcode */
-    selectVectorisableLoop(gc, selected_loops, supported_opcodes, singles, doubles);
+    //selectVectorisableLoop(gc, selected_loops, supported_opcodes, singles, doubles);
+    selectVectorisableLoop(selected_loops, supported_opcodes, singles, doubles, loops);
 
     /* Step 2: generate rules for each loop */
     for (auto l: selected_loops) {

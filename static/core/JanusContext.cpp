@@ -12,9 +12,9 @@ using namespace std;
 using namespace janus;
 
 JanusContext::JanusContext(const char* name, JMode mode)
-:mode(mode), name(string(name))
+:mode(mode)//, name(string(name))
 {
-    passedLoop = 0;
+    //passedLoop = 0;
     useProfiles = false;
     manualLoopSelection = false;
     sharedOn = true;
@@ -139,7 +139,7 @@ JanusContext::JanusContext(const char* name, JMode mode)
     }
 }*/
 
-void JanusContext::analyseLoopAndFunctionRelations()
+/*void JanusContext::analyseLoopAndFunctionRelations()
 {
     for (auto &loop: loops) {
         if (loop.ancestors.size() == 0) {
@@ -161,4 +161,4 @@ void JanusContext::analyseLoopAndFunctionRelations()
         }
         i++;
     }
-}
+}*/

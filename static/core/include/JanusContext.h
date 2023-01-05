@@ -17,10 +17,7 @@
 class JanusContext
 {
 private:
-    ///Analysis mode
-    JMode                                       mode;
-    ///The name of the executable
-    std::string                                 name;
+
     ///the raw data parsed from the executable
     //janus::Executable  program;
 
@@ -43,10 +40,12 @@ private:
 	//std::map<PCAddress, janus::Function *>      externalFunctions;
 
 public:
-
-
+    ///The name of the executable
+    //std::string                                 name;
+    ///Analysis mode
+    JMode                                       mode;
     ///A vector of recognised loops in the executable
-    std::vector<janus::Loop>                    loops;
+    //std::vector<janus::Loop>                    loops;
     ///A vector of recognised loop nests - inter-procedural
     std::vector<std::set<LoopID>>               loopNests;
 
@@ -60,7 +59,7 @@ public:
     ///Shared library profiling, enabled by default. Disable with -noshared switch
     bool					sharedOn;
     
-    int                                         passedLoop;
+    //int                                         passedLoop;
     //flag to turn on profiling information
     bool                                        useProfiles;
     bool                                        manualLoopSelection;
@@ -68,13 +67,13 @@ public:
     JanusContext(const char* name, JMode mode);
 
     ///Construct the CFG and SSA graph for the executable
-    void                            buildProgramDependenceGraph();
+    //void                            buildProgramDependenceGraph();
     ///Recognise and analyse loops from the program dependence graph
-    void                            analyseLoop();
+    //void                            analyseLoop();
     ///Recognise loop nests for loops and functions
-    void                            analyseLoopAndFunctionRelations();
+    //void                            analyseLoopAndFunctionRelations();
     ///Only recognise loops from the program dependence graph
-    void                            analyseLoopLite();
+    //void                            analyseLoopLite();
 };
 
 #endif
