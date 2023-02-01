@@ -68,7 +68,7 @@ void ProgramDependenceAnalysis::constructControlDependenceGraph(std::vector<janu
 	}
 }
 
-std::vector<janus::Loop> ProgramDependenceAnalysis::identifyLoopsFromCFG(std::vector<janus::Function> functions)
+std::vector<janus::Loop> ProgramDependenceAnalysis::identifyLoopsFromCFG(std::vector<janus::Function>& functions)
 {
 
 	std::vector<janus::Loop> loops;
@@ -77,6 +77,7 @@ std::vector<janus::Loop> ProgramDependenceAnalysis::identifyLoopsFromCFG(std::ve
     /* Step 1: identify loops from the control flow graph */
     for (auto &func: functions) {
         //searchLoop(this, &func);
+
     	// Updates the loops
     	searchLoop(&loops, &func);
     }

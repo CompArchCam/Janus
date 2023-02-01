@@ -89,7 +89,8 @@ private:
     void                            parseHeader();
     void                            parseFlat();
     //create Function classes from the symbols
-    std::vector<janus::Function>  	liftSymbolToFunction();
+    //std::vector<janus::Function>  	liftSymbolToFunction(std::vector<janus::Function>& functions);
+    void  	liftSymbolToFunction(std::vector<janus::Function>& functions);
     //void                            liftSymbolToFunction(JanusContext *jc);
     void                            retrieveHiddenSymbol(Section &section);
     void                            parseELF64();
@@ -114,9 +115,10 @@ public:
     void                            open(const char *filename);
     ///lift to disassembly and functions
     //void                            disassemble(JanusContext *jc);
-    std::vector<janus::Function>    disassemble(janus::Function *fmain,
-    								std::map<PCAddress, janus::Function *>*  functionMap,
-									std::map<PCAddress, janus::Function *>* externalFunctions);
+    void    disassemble(std::vector<janus::Function>& functions,
+    								janus::Function *fmain,
+    								std::map<PCAddress, janus::Function *>&  functionMap,
+									std::map<PCAddress, janus::Function *>& externalFunctions);
     void                            printSection();
 
     uint64_t getCapstoneHandle() {

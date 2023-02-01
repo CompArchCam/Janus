@@ -651,6 +651,7 @@ const uint64_t xmmRegs = 18446744073709486080U;
 const char *get_reg_name(int reg)
 {
     if (reg > 300) return "NULL";
+
     return regNameMaps[reg];
 }
 

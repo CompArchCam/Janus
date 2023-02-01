@@ -187,6 +187,7 @@ Variable Operand::lift(PCAddress nextInstrPc)
         }
         break;
     case OPND_MEM:
+
         if (structure == STACK_PTR_IMM) {
             var.type = JVAR_STACK;
             var.value = dispMem.disp;

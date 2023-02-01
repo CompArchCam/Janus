@@ -1,0 +1,17 @@
+--------------------------------------------------
+Janus Dynamic Loop Coverage- Sample-based Profiling - Results:
+Total Loops found: 19
+      id  fraction(%)   invocation    iteration   inaccurate         function:
+       1         0.03            1         2000            0                 main
+       2         0.02         1995       499498            0                 main
+       3         0.02            1         2000            0                 main
+       4        91.37            1         2000            0                 main
+       5        91.36         2000      4000000            0                 main
+       6        90.46      4000000   8000000000            0                 main
+       7         0.01            1         2000            0                 main
+       8         0.01         2000      2000000            0                 main
+       9         8.54            1         2000            0                 main
+      10         8.52         1999      1999000            0                 main
+      11         8.14      1997001   1331334000            0                 main
+      12         0.01         1999      1999000            0                 main
+--------------------------------------------------

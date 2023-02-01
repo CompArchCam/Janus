@@ -117,7 +117,7 @@ bool checkSafetyForParallelisation(janus::Loop &loop, std::vector<janus::Functio
  */
 //void selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
 void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Loop>& loops,
-		LoopAnalysisReport loopAnalysisReport, janus::Function *fmain, std::string name)
+		LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::string name)
 {
     LOOPLOG("Performing automatic DOALL loop selection:"<<endl);
 

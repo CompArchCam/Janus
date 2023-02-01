@@ -75,7 +75,13 @@ namespace janus {
         ///Entry block of the function CFG
         BasicBlock                             *entry;
         ///Block size
-        uint32_t                               numBlocks;
+        //uint32_t                               numBlocks;
+        uint32_t                               getNumBlocks() {
+        	return numBlocks;
+        };
+        void                               setNumBlocks(uint32_t numberOfBlocks) {
+        	numBlocks = numberOfBlocks;
+        };
         ///Actual storage of all the function's basic blocks
         std::vector<BasicBlock>                blocks;
         ///The root of the dominator tree (indexed by blockID) for the CFG in this function
@@ -172,6 +178,9 @@ namespace janus {
         /** \brief Contruct the relations of the loop in this function */
         //void analyseLoopRelations();
         void analyseLoopRelations(std::vector<janus::Loop>* allLoops);
+    private:
+        ///Block size
+        uint32_t                               numBlocks;
     };
 }
 

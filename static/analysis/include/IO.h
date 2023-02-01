@@ -66,16 +66,16 @@ void
 dumpDisasm(JanusContext *context);
 
 //void dumpCFG(JanusContext *context);
-void dumpCFG(std::vector<janus::Function> functions);
+void dumpCFG(std::vector<janus::Function>& functions);
 
 //void dumpSSA(JanusContext *context);
 void dumpSSA(std::vector<janus::Function>& functions);
 
 //void dumpLoopSSA(JanusContext *context);
-void dumpLoopSSA(std::vector<janus::Loop> loops);
+void dumpLoopSSA(std::vector<janus::Loop>& loops);
 
 //void dumpLoopCFG(JanusContext *context);
-void dumpLoopCFG(std::vector<janus::Loop> loops);
+void dumpLoopCFG(std::vector<janus::Loop>& loops);
 
 void
 dumpAST(JanusContext *context);
@@ -93,10 +93,10 @@ void
 dumpDependenceGraph(JanusContext *context);
 
 //void generateExeReport(JanusContext *context);
-void generateExeReport(JanusContext *context, std::string name, std::vector<janus::Function> functions, std::vector<janus::Loop> loops);
+void generateExeReport(std::string name, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops);
 
 //void generateExeReport(JanusContext *context, void *outputStream);
-void generateExeReport(JanusContext *context, void *outputStream, std::string name, std::vector<janus::Function> functions, std::vector<janus::Loop> loops);
+void generateExeReport(void *outputStream, std::string name, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops);
 
 /** \brief print SSA Graph of a function in .dot format */
 void printSSADot(janus::Function &function, void *outputStream);

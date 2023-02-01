@@ -50,7 +50,8 @@ Function::Function(FuncID fid, const Symbol &symbol, uint32_t size)
 
 Function::~Function()
 {
-    /* Now we free all the instructions */
+	//printf("	Function::destructor \n");
+    // Now we free all the instructions
     for (auto &instr: minstrs) {
 	//for (auto &instr: this->getMinstrs()) {
         if (instr.operands)

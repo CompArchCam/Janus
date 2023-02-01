@@ -410,7 +410,8 @@ void
 livenessAnalysis(Function *function)
 {
     BasicBlock *entry = function->entry;
-    uint32_t numBlocks = function->numBlocks;
+    //uint32_t numBlocks = function->numBlocks;
+    uint32_t numBlocks = function->getNumBlocks();
     uint32_t numInstrs = function->instrs.size();
 
     if (function->liveRegIn != NULL ||

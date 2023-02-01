@@ -205,7 +205,8 @@ void analyseStack(Function *function)
     }
     function->totalFrameSize = function->stackFrameSize + size;
 
-    for (int i=1; i<function->numBlocks; i++) {
+    //for (int i=1; i<function->numBlocks; i++) {
+    for (int i=1; i<function->getNumBlocks(); i++) {
         if (function->terminations.find(i) != function->terminations.end()) continue;
 
         auto &bb = function->entry[i];

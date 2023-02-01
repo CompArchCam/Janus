@@ -55,7 +55,6 @@ static void
 createSuccFromPred(Function &function);
 
 void buildSSAGraph(Function &function) {
-
     /* Step 1: collect variable inputs and outputs for each basic block */
     for (auto &bb : function.blocks) {
         bb.lastStates.clear();
@@ -132,7 +131,6 @@ void linkSSANodes(Function &function)
         BasicBlock &bb = entry[bid];
 
         q.pop();
-
         //get previous and current definitions
         auto previousDefs = globalDefs[pbid];
         auto currentDefs = globalDefs[bid];
@@ -141,19 +139,14 @@ void linkSSANodes(Function &function)
             currentDefs = new map<Variable, VarState*>();
             globalDefs[bid] = currentDefs;
         }
-
         //update Phi nodes for this block from previous block
         updatePhiNodes(function, bid, *previousDefs);
-
         //for already visited nodes, simply update phi nodes and return
         if (visited.find(bid) != visited.end()) continue;
-
         //copy definition to the current block
         copyDefinitions(previousDefs, currentDefs);
-
         //update SSA nodes for this block
         updateSSANodes(function, bid, *currentDefs);
-
         //mark the block as visited
         visited.insert(bid);
 
@@ -177,6 +170,7 @@ void linkSSANodes(Function &function)
         if (record.second)
             record.second->clear();
     }
+
 }
 
 static VarState *

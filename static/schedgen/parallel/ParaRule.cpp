@@ -31,7 +31,7 @@ getEncodedArrayIndex(Loop *loop, Expr var);
 
 //void generateParallelRules(JanusContext *gc)
 void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Function>& functions,
-		LoopAnalysisReport loopAnalysisReport, janus::Function *fmain, std::vector<janus::Loop>& loops, std::string name)
+		LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::vector<janus::Loop>& loops, std::string name)
 {
 
     set<LoopID> selected_loop;
@@ -548,7 +548,7 @@ generateSubFunctionRules(JanusContext *gc, Loop &loop, Function &func)
 
 /* Emit all relevant info in the rule file */
 //uint32_t compileParallelRulesToFile(JanusContext *gc)
-uint32_t compileParallelRulesToFile(JanusContext *gc, std::string name, std::vector<janus::Loop>& loops, LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function> functions)
+uint32_t compileParallelRulesToFile(JanusContext *gc, std::string name, std::vector<janus::Loop>& loops, LoopAnalysisReport& loopAnalysisReport, std::vector<janus::Function>& functions)
 {
     //FILE *op = fopen(string((gc->name)+".jrs").c_str(),"w");
 	FILE *op = fopen(string((name)+".jrs").c_str(),"w");

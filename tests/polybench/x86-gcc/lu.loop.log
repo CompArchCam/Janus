@@ -1,0 +1,452 @@
+=========================================================
+Analysing Loop 1 in main
+	Analysing sub function calls memset@plt
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RCX_17
+		Expression RCX_17 not yet created
+		Analysing phi variable RBX_9
+		Expression RBX_9 not yet created
+		Analysing phi variable R13_6
+		Expression R13_6 not yet created
+		Analysing phi variable R14_8
+		Expression R14_8 not yet created
+		Analysing phi variable R15_9
+		Expression R15_9 not yet created
+		Analysing phi variable XMM2_2
+		Expression XMM2_2 not yet created
+		Analysing phi variable XMM3_2
+		Expression XMM3_2 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 2 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RDX_33
+		Expression RDX_33 not yet created
+		Analysing phi variable RDI_22
+		Expression RDI_22 not yet created
+		Analysing phi variable XMM1_19
+		Expression XMM1_19 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 3 in main
+	Analysing sub function calls memset@plt
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable R15_10
+		Expression R15_10 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 4 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RDI_26
+		Expression RDI_26 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 5 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RCX_19
+		Expression RCX_19 not yet created
+		Analysing phi variable RSI_27
+		Expression RSI_27 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 6 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RAX_60
+		Expression RAX_60 not yet created
+		Analysing phi variable RDX_39
+		Expression RDX_39 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 7 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RDX_40
+		Expression RDX_40 not yet created
+		Analysing phi variable RDI_27
+		Expression RDI_27 not yet created
+		Analysing phi variable R11_10
+		Expression R11_10 not yet created
+		Analysing phi variable R14_9
+		Expression R14_9 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 8 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RAX_64
+		Expression RAX_64 not yet created
+		Analysing phi variable RSI_29
+		Expression RSI_29 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 9 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RBX_10
+		Expression RBX_10 not yet created
+		Analysing phi variable RSI_31
+		Expression RSI_31 not yet created
+		Analysing phi variable RDI_28
+		Expression RDI_28 not yet created
+		Analysing phi variable R8_13
+		Expression R8_13 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 10 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable R10_10
+		Expression R10_10 not yet created
+		Analysing phi variable R11_12
+		Expression R11_12 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 11 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RAX_68
+		Expression RAX_68 not yet created
+		Analysing phi variable RDX_43
+		Expression RDX_43 not yet created
+		Analysing phi variable XMM1_24
+		Expression XMM1_24 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 12 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RCX_24
+		Expression RCX_24 not yet created
+		Analysing phi variable R9_15
+		Expression R9_15 not yet created
+		Analysing phi variable R10_11
+		Expression R10_11 not yet created
+		Analysing phi variable R11_13
+		Expression R11_13 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 13 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RAX_71
+		Expression RAX_71 not yet created
+		Analysing phi variable RDX_46
+		Expression RDX_46 not yet created
+		Analysing phi variable XMM1_27
+		Expression XMM1_27 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 14 in main
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RAX_72
+		Expression RAX_72 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 15 in main
+	Analysing sub function calls fputc@plt
+	Analysing sub function calls __fprintf_chk@plt
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable R12_6
+		Expression R12_6 not yet created
+		Analysing phi variable R14_11
+		Expression R14_11 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 16 in main
+	Analysing sub function calls fputc@plt
+	Analysing sub function calls __fprintf_chk@plt
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RBX_13
+		Expression RBX_13 not yet created
+		Analysing phi variable R15_15
+		Expression R15_15 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 17 in polybench_flush_cache
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RDX_2
+		Expression RDX_2 not yet created
+		Analysing phi variable XMM0_4
+		Expression XMM0_4 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 18 in polybench_prepare_instruments
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RDX_2
+		Expression RDX_2 not yet created
+		Analysing phi variable XMM0_4
+		Expression XMM0_4 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 19 in polybench_timer_start
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RDX_2
+		Expression RDX_2 not yet created
+		Analysing phi variable XMM0_5
+		Expression XMM0_5 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 20 in __libc_csu_init
+	Analysing loop variables
+	Performing dependence analysis on loop variables
+		Analysing phi variable RBX_6
+		Expression RBX_6 not yet created
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 1 in main
+	Analysing sub function calls memset@plt
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 2 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 3 in main
+	Analysing sub function calls memset@plt
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 4 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 5 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 6 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 7 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 8 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 9 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 10 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 11 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 12 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 13 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 14 in main
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 15 in main
+	Analysing sub function calls fputc@plt
+	Analysing sub function calls __fprintf_chk@plt
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 16 in main
+	Analysing sub function calls fputc@plt
+	Analysing sub function calls __fprintf_chk@plt
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 17 in polybench_flush_cache
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 18 in polybench_prepare_instruments
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 19 in polybench_timer_start
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+
+=========================================================
+Analysing Loop 20 in __libc_csu_init
+	Analysing loop variables
+	Performing iterator analysis on loop variables
+		Failed to retrieve expression for comparison. 
+	Disable further analysis for this loop
+=========================================================
+

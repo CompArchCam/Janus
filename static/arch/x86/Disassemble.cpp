@@ -12,11 +12,10 @@ using namespace std;
 /* Generate output states for a given instruction */
 static void liftInstruction(Instruction &instr, Function *function);
 //static void linkRelocation(JanusContext *jc, Function *pltFunc);
-static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunctions, std::map<PCAddress, janus::Function *>*  functionMap, Function *pltFunc);
+static void linkRelocation(std::map<PCAddress, janus::Function *>& externalFunctions, std::map<PCAddress, janus::Function *>&  functionMap, Function *pltFunc);
 
 //void disassembleAll(JanusContext *jc)
-void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *>*  functionMap,
-		std::map<PCAddress, janus::Function *>* externalFunctions)
+void disassembleAll(uint64_t& capstoneHandle, Function* fmainRet, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>&  functionMap, std::map<PCAddress, janus::Function *>& externalFunctions)
 {
     GSTEP("Disassembling instructions: ");
     cs_err      err;
@@ -44,12 +43,14 @@ void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<jan
         if (func.isExecutable) {
             disassemble(&func, capstoneHandle);
             //jc->functionMap[func.startAddress] = &func;
-            (*functionMap)[func.startAddress] = &func;
+            //(*functionMap)[func.startAddress] = &func;
+            functionMap[func.startAddress] = &func;
         }
         //if the function is calling shared library call
         else {
             //jc->externalFunctions[func.startAddress] = &func;
-        	(*externalFunctions)[func.startAddress] = &func;
+        	//(*externalFunctions)[func.startAddress] = &func;
+        	externalFunctions[func.startAddress] = &func;
         }
     }
     //GSTEPCONT(jc->functions.size()<<" functions recognised"<<endl);
@@ -88,7 +89,7 @@ void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<jan
 }
 
 //static void linkRelocation(JanusContext *jc, Function *pltFunc)
-static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunctions, std::map<PCAddress, janus::Function *>*  functionMap, Function *pltFunc)
+static void linkRelocation(std::map<PCAddress, janus::Function *>& externalFunctions, std::map<PCAddress, janus::Function *>&  functionMap, Function *pltFunc)
 {
     if (!pltFunc) return;
 
@@ -106,7 +107,7 @@ static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunct
     uint32_t i = 1;
 
     //for (auto synthetic: jc->externalFunctions)
-    for (auto synthetic: *externalFunctions)
+    for (auto synthetic: externalFunctions)
     {
         Function *synFunc = synthetic.second;
         synFunc->startAddress = pltFunc->minstrs[3*i].pc;
@@ -116,7 +117,8 @@ static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunct
         synFunc->isExternal = true;
         //update in the function map
         //jc->functionMap[synFunc->startAddress] = synFunc;
-        (*functionMap)[synFunc->startAddress] = synFunc;
+        //(*functionMap)[synFunc->startAddress] = synFunc;
+        functionMap[synFunc->startAddress] = synFunc;
         i++;
         if (i==nPltSym) break;
     }
@@ -124,7 +126,7 @@ static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunct
 
 ///Disassemble for the given function
 //void disassemble(Function *function)
-void disassemble(Function *function, uint64_t handle)
+void disassemble(Function *function, uint64_t& handle)
 {
     //if already disassembled, return
     if(function->minstrs.size()) return;
@@ -141,6 +143,7 @@ void disassemble(Function *function, uint64_t handle)
 
     //reserve machine instructions
     function->minstrs.reserve(codeSize+1);
+
     while(cs_disasm_iter((csh)handle, (const uint8_t **)(&code), &codeSize, (uint64_t *)&pc, instr)) {
         function->minstrs.emplace_back(id,(void *)handle,(void *)instr);
         id++;
@@ -372,6 +375,7 @@ int liftInstructions(janus::Function *function)
     int count = 0;
     for (auto &instr: function->instrs) {
         count++;
+
         liftInstruction(instr, function);
     }
     return count;
@@ -389,8 +393,10 @@ static void liftInstruction(Instruction &instr, Function *function)
     for(int i=0; i<minstr->opndCount; i++)
     {
         Variable var = minstr->operands[i].lift(instr.pc + instr.minstr->size);
+
         //record this variable
         function->allVars.insert(var);
+
         //add outputs to the instruction
         if (minstr->operands[i].access == OPND_WRITE ||
             minstr->operands[i].access == OPND_READ_WRITE) {
@@ -399,6 +405,8 @@ static void liftInstruction(Instruction &instr, Function *function)
             instr.outputs.push_back(vs);
         }
     }
+
+
 
     //if the instruction modifies eflag, add to the output too
     if (minstr->writeControlFlag()) {
@@ -439,6 +447,7 @@ static void liftInstruction(Instruction &instr, Function *function)
         instr.outputs.push_back(vs);
     }
 
+
     //push or pop
     else if (minstr->opcode == X86_INS_PUSH || minstr->opcode == X86_INS_POP) {
         Variable var((uint32_t)JREG_RSP);
@@ -449,7 +458,7 @@ static void liftInstruction(Instruction &instr, Function *function)
             for(int i=0; i<minstr->opndCount; i++)
             {
                 Variable var = minstr->operands[i].lift(instr.pc + instr.minstr->pc);
-                vs = new VarState(var, block, &instr);
+            	vs = new VarState(var, block, &instr);
                 function->allStates.insert(vs);
                 instr.outputs.push_back(vs);
             }
@@ -467,7 +476,7 @@ static void liftInstruction(Instruction &instr, Function *function)
     else if (minstr->opcode == X86_INS_MOVDQU ||
              minstr->opcode == X86_INS_MOVDQA) {
         Variable var = minstr->operands[0].lift(instr.pc + instr.minstr->pc);
-        minstr->operands[0].access = OPND_WRITE;
+    	minstr->operands[0].access = OPND_WRITE;
         minstr->operands[1].access = OPND_READ;
         VarState *vs = new VarState(var, block, &instr);
         function->allStates.insert(vs);

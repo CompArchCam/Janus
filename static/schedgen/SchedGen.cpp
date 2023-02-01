@@ -26,23 +26,26 @@ vector<RuleCluster>                 rewriteRules;
 BasicBlock                          *reshapeBlock;
 
 //static uint32_t compileRewriteRulesToFile(JanusContext *gc);
-static uint32_t compileRewriteRulesToFile(JanusContext *gc, std::vector<janus::Function> functions, std::vector<janus::Loop> loops, std::string name);
+static uint32_t compileRewriteRulesToFile(JanusContext *gc, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops, std::string name);
 
 static uint32_t
 compileRewriteRuleDataToFile(JanusContext *gc);
 
 //void generateRules(JanusContext *gc)
-void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap, std::vector<janus::Function>& functions, std::vector<janus::Loop> loops,
+void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops,
 		LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::string name)
 {
+	printf("	SchedGen::generateRules --- START --- \n");
     uint32_t size;
     if (!gc) return;
 
     //uint32_t numLoops = gc->loops.size();
     uint32_t numLoops = loops.size();
+    printf("	SchedGen::generateRules numLoops = %d \n", numLoops);
 
     if (gc->mode != JFCOV && !numLoops) {
         GSTEP("No rules generated"<<endl);
+        printf("		SchedGen::generateRules No rules generated --- START --- \n");
         return;
     }
 
@@ -100,6 +103,7 @@ void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> func
 
     /* Now we generated all rules, compile the static rules
      * to a rule file */
+    printf("	Writing rewrite schedules to file --- START --- \n");
     GSTEP("Writing rewrite schedules to file: "<<endl);
     if (gc->mode == JPARALLEL)
         //size = compileParallelRulesToFile(gc);
@@ -107,7 +111,9 @@ void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> func
     else
         //size = compileRewriteRulesToFile(gc);
     	size = compileRewriteRulesToFile(gc, functions, loops, name);
+    printf("	Writing rewrite schedules to file --- DONE --- \n");
     GSTEP("Rewrite schedule file: "<<gc->name<<".jrs generated, "<<size<<" bytes "<<endl);
+    printf("	SchedGen::generateRules --- DONE --- \n");
 }
 
 /* We have *fake* basic blocks which
@@ -170,8 +176,9 @@ void removeRule(uint32_t channel, RewriteRule rule, BasicBlock *block)
 
 /* Emit all relevant info in the rule file */
 //static uint32_t compileRewriteRulesToFile(JanusContext *gc)
-static uint32_t compileRewriteRulesToFile(JanusContext *gc, std::vector<janus::Function> functions, std::vector<janus::Loop> loops, std::string name)
+static uint32_t compileRewriteRulesToFile(JanusContext *gc, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops, std::string name)
 {
+	printf("		compileRewriteRulesToFile --- START --- \n");
     //FILE *op = fopen(string((gc->name)+".jrs").c_str(),"w");
 	FILE *op = fopen(string((name)+".jrs").c_str(),"w");
     fpos_t pos;
@@ -213,7 +220,7 @@ static uint32_t compileRewriteRulesToFile(JanusContext *gc, std::vector<janus::F
     }
 
     fclose(op);
-
+    printf("		compileRewriteRulesToFile --- DONE --- \n");
     return numRules;
 }
 

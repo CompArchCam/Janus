@@ -16,7 +16,7 @@ using namespace std;
 
 static void liftInstruction(Instruction &instr, Function *function);
 //static void linkRelocation(JanusContext *jc, Function *pltFunc);
-static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunctions, std::map<PCAddress, janus::Function *>*  functionMap, Function *pltFunc);
+static void linkRelocation(std::map<PCAddress, janus::Function *>& externalFunctions, std::map<PCAddress, janus::Function *>&  functionMap, Function *pltFunc);
 
 static bool
 propagateX29Instr(Instruction *instr, VarState *vs, int64_t offset, map<BlockID, map<Variable, VarState*> *> globalDefs, Function& function);
@@ -25,7 +25,7 @@ static bool
 propagateX29(VarState *vs, int64_t offset, map<BlockID, map<Variable, VarState*> *> globalDefs, Function& function);
 
 //void disassembleAll(JanusContext *jc)
-void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *>*  functionMap,
+void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *>&  functionMap,
 		std::map<PCAddress, janus::Function *>* externalFunctions)
 {
     GSTEP("Disassembling instructions: ");
@@ -54,7 +54,8 @@ void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<jan
         if (func.isExecutable) {
             disassemble(&func, capstoneHandle);
             //jc->functionMap[func.startAddress] = &func;
-            (*functionMap)[func.startAddress] = &func;
+            //(*functionMap)[func.startAddress] = &func;
+            functionMap[func.startAddress] = &func;
         }
         //if the function is calling shared library call
         else {
@@ -99,7 +100,7 @@ void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<jan
 }
 
 //static void linkRelocation(JanusContext *jc, Function *pltFunc)
-static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunctions, std::map<PCAddress, janus::Function *>*  functionMap, Function *pltFunc)
+static void linkRelocation(std::map<PCAddress, janus::Function *>& externalFunctions, std::map<PCAddress, janus::Function *>&  functionMap, Function *pltFunc)
 {
     if (!pltFunc) return;
 
@@ -126,7 +127,8 @@ static void linkRelocation(std::map<PCAddress, janus::Function *>* externalFunct
         synFunc->name += "@plt";
         //update in the function map
         //jc->functionMap[synFunc->startAddress] = synFunc;
-        *functionMap[synFunc->startAddress] = synFunc;
+        //*functionMap[synFunc->startAddress] = synFunc;
+        functionMap[synFunc->startAddress] = synFunc;
         i++;
         if (i==nPltSym) break;
     }

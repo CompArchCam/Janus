@@ -48,7 +48,7 @@ GIO_Exit()
 }
 
 //void dumpCFG(JanusContext *context)
-void dumpCFG(std::vector<janus::Function> functions)
+void dumpCFG(std::vector<janus::Function>& functions)
 {
     //if(!context) return;
 	//if(!functions) return;
@@ -65,7 +65,7 @@ void dumpCFG(std::vector<janus::Function> functions)
 }
 
 //void dumpLoopCFG(JanusContext *context)
-void dumpLoopCFG(std::vector<janus::Loop> loops)
+void dumpLoopCFG(std::vector<janus::Loop>& loops)
 {
     //if(!context) return;
     ofstream fcfg;
@@ -96,7 +96,7 @@ void dumpSSA(std::vector<janus::Function>& functions)
 }
 
 //void dumpLoopSSA(JanusContext *context)
-void dumpLoopSSA(std::vector<janus::Loop> loops)
+void dumpLoopSSA(std::vector<janus::Loop>& loops)
 {
     ofstream lssa;
     lssa.open(filename + ".loop.ssa",ios::out);
@@ -324,17 +324,17 @@ void printSSADot(janus::Loop &loop, void *outputStream)
 
 
 //void generateExeReport(JanusContext *context)
-void generateExeReport(JanusContext *context, std::string name, std::vector<janus::Function> functions, std::vector<janus::Loop> loops)
+void generateExeReport(std::string name, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops)
 {
     ofstream report;
     report.open(filename + ".report.txt",ios::out);
     //generateExeReport(context, &report);
-    generateExeReport(context, &report, name, functions, loops);
+    generateExeReport(&report, name, functions, loops);
     report.close();
 }
 
 //void generateExeReport(JanusContext *context, void *outputStream)
-void generateExeReport(JanusContext *context, void *outputStream, std::string name, std::vector<janus::Function> functions, std::vector<janus::Loop> loops)
+void generateExeReport(void *outputStream, std::string name, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops)
 {
     ofstream &report = *(ofstream *)outputStream;
 

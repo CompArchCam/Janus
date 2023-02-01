@@ -57,16 +57,20 @@ void janus::ExecutableBinaryStructure::open(const char *filename)
 }
 
 //void Executable::disassemble(JanusContext *jc)
-std::vector<janus::Function> janus::ExecutableBinaryStructure::disassemble(Function* fmain, std::map<PCAddress, janus::Function *>*  functionMap, std::map<PCAddress, janus::Function *>* externalFunctions)
+void janus::ExecutableBinaryStructure::disassemble(std::vector<janus::Function>& functions, Function* fmain, std::map<PCAddress, janus::Function *>&  functionMap, std::map<PCAddress, janus::Function *>& externalFunctions)
 {
     //lift all the recognised symbols to function
     //liftSymbolToFunction(jc);
-	std::vector<janus::Function> functions = liftSymbolToFunction();
+
+	liftSymbolToFunction(functions);
     //disassemble each identified functions
     //disassembleAll(jc);
+
+	printf("		disassembleAll --- START --- \n");
 	disassembleAll(capstoneHandle, fmain, functions, functionMap, externalFunctions);
+	printf("		disassembleAll --- DONE --- \n");
 	// So, here we could return every function
-	return functions;
+	//return functions;
 }
 
 void janus::ExecutableBinaryStructure::parseHeader()
@@ -103,9 +107,8 @@ void janus::ExecutableBinaryStructure::parseFlat()
 }
 
 //void Executable::liftSymbolToFunction(JanusContext *jc)
-std::vector<janus::Function> janus::ExecutableBinaryStructure::liftSymbolToFunction()
+void janus::ExecutableBinaryStructure::liftSymbolToFunction(std::vector<janus::Function>& functions)
 {
-	std::vector<janus::Function> functions;
     uint32_t      fid = 0;
     //construct a vector of functions from the symbol table
     //Infer the symbol boundaries by looking at the next entry
@@ -129,10 +132,10 @@ std::vector<janus::Function> janus::ExecutableBinaryStructure::liftSymbolToFunct
             //create new function and put it into the global vector
             //jc->functions.emplace_back(jc,fid,(*sit),size);
             functions.emplace_back(fid,(*sit),size);
-
             fid++;
         }
     }
+    //return functions;
 }
 
 void janus::ExecutableBinaryStructure::retrieveHiddenSymbol(Section &section)

@@ -19,7 +19,7 @@ public:
 	void constructControlDependenceGraph(std::vector<janus::Function>& functions);
 
 	// Identify loops from the control flow graph
-	std::vector<janus::Loop> identifyLoopsFromCFG(std::vector<janus::Function> functions);
+	std::vector<janus::Loop> identifyLoopsFromCFG(std::vector<janus::Function>& functions);
 
 	// Analyze loop relations within one procedure
 	void analyseLoopRelationsWithinProcedure(std::vector<janus::Function>& functions, std::vector<janus::Loop>* loops);

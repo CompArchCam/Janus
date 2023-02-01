@@ -11,6 +11,7 @@ using namespace std;
 //static void generateRulesForEachLoop(JanusContext *gc, Loop &loop)
 static void generateRulesForEachLoop(JanusContext *gc, Loop &loop, std::vector<janus::Function>& functions)
 {
+	printf("	PlanRule::generateRulesForEachLoop --- START --- \n");
     /* Get the array of CFG */
     BasicBlock *entry = loop.parent->entry;
     /* Place holder for a static rule for copy */
@@ -113,6 +114,7 @@ static void generateRulesForEachLoop(JanusContext *gc, Loop &loop, std::vector<j
 	    }
 	}
     }
+    printf("	PlanRule::generateRulesForEachLoop --- DONE --- \n");
 }
 static bool
 loopNeedProfiling(Loop &loop)

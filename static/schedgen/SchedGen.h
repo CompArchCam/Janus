@@ -43,8 +43,8 @@ public:
 }
 
 //void generateRules(JanusContext *gc);
-void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *> functionMap, std::vector<janus::Function>& functions,
-		std::vector<janus::Loop> loops, LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::string name);
+void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Function>& functions,
+		std::vector<janus::Loop>& loops, LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::string name);
 
 /* Generic rule insertion API from outside rule generation module */
 void

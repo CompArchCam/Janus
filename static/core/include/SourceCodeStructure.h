@@ -28,7 +28,7 @@ public:
 	SourceCodeStructure();
 
 	// For consistency reason, only update of the full structure is possible.
-	void updateBinaryStructure(janus::Function *main, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *> functionMap);
+	void updateBinaryStructure(janus::Function *main, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap);
 
 	//std::vector<janus::Loop> getAllLoops();
 
@@ -39,11 +39,6 @@ public:
 	std::map<PCAddress, janus::Function *> getFunctionMap()
 	{
 		return functionMap;
-	}
-
-	std::string getExecutableName()
-	{
-		return executableName;
 	}
 };
 

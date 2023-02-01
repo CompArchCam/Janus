@@ -31,12 +31,23 @@ void buildCFG(Function &function, std::map<PCAddress, janus::Function *>& functi
     /* step 1: construct a vector of basic blocks
      * and link them together */
     //buildBasicBlocks(function);
-    buildBasicBlocks(function, functionMap);
-    /* set function entry */
-    function.entry = function.blocks.data();
-    function.numBlocks = function.blocks.size();
+	buildBasicBlocks(function, functionMap);
 
-    if (function.numBlocks <= 1) return;
+	/* set function entry */
+    function.entry = function.blocks.data();
+    //function.numBlocks = function.blocks.size();
+    function.setNumBlocks(function.blocks.size());
+
+	/*printf("	fid = %d.\n", function.fid);
+	printf("	instrs.size() = %d.\n", function.instrs.size());
+	printf("	numBlocks = %d.\n", function.numBlocks);
+	printf("	blocks.size() = %d.\n", function.blocks.size());
+	if(function.blocks.size()>0)
+		printf("	blocks[0].instrs->minstr->name = %s.\n", function.blocks[0].instrs->minstr->name);
+	printf("\n\n");*/
+
+    //if (function.numBlocks <= 1) return;
+    if (function.getNumBlocks() <= 1) return;
 
     /* step 2: analyse the CFG and build dominance tree */
     buildDominanceTree(function);
@@ -73,12 +84,12 @@ buildCDG(Function &function)
 }
 
 //static void buildBasicBlocks(Function &function)
-static void buildBasicBlocks(Function &function, std::map<PCAddress, janus::Function *>& functionMap)
+static void buildBasicBlocks(Function& function, std::map<PCAddress, janus::Function *>& functionMapOriginal)
 {
     int cornerCase = false;
     auto &instrs = function.instrs;
     auto &instrTable = function.minstrTable;
-    //auto &functionMap = function.context->functionMap;
+    auto &functionMapTemp = functionMapOriginal;
     auto &blocks = function.blocks;
 
     /* Each function has a vector of machine instructions, each insn has an ID
@@ -154,8 +165,8 @@ static void buildBasicBlocks(Function &function, std::map<PCAddress, janus::Func
                 PCAddress callTarget = instr.minstr->getTargetAddress();
                 if (callTarget) {
                     //find this target in the function map
-                    auto query = functionMap.find(callTarget);
-                    if (query == functionMap.end()) {
+                    auto query = functionMapTemp.find(callTarget);
+                    if (query == functionMapTemp.end()) {
                         notRecognised.insert(id);
                     }
                     //if found in the function map
@@ -332,9 +343,9 @@ static void buildBasicBlocks(Function &function, std::map<PCAddress, janus::Func
             if (block->lastInstr()->opcode == Instruction::Call) {
                 PCAddress target = block->lastInstr()->minstr->getTargetAddress();
                 //if (function.context->functionMap.find(target) != function.context->functionMap.end())
-                if (functionMap.find(target) != functionMap.end())
+                if (functionMapTemp.find(target) != functionMapTemp.end())
                     //if (function.context->functionMap[target]->name == "_gfortran_stop_string@plt")
-                	if (functionMap[target]->name == "_gfortran_stop_string@plt")
+                	if (functionMapTemp[target]->name == "_gfortran_stop_string@plt")
                         function.terminations.insert(i);
             }
         }
@@ -406,7 +417,8 @@ void buildPostDominanceFrontiers(janus::Function &function) {
 static void
 buildDominanceTree(Function &function)
 {
-    uint32_t size = function.numBlocks;
+    //uint32_t size = function.numBlocks;
+	uint32_t size = function.getNumBlocks();
     if (!size) return;
 
     /* construct a two dimensional dominator tree */
@@ -469,7 +481,8 @@ buildDominanceTree(Function &function)
 static void
 buildPostDominanceTree(Function &function)
 {
-    uint32_t size = function.numBlocks;
+    //uint32_t size = function.numBlocks;
+	uint32_t size = function.getNumBlocks();
     if (!size) return;
     if (!function.terminations.size()) return;
 
@@ -544,7 +557,8 @@ buildPostDominanceTree(Function &function)
             /* If the number of pdominators of BB d is 1 less than the pdominators of BB i,
              * Then it means the immediate post dominator of i is d */
             if (pdomTree[d].size() + 1 == pdominators.size()) {
-            	if (d < function.numBlocks) {
+            	//if (d < function.numBlocks) {
+            	if (d < function.getNumBlocks()) {
                     bb.ipdom = &function.entry[d];
                     break;
                 }
@@ -575,7 +589,8 @@ static void markBlock(BasicBlock *block, bool *discovered)
 void
 traverseCFG(Function &function)
 {
-    uint32_t size = function.numBlocks;
+    //uint32_t size = function.numBlocks;
+	uint32_t size = function.getNumBlocks();
     /* Array to tag if a block has been visited */
     bool *discovered = new bool[size];
     memset(discovered, 0, size*sizeof(bool));
