@@ -26,7 +26,7 @@ propagateX29(VarState *vs, int64_t offset, map<BlockID, map<Variable, VarState*>
 
 //void disassembleAll(JanusContext *jc)
 void disassembleAll(uint64_t capstoneHandle, Function* fmainRet, std::vector<janus::Function> functions, std::map<PCAddress, janus::Function *>&  functionMap,
-		std::map<PCAddress, janus::Function *>* externalFunctions)
+		std::map<PCAddress, janus::Function *>& externalFunctions)
 {
     GSTEP("Disassembling instructions: ");
     cs_err      err;

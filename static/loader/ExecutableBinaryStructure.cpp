@@ -57,7 +57,8 @@ void janus::ExecutableBinaryStructure::open(const char *filename)
 }
 
 //void Executable::disassemble(JanusContext *jc)
-void janus::ExecutableBinaryStructure::disassemble(std::vector<janus::Function>& functions, Function* fmain, std::map<PCAddress, janus::Function *>&  functionMap, std::map<PCAddress, janus::Function *>& externalFunctions)
+void janus::ExecutableBinaryStructure::disassemble(std::vector<janus::Function>& functions, Function* fmain,
+		std::map<PCAddress, janus::Function *>&  functionMap, std::map<PCAddress, janus::Function *>& externalFunctions)
 {
     //lift all the recognised symbols to function
     //liftSymbolToFunction(jc);

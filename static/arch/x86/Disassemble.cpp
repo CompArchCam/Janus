@@ -15,7 +15,8 @@ static void liftInstruction(Instruction &instr, Function *function);
 static void linkRelocation(std::map<PCAddress, janus::Function *>& externalFunctions, std::map<PCAddress, janus::Function *>&  functionMap, Function *pltFunc);
 
 //void disassembleAll(JanusContext *jc)
-void disassembleAll(uint64_t& capstoneHandle, Function* fmainRet, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>&  functionMap, std::map<PCAddress, janus::Function *>& externalFunctions)
+void disassembleAll(uint64_t& capstoneHandle, Function* fmainRet, std::vector<janus::Function>& functions,
+		std::map<PCAddress, janus::Function *>&  functionMap, std::map<PCAddress, janus::Function *>& externalFunctions)
 {
     GSTEP("Disassembling instructions: ");
     cs_err      err;

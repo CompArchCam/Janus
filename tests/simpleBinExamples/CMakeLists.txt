@@ -1,0 +1,2 @@
+add_subdirectory(testIf)
+add_subdirectory(testSimpleLoop)

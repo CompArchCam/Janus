@@ -126,6 +126,14 @@ int main(int argc, char **argv) {
     janus::ExecutableBinaryStructure executableBinaryStructure = janus::ExecutableBinaryStructure(string(executableName));
     //SourceCodeStructure sourceCodeStructure;
 
+    if(executableBinaryStructure.isExecutable)
+    	printf("isExecutable\n");
+
+    printf("Executable name: %s\n", executableBinaryStructure.getExecutableName().c_str());
+    printf("WordSize = %d\n", executableBinaryStructure.wordSize);
+    printf("sections.size() = %lu\n", executableBinaryStructure.sections.size());
+    printf("symbols.size() = %lu\n", executableBinaryStructure.symbols.size());
+    printf("crossSectionRef.size() = %lu\n", executableBinaryStructure.crossSectionRef.size());
 
     // The main function of the program (not entry)
     janus::Function *fmain;
