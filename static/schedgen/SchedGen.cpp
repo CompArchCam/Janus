@@ -33,7 +33,7 @@ compileRewriteRuleDataToFile(JanusContext *gc);
 
 //void generateRules(JanusContext *gc)
 void generateRules(JanusContext *gc, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Function>& functions, std::vector<janus::Loop>& loops,
-		LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::string name)
+		LoopAnalysisReport& loopAnalysisReport, janus::Function* fmain, std::string name)
 {
 	printf("	SchedGen::generateRules --- START --- \n");
     uint32_t size;

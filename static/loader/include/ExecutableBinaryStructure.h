@@ -116,7 +116,7 @@ public:
     ///lift to disassembly and functions
     //void                            disassemble(JanusContext *jc);
     void    disassemble(std::vector<janus::Function>& functions,
-    								janus::Function *fmain,
+    								janus::Function** fmain,
     								std::map<PCAddress, janus::Function *>&  functionMap,
 									std::map<PCAddress, janus::Function *>& externalFunctions);
     void                            printSection();

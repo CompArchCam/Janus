@@ -78,6 +78,8 @@ MemoryLocation::MemoryLocation(MemoryInstruction *mi, Loop *loop)
     if (hasLoopIterator && !hasSubLoopIterator) type = Affine1D;
     if (hasSubLoopIterator) type = AffinemD;
     if (!hasLoopIterator && !hasSubLoopIterator) type = Constant;
+
+	std::cout << "MemoryLocation::MemoryLocation expression type "<< expr.kind << "." << std::endl;
 }
 
 SCEV::SCEV(Expr start, Expr stride, Iterator *iter)

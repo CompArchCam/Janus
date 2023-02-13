@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
     // Function class contains several pointers.
     // Hence, default copy constructor won't work (many of those are destroyed in the destructor).
     printf("	disassemble --- START --- \n");
-    executableBinaryStructure.disassemble(functions, fmain, functionMap, externalFunctions);
+    executableBinaryStructure.disassemble(functions, &fmain, functionMap, externalFunctions);
     printf("	disassemble --- DONE --- \n");
 
     // Update the code structure with analysis results.
@@ -180,6 +180,7 @@ int main(int argc, char **argv) {
 
     printf("	constructControlDependenceGraph --- START --- \n");
     programDependenceAnalysis.constructControlDependenceGraph(functions);
+    printf("		fmain->entry->bid = %d\n", fmain->entry->bid);
     printf("	constructControlDependenceGraph --- DONE --- \n");
 
 
@@ -203,7 +204,7 @@ int main(int argc, char **argv) {
     		printf("JLCOV --- START --- \n");
     		IF_VERBOSE(cout<<"Loop coverage profiling mode enabled"<<endl);
     		// Get the loops from CFG
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
     		printf("	JLCOV --- numLoops = %lu \n", loops.size());
     		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
@@ -219,47 +220,65 @@ int main(int argc, char **argv) {
     	case JPROF:
     		printf("JPROF --- START --- \n");
     		// Get the loops from CFG
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		// Identify loops from functions and update loops.
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		printf("	identifyLoopsFromCFG --- DONE --- \n");
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		printf("	analyseLoopRelationsWithinProcedure --- DONE --- \n");
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
+    		printf("	analyseLoopAndFunctionRelations --- DONE --- \n");
     		loadLoopCoverageProfiles(executableBinaryStructure.getExecutableName(), loops);
-    		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
-    		programDependenceAnalysis.reduceLoopsAliasAnalysis(loops, loopAnalysisReport, functions);
+    		printf("	loadLoopCoverageProfiles --- DONE --- \n");
+    		programDependenceAnalysis.performAdvanceLoopAnalysisWithReduceLoopsAliasAnalysis(loops, loopAnalysisReport, functions);
+    		printf("	performAdvanceLoopAnalysis --- DONE --- \n");
+    		//programDependenceAnalysis.reduceLoopsAliasAnalysis(loops, loopAnalysisReport, functions);
+    		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport, loopNests);
     		printf("JPROF --- DONE --- \n");
     		break;
     	case JPARALLEL:
+    		printf("JPARALLEL --- START --- \n");
     		// Get the loops from CFG
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		printf("	identifyLoopsFromCFG --- DONE --- \n");
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		printf("	analyseLoopRelationsWithinProcedure --- DONE --- \n");
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
+    		printf("	analyseLoopAndFunctionRelations --- DONE --- \n");
     		loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, executableBinaryStructure.getExecutableName());
+    		printf("	loadLoopSelectionReport --- DONE --- \n");
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
+    		printf("	performAdvanceLoopAnalysis --- DONE --- \n");
     		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
     		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
+    		printf("	performBasicPassWithAdvanceFunctionTranslate --- DONE --- \n");
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport, loopNests);
+    		printf("JPARALLEL --- DONE --- \n");
     		break;
     	case JVECTOR:
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		printf("JVECTOR --- START --- \n");
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
     		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport, loopNests);
     		break;
     	case JFETCH:
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		printf("JFETCH --- START --- \n");
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
     		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport, loopNests);
     		break;
     	case JANALYSIS:
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		printf("JANALYSIS --- START --- \n");
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
     		loopAnalysisReport = programDependenceAnalysis.loadLoopSelectionReport(loops, executableBinaryStructure.getExecutableName());
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
@@ -267,41 +286,46 @@ int main(int argc, char **argv) {
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport, loopNests);
     		break;
     	case JGRAPH:
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
+    		printf("JGRAPH --- START --- \n");
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
     		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
     		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, functions);
     		break;
     	case JOPT:
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		printf("JOPT --- START --- \n");
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
     		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		break;
     	case JSECURE:
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		printf("JSECURE --- START --- \n");
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
     		programDependenceAnalysis.performAdvanceLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, loopAnalysisReport);
     		programDependenceAnalysis.performBasicPassWithAdvanceFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport, loopNests);
     		break;
     	case JCUSTOM:
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		printf("JCUSTOM --- START --- \n");
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
     		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
     		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, functions);
     		programDependenceAnalysis.performLoopAnalysisPasses(loops, loopAnalysisReport, loopNests);
     		break;
     	case JDLL:
-    		loops = programDependenceAnalysis.identifyLoopsFromCFG(functions);
-    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, &loops);
-    		loopNests = programDependenceAnalysis.analyseLoopAndFunctionRelations(loops);
+    		printf("JDLL --- START --- \n");
+    		programDependenceAnalysis.identifyLoopsFromCFG(functions, loops);
+    		programDependenceAnalysis.analyseLoopRelationsWithinProcedure(functions, loops);
+    		programDependenceAnalysis.analyseLoopAndFunctionRelations(loops, loopNests);
     		programDependenceAnalysis.performBasicLoopAnalysis(loops, loopAnalysisReport, functions);
     		//programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, loopAnalysisReport);
     		programDependenceAnalysis.performBasicPassWithBasicFunctionTranslate(loops, functions);

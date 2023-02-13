@@ -117,7 +117,7 @@ bool checkSafetyForParallelisation(janus::Loop &loop, std::vector<janus::Functio
  */
 //void selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected)
 void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Loop>& loops,
-		LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::string name)
+		LoopAnalysisReport& loopAnalysisReport, janus::Function* fmain, std::string name)
 {
     LOOPLOG("Performing automatic DOALL loop selection:"<<endl);
 
@@ -238,6 +238,8 @@ void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& 
     //filterLoopNests(jc, selected);
     filterLoopNests(selected, loops);
 
+    printf("		selectDOALLLoops::Number of selected loops for parallelization = %lu. \n", selected.size());
+
     LOOPLOG("-- Final selected DOALL loops: "<<endl);
     IF_LOOPLOG(
     for (auto id: selected)
@@ -249,6 +251,7 @@ void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& 
     for (auto id: selected)
         cout <<dec<<id<<" ";
     cout <<endl;
+    printf("	selectDOALLLoops::DONE. \n");
 }
 
 //void filterLoopNests(JanusContext *jc, std::set<LoopID> &selected)
@@ -407,6 +410,8 @@ static void rejectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &se
 //static bool selectLoopFromRuntimeFeedback(JanusContext *jc, std::set<LoopID> &selected)
 static bool selectLoopFromRuntimeFeedback(std::set<LoopID> &selected, std::string name, std::vector<janus::Loop>& loops)
 {
+	printf("selectLoopFromRuntimeFeedback::loops.size() = %lu\n", loops.size());
+	printf("selectLoopFromRuntimeFeedback:name = %s\n", name.c_str());
     ifstream iselect;
     //iselect.open(jc->name+".loop.select", ios::in);
     iselect.open(name+".loop.select", ios::in);

@@ -42,7 +42,7 @@ namespace janus {
         bool                                   available;
         //JanusContext                           *context;
         ///If set, then it is safe to query the basic information of basic block/instructions/sub calls
-        bool                                   translated;
+        //bool                                   translated;
         /* --------------------------------------------------------------
          *                       information storage
          * ------------------------------------------------------------- */
@@ -162,6 +162,7 @@ namespace janus {
         uint32_t                               traverseEndStep;
 
         //Function(JanusContext *gc, FuncID fid, const Symbol &symbol, uint32_t size);
+        Function();
         Function(FuncID fid, const Symbol &symbol, uint32_t size);
         ~Function();
 
@@ -177,10 +178,12 @@ namespace janus {
         bool needSync();
         /** \brief Contruct the relations of the loop in this function */
         //void analyseLoopRelations();
-        void analyseLoopRelations(std::vector<janus::Loop>* allLoops);
+        void analyseLoopRelations(std::vector<janus::Loop>& allLoops);
     private:
         ///Block size
         uint32_t                               numBlocks;
+        bool                                   translatedBasic;
+        bool                                   translatedAdvance;
     };
 }
 

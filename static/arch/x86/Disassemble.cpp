@@ -15,7 +15,7 @@ static void liftInstruction(Instruction &instr, Function *function);
 static void linkRelocation(std::map<PCAddress, janus::Function *>& externalFunctions, std::map<PCAddress, janus::Function *>&  functionMap, Function *pltFunc);
 
 //void disassembleAll(JanusContext *jc)
-void disassembleAll(uint64_t& capstoneHandle, Function* fmainRet, std::vector<janus::Function>& functions,
+void disassembleAll(uint64_t& capstoneHandle, Function** fmainRet, std::vector<janus::Function>& functions,
 		std::map<PCAddress, janus::Function *>&  functionMap, std::map<PCAddress, janus::Function *>& externalFunctions)
 {
     GSTEP("Disassembling instructions: ");
@@ -71,7 +71,9 @@ void disassembleAll(uint64_t& capstoneHandle, Function* fmainRet, std::vector<ja
         }
         if (func.name == string("main") && !foundFortranMain) {
             //jc->main = &func;
-        	fmainRet = &func;
+        	printf("Update fmainRet 1 --- START --- \n");
+        	*fmainRet = &func;
+        	printf("Update fmainRet 1 --- DONE --- \n");
         }
         if (func.name == string("_start")) {
             //fmain = &func;
@@ -83,7 +85,12 @@ void disassembleAll(uint64_t& capstoneHandle, Function* fmainRet, std::vector<ja
     }
 
     //if (foundFortranMain) jc->main = fmain;
-    if (foundFortranMain) fmainRet = fmain;
+    if (foundFortranMain)
+	{
+    	printf("Update fmainRet 2 --- START --- \n");
+    	*fmainRet = fmain;
+    	printf("Update fmainRet 2 --- DONE --- \n");
+	}
 
     //cs_close((csh *)(&jc->program.capstoneHandle));
     cs_close((csh *)(&capstoneHandle));

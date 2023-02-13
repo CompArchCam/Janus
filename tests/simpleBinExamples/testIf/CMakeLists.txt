@@ -5,6 +5,9 @@
 cmake_minimum_required(VERSION 3.1...3.25)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/tests/simpleBinExamples/testIf/build")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -O3 -static")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O3 -static")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O3")
 
 # This is your project statement. You should always list languages;
 # Listing the version is nice here since it sets lots of useful variables

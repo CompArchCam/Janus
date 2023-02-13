@@ -16,6 +16,11 @@
 using namespace std;
 using namespace janus;
 
+Function::Function()
+{
+
+}
+
 //Function::Function(JanusContext *gc,FuncID fid, const Symbol &symbol, uint32_t size)
 //Function::Function(FuncID fid, const Symbol &symbol, uint32_t size)
 //:context(gc),fid(fid),size(size)
@@ -38,7 +43,9 @@ Function::Function(FuncID fid, const Symbol &symbol, uint32_t size)
 
     domTree = NULL;
     entry = NULL;
-    translated = false;
+    //translated = false;
+    translatedBasic = false;
+    translatedAdvance = false;
     hasIndirectStackAccesses = false;
     available = true;
     isExternal = false;
@@ -50,7 +57,7 @@ Function::Function(FuncID fid, const Symbol &symbol, uint32_t size)
 
 Function::~Function()
 {
-	//printf("	Function::destructor \n");
+	//printf("	Function id=%d::destructor \n", this->fid);
     // Now we free all the instructions
     for (auto &instr: minstrs) {
 	//for (auto &instr: this->getMinstrs()) {
@@ -67,17 +74,20 @@ Function::~Function()
 //void Function::translate()
 void Function::translateBasic()
 {
-    if (translated) return;
+	//printf("	translate --- START --- \n");
+	//printf("					translateBasic --- START --- \n");
+    //if (translated) return;
+	if (translatedBasic) return;
 
     if (!entry) {
         available = false;
         return;
     }
 
-    translated = true;
+    //translated = true;
+    translatedBasic = true;
 
     GASSERT(entry, "CFG not found in "<<name<<endl);
-
     /* Scan the code to retrieve stack information
      * this has to be done at first */
     analyseStack(this);
@@ -108,7 +118,19 @@ void Function::translateBasic()
 
 void Function::translateAdvance()
 {
-    /* For other mode, memory accesses are enough,
+	//printf("					translateAdvance --- START --- \n");
+    //if (translated) return;
+	if (this->translatedAdvance) return;
+
+    if (!entry) {
+        available = false;
+        return;
+    }
+
+    //translated = true;
+    this->translatedAdvance = true;
+
+	/* For other mode, memory accesses are enough,
      * Only paralleliser and analysis mode needs to go further */
     /*if (context->mode != JPARALLEL &&
         context->mode != JPROF &&
@@ -120,13 +142,16 @@ void Function::translateAdvance()
         return;*/
 
     /* Construct the abstract syntax tree of the function */
-    buildASTGraph(this);
-
+    printf("						buildASTGraph --- CALL --- \n");
+	buildASTGraph(this);
+	printf("						buildASTGraph --- RETURN --- \n");
     /* Perform variable analaysis */
+	printf("						variableAnalysis --- CALL --- \n");
     variableAnalysis(this);
-
+    printf("						variableAnalysis --- RETURN --- \n");
     /* Peform liveness analysis */
     livenessAnalysis(this);
+    printf("					translateAdvance --- DONE --- \n");
 }
 
 static void
@@ -141,11 +166,11 @@ assign_loop_blocks(Loop *loop) {
 }
 
 //void Function::analyseLoopRelations()
-void Function::analyseLoopRelations(std::vector<janus::Loop>* allLoops)
+void Function::analyseLoopRelations(std::vector<janus::Loop>& allLoops)
 {
     //get loop array
     //Loop *loopArray = context->loops.data();
-	Loop *loopArray = allLoops->data();
+	Loop *loopArray = allLoops.data();
     //step 1 we simply use a O(n^2) comparison
     for (auto loopID: loopIDs) {
         for (auto loopID2 : loopIDs) {

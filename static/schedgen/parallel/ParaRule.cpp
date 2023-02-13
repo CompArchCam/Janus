@@ -31,9 +31,9 @@ getEncodedArrayIndex(Loop *loop, Expr var);
 
 //void generateParallelRules(JanusContext *gc)
 void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Function>& functions,
-		LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::vector<janus::Loop>& loops, std::string name)
+		LoopAnalysisReport& loopAnalysisReport, janus::Function* fmain, std::vector<janus::Loop>& loops, std::string name)
 {
-
+	printf("generateParallelRules --- START --- \n");
     set<LoopID> selected_loop;
 
     /* Step 1: select DOALL loops for parallelisation */
@@ -67,20 +67,30 @@ void generateParallelRules(JanusContext *gc, std::map<PCAddress, janus::Function
     /* Step 4: generate thread create/exit rules on main function */
     //GASSERT(gc->main, "main function not found in this program");
     GASSERT(fmain, "main function not found in this program");
-    Function *main = fmain;
-
-    RewriteRule rule = RewriteRule(THREAD_CREATE, main->entry, FIRST_INSTRUCTION);
+    //Function *main = fmain;
+    printf("fmain->entry->bid = %d\n", fmain->entry->bid);
+    THREAD_CREATE;
+    FIRST_INSTRUCTION;
+    printf("	generateParallelRules --- probe 1 --- \n");
+    //RewriteRule rule = RewriteRule(THREAD_CREATE, main->entry, FIRST_INSTRUCTION);
+    RewriteRule rule = RewriteRule(THREAD_CREATE, fmain->entry, FIRST_INSTRUCTION);
+    printf("	generateParallelRules --- probe 2 --- \n");
     //rule.reg0 = gc->functions.size();
     rule.reg0 = functions.size();
     rewriteRules[MAIN_CHANNEL].insert(rule);
     /* Thread create explicitly changes the basic block termination
      * The basic block structure has been changed */
-    reshapeBlock = main->entry;
-
-    for(auto t:main->terminations) {
-        BasicBlock *end_block = main->entry + t;
+    printf("	generateParallelRules --- probe 3 --- \n");
+    //reshapeBlock = main->entry;
+    reshapeBlock = fmain->entry;
+    printf("	generateParallelRules --- probe 4 --- \n");
+    //for(auto t:main->terminations) {
+    for(auto t:fmain->terminations) {
+        //BasicBlock *end_block = main->entry + t;
+    	BasicBlock *end_block = fmain->entry + t;
         insertRule(MAIN_CHANNEL,RewriteRule(THREAD_EXIT,end_block,PRE_INSERT), end_block);
     }
+    printf("generateParallelRules --- DONE --- \n");
 }
 
 //static void prepareLoopHeader(JanusContext *gc, Loop &loop)

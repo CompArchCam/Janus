@@ -1042,9 +1042,18 @@ ExpandedExpr janus::operator&(const ExpandedExpr &expr1, const ExpandedExpr &exp
 void
 ExpandedExpr::extendToFuncScope(Function *func, Loop *loop)
 {
-    map<Expr, Expr> refs = exprs;
-    exprs.clear();
+	printf("									extendToFuncScope --- START --- \n");
+	printf("									extendToFuncScope --- check if exprs are set --- \n");
+	/*if(!exprs.empty())
+		printf("									extendToFuncScope --- the exprs is set.\n");
+	else
+		printf("									extendToFuncScope --- something is wrong, the exprs is not set!!!\n");
 
+	printf("									extendToFuncScope --- exprs.size() = %lu \n", exprs.size());*/
+    map<Expr, Expr> refs = exprs;
+    printf("									extendToFuncScope --- probe 1 --- \n");
+    exprs.clear();
+    printf("									extendToFuncScope --- probe 2 --- \n");
     for (auto e: refs) {
         Expr term = e.first;
 
@@ -1055,7 +1064,9 @@ ExpandedExpr::extendToFuncScope(Function *func, Loop *loop)
             merge(terms);
         } else exprs[e.first] = e.second;
     }
+    printf("									extendToFuncScope --- probe 3 --- \n");
     simplify();
+    printf("									extendToFuncScope --- DONE --- \n");
 }
 
 void

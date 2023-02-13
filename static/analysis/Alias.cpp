@@ -26,6 +26,7 @@ static AliasType banerjeeTest(ExpandedSCEV &diff);
 //void aliasAnalysis(janus::Loop *loop)
 void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests)
 {
+	printf("						aliasAnalysis --- START --- \n");
     Function *parent = loop->parent;
     BasicBlock *entry = parent->entry;
 
@@ -39,12 +40,14 @@ void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::v
 
     //step 0: affine analysis
     //scan for a specific affine conditions for the given loop
+    printf("						affineAnalysis --- START --- \n");
     affineAnalysis(loop);
 
     LOOPLOG2("\n\tStep 0: Extracting loop ranges in the loop nest:"<<endl);
     LOOPLOG2("\t\tMain Loop "<<dec<<loop->id<<" range "<<*loop->mainIterator<<" trip count "<<loop->staticIterCount<<endl);
 
     //auto myNest = parent->context->loopNests[loop->nestID];
+    printf("						loopNests --- START --- \n");
     auto myNest = loopNests[loop->nestID];
 
     for (auto l: myNest) {
@@ -59,9 +62,12 @@ void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::v
 
     //step 1: record all memory access into read and write sets
     //and build scalar evolution
+    printf("						step 1 --- START --- \n");
+    printf("						loop->id = %d.\n", loop->id);
     LOOPLOG2("\n\tStep 1: Analyse each memory access in the loop:"<<endl);
     for (auto bid: loop->body) {
         BasicBlock &bb = entry[bid];
+        printf("						bb.minstrs.size() = %lu \n", bb.minstrs.size());
         for (auto &mi : bb.minstrs) {
             //skip for load effective address
             if (mi.mem->type != JVAR_MEMORY) continue;
@@ -70,10 +76,22 @@ void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::v
             //create a memory variable for each memory instruction
             MemoryLocation *memVar = new MemoryLocation(&mi, loop);
             LOOPLOG2("\t\t\tMemory expression: "<<memVar->expr<<" constructed"<<endl);
+            printf("							Memory expression constructed \n");
             //create a memory variable for each memory instruction
+            printf("							getSCEV --- CALL --- \n");
+            //std::cout << "						expression type "<< memVar->expr.kind << "." << std::endl;
+            //printf("						step 2 --- START --- \n");
+            //printf("						memVar->expr.kind = %s --- \n", memVar->expr.kind);
+            //printf("						memVar->loop->id = %d --- \n", memVar->loop->id);
+            //printf("						loop->id = %s --- \n", loop->id);
             memVar->getSCEV();
-            LOOPLOG2("\t\t\tScalar evolution: "<<*memVar->escev<<endl);
+            printf("							getSCEV --- RETURN --- \n");
+            //LOOPLOG2("\t\t\tScalar evolution: "<<*memVar->escev<<endl);
             //insert the memory location into the loop array accesses
+            printf("							getOrInsertMemLocations --- CALL --- \n");
+            printf("							getOrInsertMemLocations --- CALL --- \n");
+            printf("							getOrInsertMemLocations --- CALL --- \n");
+            printf("							getOrInsertMemLocations --- CALL --- \n");
             MemoryLocation *location = getOrInsertMemLocations(loop, memVar);
             //add to read and write set
             if (mi.type == MemoryInstruction::Read ||
@@ -91,6 +109,7 @@ void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::v
             }
         }
     }
+    printf("						probe 1 --- START --- \n");
 
     LOOPLOG2("\n\t"<<"Identified read set: "<<endl);
     IF_LOOPLOG2(
@@ -119,6 +138,7 @@ void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::v
     });
 
     //step 2: perform alias analysis on each memory write with respect to each memory read with the same array base
+    printf("						step 2 --- START --- \n");
     //alias analysis is only performed within the same memory base
     LOOPLOG2("\n\tStep 2: Performing SCEV-based alias analysis on loop memory accesses"<<endl);
     for (auto memWrite: writeSets) {
@@ -145,6 +165,7 @@ void aliasAnalysis(janus::Loop *loop, std::vector<janus::Loop>& allLoops, std::v
     }
 
     //step 3: encode array bases for further runtime checks
+    printf("						step 3 --- START --- \n");
     for (auto &memBase: loop->arrayAccesses) {
         //get the iterators contributed to this base
         //print the accessed instructions
@@ -518,20 +539,34 @@ buildSCEV(SCEV *scev, ExpandedExpr &expr, Loop *loop)
 
 void MemoryLocation::getSCEV()
 {
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
+	printf("								getSCEV --- START --- \n");
     if (!vs || vs->type != JVAR_MEMORY) return;
     if (escev) return;
-
+    printf("								getSCEV --- probe 1 --- \n");
     LOOPLOG2("\t\t\tExpr:"<<expr<<endl);
 
     escev = new ExpandedSCEV();
     
     //a stack for the expression to be expanded
     stack<pair<Iterator*, Expr>> checkList;
-
+    printf("								getSCEV --- probe 2 --- \n");
     //step 1: force expanding start expersion, so that it can be easily merged
     escev->start.kind = Expr::EXPANDED;
     escev->start.ee = new ExpandedExpr(ExpandedExpr::SUM);
-
+    printf("								getSCEV --- probe 3 --- \n");
     for (auto e: expr.exprs) {
         Expr term = e.first;
         if (term.iteratorTo) {
@@ -541,45 +576,57 @@ void MemoryLocation::getSCEV()
             escev->start.ee->addTerm(e.first, e.second);
         }
     }
-
+    printf("								getSCEV --- probe 4 --- \n");
     while (!checkList.empty()) {
+    	printf("								getSCEV --- probe 5 --- \n");
         auto check = checkList.top();
+        printf("								getSCEV --- probe 6 --- \n");
         checkList.pop();
+        printf("								getSCEV --- probe 7 --- \n");
 
         Iterator *iter = check.first;
+        printf("								getSCEV --- probe 8 --- \n");
 
         if (iter->kind == Iterator::ITER_GENERIC) {
             LOOPLOG2("\t\tScalar evolution contains complex iterators!"<<endl);
             escev->kind = ExpandedSCEV::Ambiguous;
+            printf("								getSCEV --- probe 9 --- \n");
             return;
         }
 
         Expr scale = check.second;
+        printf("								getSCEV --- probe 10 --- \n");
 
         Expr init = iter->getInitExpr();
         //check if the init has other iterators
         if (init.kind == Expr::INTEGER) {
+        	printf("								getSCEV --- probe 11 --- \n");
             init.multiply(scale);
             escev->start.ee->addTerm(init);
         } else {
+        	printf("								getSCEV --- probe 12 --- \n");
             //expand init
             if (init.kind == Expr::VAR) {
+            	printf("								getSCEV --- probe 13 --- \n");
                 ExpandedExpr *ee = expandExpr(init.v->expr, loop);
                 init.ee = ee;
                 init.kind = Expr::EXPANDED;
             } else if (init.kind != Expr::EXPANDED) {
+            	printf("								getSCEV --- probe 14 --- \n");
                 LOOPLOG2("\t\tScalar evolution case not yet handled"<<endl);
                 escev->kind = ExpandedSCEV::Ambiguous;
                 return;
             }
+            printf("								getSCEV --- probe 15 --- \n");
             init.ee->extendToFuncScope(loop->parent, loop);
-
+            printf("								getSCEV --- probe 16 --- \n");
             if (init.ee->kind == ExpandedExpr::SENSI) {
+            	printf("								getSCEV --- probe 17 --- \n");
                 LOOPLOG2("\t\tScalar evolution init case not yet handled"<<endl);
                 escev->kind = ExpandedSCEV::Ambiguous;
                 return;
             }
-
+            printf("								getSCEV --- probe 18 --- \n");
             //check if the expanded init
             //whether it has more loop iterators
             for (auto term: init.ee->exprs) {
@@ -590,8 +637,10 @@ void MemoryLocation::getSCEV()
                     checkList.push(make_pair(node.iteratorTo, coeff));
                 else escev->start.ee->addTerm(node, coeff);
             }
+            printf("								getSCEV --- probe 19 --- \n");
         }
 
+        printf("								getSCEV --- probe 20 --- \n");
         //next consider strides
         Expr stride = iter->getStrideExpr();
         if (stride.kind == Expr::EXPANDED &&
@@ -600,13 +649,16 @@ void MemoryLocation::getSCEV()
             escev->kind = ExpandedSCEV::Ambiguous;
             return;
         }
+
         stride.multiply(scale);
         //add to the final
         escev->strides[iter] = stride;
         escev->kind = ExpandedSCEV::Normal;
     }
+    printf("								getSCEV --- probe 21 --- \n");
     //simplify the base expression
     escev->start.simplify();
+    printf("								getSCEV --- DONE --- \n");
 }
 
 MemoryLocation*

@@ -19,7 +19,8 @@
  *  *No cross-iteration dependences.
  *  *Clear induction variables */
 //void selectDOALLLoops(JanusContext *jc, std::set<LoopID> &selected);
-void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap, std::vector<janus::Loop>& loops, LoopAnalysisReport& loopAnalysisReport, janus::Function *fmain, std::string name);
+void selectDOALLLoops(std::set<LoopID> &selected, std::vector<janus::Function>& functions, std::map<PCAddress, janus::Function *>& functionMap,
+		std::vector<janus::Loop>& loops, LoopAnalysisReport& loopAnalysisReport, janus::Function* fmain, std::string name);
 
 /** \brief Filter out the loops that are in the same loop nests
  *  \param jc The global context containing all the loop information

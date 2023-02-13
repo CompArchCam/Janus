@@ -45,6 +45,7 @@ void loadLoopCoverageProfiles(std::string name, std::vector<janus::Loop>& loops)
         uint64_t invocation, iteration;
         float coverage;
         string name;
+        printf("		loadLoopCoverageProfiles:probe 1 \n");
         while (lcov >> loopID >> coverage >> invocation>>iteration>>inaccurate>>name) {
             //Loop &loop = gc->loops[loopID-1];
         	Loop &loop = loops[loopID-1];
@@ -54,11 +55,14 @@ void loadLoopCoverageProfiles(std::string name, std::vector<janus::Loop>& loops)
             loop.inaccurate = inaccurate;
             //cout<<loopID<<" "<<coverage<<" "<<invocation<<" "<<iteration<<" "<<name<<endl;
         }
+        printf("		loadLoopCoverageProfiles:probe 2 \n");
     }
     lcov.close();
 
     //filterParallelisableLoop(gc);
+    printf("		loadLoopCoverageProfiles:filterParallelisableLoop --- CALL --- \n");
     filterParallelisableLoop(loops);
+    printf("		loadLoopCoverageProfiles:filterParallelisableLoop --- RETURN --- \n");
 }
 
 //void filterParallelisableLoop(JanusContext *gc)

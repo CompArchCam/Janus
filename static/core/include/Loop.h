@@ -199,18 +199,22 @@ class Loop
     uint64_t                        total_iteration_count;
     /** \brief Reveals the hot path from profiling */
     std::map<BlockID, double>       temperature;
+    // Loop constructor
     Loop(BasicBlock *start, Function *parent);
+    // Loop destructor
+    ~Loop();
     /** \brief perform full Janus static analysis on this loop (first pass) */
     //void                 analyse(JanusContext *gc);
     // The only difference between basic and advance analysis is that the advance analysis
     // calls also translateAdvance on the parent function, while basic analysis
     // calls only translateBasic.
     void analyseBasic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
-    void analyseAdvance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
+    void analyseAdvance(LoopAnalysisReport& loopAnalysisReport, std::vector<janus::Function>& allFunctions);
     // Had to separate analyze into analyseBasic/analyseAdvance, analyseReduceLoopsAliasAnalysis, and
     // analysePass0, due to dependencies on different steps.
     //void analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions);
-    void analyseReduceLoopsAliasAnalysis(std::vector<janus::Function>& allFunctions);
+    //void analyseReduceLoopsAliasAnalysis(std::vector<janus::Function>& allFunctions);
+    void analyseAdvanceWithReduceLoopsAliasAnalysis(LoopAnalysisReport& loopAnalysisReport, std::vector<janus::Function>& allFunctions);
     //void Loop::analysePass0(LoopAnalysisReport loopAnalysisReport);
     // The only difference between analysePass0_Basic and analysePass0_Advance is that
     // analysePass0_Basic calls translateBasic on functions, while
@@ -222,11 +226,11 @@ class Loop
 
     /** \brief perform full Janus static analysis on this loop (second pass) */
     //void                 analyse2(JanusContext *gc);
-    void                 analyse2(LoopAnalysisReport loopAnalysisReport);
+    void                 analyse2(LoopAnalysisReport& loopAnalysisReport);
     /** \brief perform full Janus static analysis on this loop (third pass) */
     //void                 analyse3(JanusContext *gc);
     //void                 analyse3(LoopAnalysisReport loopAnalysisReport);
-    void 				 analyse3(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests);
+    void 				 analyse3(LoopAnalysisReport& loopAnalysisReport, std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests);
     /** \brief return true if the loop body contains the basic block */
     bool                 contains(BlockID bid);
     /** \brief return true if the loop body contains the instruction */
@@ -296,5 +300,5 @@ linkParentLoops(janus::Function *function);
 
 //void searchLoop(JanusContext *gc, janus::Function *function);
 //void searchLoop(janus::Function *function);
-void searchLoop(std::vector<janus::Loop>* loops, janus::Function *function);
+void searchLoop(std::vector<janus::Loop>& loops, janus::Function *function);
 #endif

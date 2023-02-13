@@ -30,13 +30,13 @@ using namespace std;
  * Each loop has only one start node (X) but may have multiple end nodes (Ys) */
 //void searchLoop(JanusContext *gc, Function *function)
 //void searchLoop(JanusContext *gc, Function *function)
-void searchLoop(std::vector<janus::Loop>* loops, Function *function)
+void searchLoop(std::vector<janus::Loop>& loops, Function *function)
 {
     //if (!gc || !function) return;
 	if (!function) return;
 
     //auto            &loopArray = gc->loops;
-	auto            &loopArray = loops;
+	//auto            &loopArray = loops;
 
     BasicBlock      *entry = function->entry;
     uint32_t        size = function->blocks.size();
@@ -82,12 +82,12 @@ void searchLoop(std::vector<janus::Loop>* loops, Function *function)
     }
 
     //loopArray.reserve(loopPool.size()+1);
-    loopArray->reserve(loopPool.size()+1);
+    loops.reserve(loopPool.size()+1);
     /* Now all loop stack blocks have been recognised
      * contruct loops */
     for (auto block_id : loopPool) {
         //loopArray.emplace_back(entry+block_id, function);
-    	loopArray->emplace_back(entry+block_id, function);
+    	loops.emplace_back(entry+block_id, function);
     }
 }
 
@@ -212,6 +212,11 @@ Loop::Loop(BasicBlock *start, Function *parent)
     }
 }
 
+Loop::~Loop()
+{
+	//printf("	Function::destructor \n");
+}
+
 //void Loop::analyse(JanusContext *gc)
 //void Loop::analyse(LoopAnalysisReport loopAnalysisReport)
 void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
@@ -240,16 +245,19 @@ void Loop::analyseBasic(LoopAnalysisReport loopAnalysisReport, std::vector<janus
     //Analyse sub-loop first
     //So that information in the inner loop should be available for analysis of the outer loop
     for (auto *l : subLoops)
+    {
+    	printf("analyseBasic::parent loop id = %d has a nested loop id = %d.\n", this->id, l->id);
     	l->analyseBasic(loopAnalysisReport, allFunctions);
         //l->analyse(gc);
+    }
 
     //analysePass0_Basic(loopAnalysisReport, allFunctions);
     analysePass0_Basic(allFunctions);
 }
 
-void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
+void Loop::analyseAdvance(LoopAnalysisReport& loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 {
-    if (analysed) return;
+	if (analysed) return;
 
     //if (gc->manualLoopSelection && !pass) {
     if (loopAnalysisReport.getManualLoopSelection() && !pass) {
@@ -261,21 +269,76 @@ void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport, std::vector<jan
             if (l->pass) goto proceed;
         return;
     }
-
     proceed:
     analysed = true;
     BasicBlock *entry = parent->entry;
-
     /* translate parent function before analysis */
     //if (parent) parent->translate();
-    if (parent) parent->translateBasic();
-    if (parent) parent->translateAdvance();
+    if (parent)
+	{
+    	parent->translateBasic();
+    	parent->translateAdvance();
+	}
+
 
     //Analyse sub-loop first
     //So that information in the inner loop should be available for analysis of the outer loop
     for (auto *l : subLoops)
+    {
     	l->analyseAdvance(loopAnalysisReport, allFunctions);
         //l->analyse(gc);
+    }
+
+    //analysePass0_Advance(loopAnalysisReport, allFunctions);
+    analysePass0_Advance(allFunctions);
+}
+
+void Loop::analyseAdvanceWithReduceLoopsAliasAnalysis(LoopAnalysisReport& loopAnalysisReport, std::vector<janus::Function>& allFunctions)
+{
+	if (analysed) return;
+
+    //if (gc->manualLoopSelection && !pass) {
+    if (loopAnalysisReport.getManualLoopSelection() && !pass) {
+        //even if the loop is not selected, if it belongs to the same loop nest with selected loop
+        //then we should analyse the loop
+        for (auto l: ancestors)
+            if (l->pass) goto proceed;
+        for (auto l: descendants)
+            if (l->pass) goto proceed;
+        return;
+    }
+    proceed:
+    analysed = true;
+    BasicBlock *entry = parent->entry;
+    /* translate parent function before analysis */
+    //if (parent) parent->translate();
+    if (parent)
+	{
+    	parent->translateBasic();
+    	parent->translateAdvance();
+	}
+
+
+    //Analyse sub-loop first
+    //So that information in the inner loop should be available for analysis of the outer loop
+    for (auto *l : subLoops)
+    {
+    	l->analyseAdvance(loopAnalysisReport, allFunctions);
+        //l->analyse(gc);
+    }
+
+	if (removed)
+	{
+        LOOPLOG("-----------------------------------------------------------------"<<endl);
+        if (invocation_count)
+            LOOPLOG("Loop "<<dec<<id<<" is removed due to low profiled coverage: "<<coverage<<" or low iteration: "<<(total_iteration_count/invocation_count)<<endl);
+        else
+            LOOPLOG("Loop "<<dec<<id<<" is removed due to low profiled coverage: "<<coverage<<endl);
+        //we still analyse removed loops since it might contribute to alias analysis of parent/children loops
+        //TODO: reduce the number of loops with the help of alias analysis
+        //return;
+        return;
+    }
 
     //analysePass0_Advance(loopAnalysisReport, allFunctions);
     analysePass0_Advance(allFunctions);
@@ -285,7 +348,7 @@ void Loop::analyseAdvance(LoopAnalysisReport loopAnalysisReport, std::vector<jan
 // If a loop is removed, then do nothing.
 // Else, call analysePass0.
 //void Loop::analyseReduceLoopsAliasAnalysis(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
-void Loop::analyseReduceLoopsAliasAnalysis(std::vector<janus::Function>& allFunctions)
+/*void Loop::analyseReduceLoopsAliasAnalysis(std::vector<janus::Function>& allFunctions)
 {
     //if (gc->mode == JPROF && removed) {
 	if (removed)
@@ -303,7 +366,7 @@ void Loop::analyseReduceLoopsAliasAnalysis(std::vector<janus::Function>& allFunc
 
 	//analysePass0_Advance(loopAnalysisReport, allFunctions);
 	analysePass0_Advance(allFunctions);
-}
+}*/
 
 // Not called by JPROF for removed loops.
 //void Loop::analysePass0_Basic(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
@@ -336,6 +399,7 @@ void Loop::analysePass0_Basic(std::vector<janus::Function>& allFunctions)
     }
 
     /* Step 2: translate all subcalls */
+    printf("		Step 2: translate all subcalls.\n");
     //Function *functions = gc->functions.data();
     Function *functions = allFunctions.data();
     for (auto call: subCalls) {
@@ -360,6 +424,7 @@ void Loop::analysePass0_Basic(std::vector<janus::Function>& allFunctions)
 //void Loop::analysePass0_Advance(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Function>& allFunctions)
 void Loop::analysePass0_Advance(std::vector<janus::Function>& allFunctions)
 {
+	printf("	analysePass0_Advance --- START ---\n");
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" in "<<parent->name<<endl);
 
@@ -397,20 +462,24 @@ void Loop::analysePass0_Advance(std::vector<janus::Function>& allFunctions)
     }
 
     /* Step 3: variable analysis (find constant variables) */
+    printf("		variableAnalysis --- START ---\n");
     variableAnalysis(this);
 
     /* Step 4: dependence analysis for variables (only) */
+    printf("		dependenceAnalysis --- START ---\n");
     dependenceAnalysis(this);
 
     /* Step 5: iterator variable analysis */
+    printf("		iteratorAnalysis --- START ---\n");
     iteratorAnalysis(this);
 
     LOOPLOG("========================================================="<<endl<<endl);
+    printf("	analysePass0_Advance --- DONE ---\n");
 }
 
 
 //void Loop::analyse2(JanusContext *gc)
-void Loop::analyse2(LoopAnalysisReport loopAnalysisReport)
+void Loop::analyse2(LoopAnalysisReport& loopAnalysisReport)
 {
     if (unsafe) return;
     //if (gc->manualLoopSelection && !pass) return;
@@ -429,24 +498,42 @@ void Loop::analyse2(LoopAnalysisReport loopAnalysisReport)
 
 //void
 //Loop::analyse3(JanusContext *gc)
-void Loop::analyse3(LoopAnalysisReport loopAnalysisReport, std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests)
+void Loop::analyse3(LoopAnalysisReport& loopAnalysisReport,
+		std::vector<janus::Loop>& allLoops, std::vector<std::set<LoopID>>& loopNests)
 {
-    if (unsafe) return;
+	//printf("				analyse3 --- START --- \n");
+    if (unsafe)
+	{
+    	//printf("						analyse3::unsafe --- return\n");
+    	return;
+	}
     //if (gc->manualLoopSelection && !pass) return;
-    if (loopAnalysisReport.getManualLoopSelection() && !pass) return;
+    if (loopAnalysisReport.getManualLoopSelection() && !pass)
+	{
+    	/*if(loopAnalysisReport.getManualLoopSelection())
+    		printf("						analyse3::manualLoopSelection is true --- return\n");
+    	if(!pass)
+    	    printf("						analyse3::!pass --- return\n");*/
+    	return;
+	}
 
     LOOPLOG("========================================================="<<endl);
     LOOPLOG("Analysing Loop "<<dec<<id<<" Third Pass"<<endl);
 
     /* Step 7: alias analysis */
+    printf("					aliasAnalysis --- CALL --- \n");
+    printf("					analyse3::loop.id = %d \n", this->id);
     aliasAnalysis(this, allLoops, loopNests);
 
     /* Step 8: scratch register analysis */
+    printf("					scratchAnalysis --- START --- \n");
     scratchAnalysis(this);
 
     /* Step 9: encode loop iterators */
+    printf("					encodeIterators --- START --- \n");
     encodeIterators(this);
     LOOPLOG("========================================================="<<endl<<endl);
+    printf("				analyse3 --- DONE --- \n");
 }
 
 void
