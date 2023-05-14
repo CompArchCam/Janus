@@ -35,7 +35,7 @@ buildCFG(Function &function)
     function.entry = function.blocks.data();
     function.numBlocks = function.blocks.size();
 
-    if (function.numBlocks <= 1 || function.isExternal) return;
+    if (function.numBlocks < 1 || function.isExternal) return;
 
     /* step 2: analyse the CFG and build dominance tree */
     buildDominanceTree(function);
@@ -288,7 +288,7 @@ buildBasicBlocks(Function &function)
         }
     }
 
-    if (bSize <= 1) return;
+    if (bSize < 1) return;
 
     //step 3.2 after all instructions are linked with their parent blocks, we can then link each block to block
     for (int i=0; i<bSize; i++) {
@@ -337,6 +337,12 @@ buildBasicBlocks(Function &function)
                         function.terminations.insert(i);
             }
         }
+    }
+    //Add all the basic blocks with no incoming edges as dangling set
+    for(auto &bb : function.blocks){
+       if(bb.pred.empty()){
+            function.danglingBlocks.insert(bb.bid);
+       }
     }
 }
 

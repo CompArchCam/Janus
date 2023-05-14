@@ -119,52 +119,53 @@ void linkSSANodes(Function &function)
     queue<pair<BlockID,BlockID>> q;
     set<BlockID> visited;
 
-    //start with the entry
-    q.push(make_pair(0,0));
-    globalDefs[0] = &latestStates;
+    //start with the entry block, and all the other dangling blocks which do not have incoming edge (NOTE: this for those bianries where some basic blocks have no incoming edge perhaps beacuse they are a target of indirect branch
+    for(auto &sid : function.danglingBlocks){ 
+        q.push(make_pair(sid,sid));
+        globalDefs[sid] = &latestStates;
 
-    while(!q.empty()) {
-        auto pair = q.front();
-        //previous block
-        BlockID pbid = pair.first;
-        //current block
-        BlockID bid = pair.second;
-        BasicBlock &bb = entry[bid];
+        while(!q.empty()) {
+            auto pair = q.front();
+            //previous block
+            BlockID pbid = pair.first;
+            //current block
+            BlockID bid = pair.second;
+            BasicBlock &bb = entry[bid];
 
-        q.pop();
+            q.pop();
 
-        //get previous and current definitions
-        auto previousDefs = globalDefs[pbid];
-        auto currentDefs = globalDefs[bid];
+            //get previous and current definitions
+            auto previousDefs = globalDefs[pbid];
+            auto currentDefs = globalDefs[bid];
 
-        if (currentDefs == NULL) {
-            currentDefs = new map<Variable, VarState*>();
-            globalDefs[bid] = currentDefs;
-        }
+            if (currentDefs == NULL) {
+                currentDefs = new map<Variable, VarState*>();
+                globalDefs[bid] = currentDefs;
+            }
 
-        //update Phi nodes for this block from previous block
-        updatePhiNodes(function, bid, *previousDefs);
+            //update Phi nodes for this block from previous block
+            updatePhiNodes(function, bid, *previousDefs);
 
-        //for already visited nodes, simply update phi nodes and return
-        if (visited.find(bid) != visited.end()) continue;
+            //for already visited nodes, simply update phi nodes and return
+            if (visited.find(bid) != visited.end())  continue;
+            //copy definition to the current block
+            copyDefinitions(previousDefs, currentDefs);
 
-        //copy definition to the current block
-        copyDefinitions(previousDefs, currentDefs);
+            //update SSA nodes for this block
+            updateSSANodes(function, bid, *currentDefs);
 
-        //update SSA nodes for this block
-        updateSSANodes(function, bid, *currentDefs);
+            //mark the block as visited
+            visited.insert(bid);
 
-        //mark the block as visited
-        visited.insert(bid);
+            if (bb.succ1) {
+                BlockID sbid = bb.succ1->bid;
+                q.push(make_pair(bid,sbid));
+            }
 
-        if (bb.succ1) {
-            BlockID sbid = bb.succ1->bid;
-            q.push(make_pair(bid,sbid));
-        }
-
-        if (bb.succ2) {
-            BlockID sbid = bb.succ2->bid;
-            q.push(make_pair(bid,sbid));
+            if (bb.succ2) {
+                BlockID sbid = bb.succ2->bid;
+                q.push(make_pair(bid,sbid));
+            }
         }
     }
 
@@ -191,12 +192,19 @@ getOrInitVarState(Variable var,
         return vs;
     }
 
-    //we currently assume all memory variables are different
     if (var.type == JVAR_MEMORY ||
         var.type == JVAR_POLYNOMIAL) {
         VarState *vs = new VarState(var,function.entry, false);
-        function.allStates.insert(vs);
+        //first link memory nodes and then add memory variables to . Janus assumed that all memory variables are different. TODO: check if the version numbers od base+disp are coming from the same SSA version. 
         linkMemoryNodes(var, vs, latestDefs, function);
+        for(auto &it : function.allStates){
+            if(*it == *vs){
+               if(it->pred.size() != vs->pred.size()) break;
+               //check for pred
+               return it;
+            }
+        }
+        function.allStates.insert(vs);
         return vs;
     }
 
@@ -257,7 +265,6 @@ updateSSANodes(Function &function,
 {
     BasicBlock &bb = function.entry[bid];
     vector<Variable> inputs;
-
     //Register phi nodes in the definitions
     for (auto phi: bb.phiNodes) {
         Variable var = (Variable)(*phi);
@@ -325,6 +332,14 @@ static void linkMemoryNodes(Variable var, VarState *vs,
         Variable ivar;
         ivar.type = JVAR_CONSTANT;
         ivar.value = var.value;
+        VarState *ivs = new VarState(ivar,function.entry, false);
+        function.allStates.insert(ivs);
+        vs->pred.insert(ivs);
+    }
+    if (var.scale) {
+        Variable ivar;
+        ivar.type = JVAR_CONSTANT;
+        ivar.value = var.scale;
         VarState *ivs = new VarState(ivar,function.entry, false);
         function.allStates.insert(ivs);
         vs->pred.insert(ivs);
