@@ -110,7 +110,7 @@ static void linkRelocation(JanusContext *jc, Function *pltFunc)
     }
 }
 
-///Disassemble for the given function
+//Disassemble for the given function
 void disassemble(Function *function)
 {
     //if already disassembled, return
@@ -452,7 +452,10 @@ static void liftInstruction(Instruction &instr, Function *function)
     }
 
     else if (minstr->opcode == X86_INS_MOVDQU ||
-             minstr->opcode == X86_INS_MOVDQA) {
+             minstr->opcode == X86_INS_MOVDQA ||
+             minstr->opcode == X86_INS_MOVUPS || 
+             minstr->opcode == X86_INS_MOVUPD ||
+             minstr->opcode == X86_INS_MOVLPS) {
         Variable var = minstr->operands[0].lift(instr.pc + instr.minstr->pc);
         minstr->operands[0].access = OPND_WRITE;
         minstr->operands[1].access = OPND_READ;
@@ -460,12 +463,12 @@ static void liftInstruction(Instruction &instr, Function *function)
         function->allStates.insert(vs);
         instr.outputs.push_back(vs);
     }
+
 }
 
 void getInstructionInputs(janus::MachineInstruction *minstr, vector<Variable> &v)
 {
     if (minstr->fineType == INSN_NOP) return;
-
     for(int i=0; i<minstr->opndCount; i++)
     {
         if (minstr->operands[i].access == OPND_READ ||
@@ -491,7 +494,7 @@ void getInstructionInputs(janus::MachineInstruction *minstr, vector<Variable> &v
 
     else if (minstr->isLEA()) {
         if (v[0].type == JVAR_STACK) {
-            v[0].base = JREG_RSP;
+            v[0].base = JREG_RSP;               //how will we ever get here is v is empty? 
         }
         v[0].type = JVAR_POLYNOMIAL;
     }
@@ -517,7 +520,10 @@ void getInstructionInputs(janus::MachineInstruction *minstr, vector<Variable> &v
         v.push_back(var);
     }
     else if (minstr->opcode == X86_INS_MOVDQU ||
-             minstr->opcode == X86_INS_MOVDQA) {
+             minstr->opcode == X86_INS_MOVDQA ||
+             minstr->opcode == X86_INS_MOVUPS || 
+             minstr->opcode == X86_INS_MOVUPD ||
+             minstr->opcode == X86_INS_MOVLPS) {
         Variable var = minstr->operands[1].lift(minstr->pc + minstr->size);
         v.push_back(var);
     }
