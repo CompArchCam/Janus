@@ -94,7 +94,7 @@ buildBasicBlocks(Function &function)
     marks[0] += BB_LEADER;
 
     uint32_t instrCount = instrs.size();
-
+   
     for (InstID id=0; id<instrCount; id++) {
 
         Instruction &instr = instrs[id];
@@ -125,6 +125,13 @@ buildBasicBlocks(Function &function)
                     //find this target in the instruction table
                     auto query = instrTable.find(target);
                     if (query == instrTable.end()) {
+
+                        auto query2 = functionMap.find(target);
+                        if(query2 != functionMap.end()){ //if it is also not found in functionMap i.e. jumps to a function
+                            if(instr.opcode == Instruction::DirectBranch){
+                                //TODO:
+                            }      
+                        }
                         notRecognised.insert(id);
                     }
                     //if found the target instruction, mark the target as a leader
@@ -308,8 +315,9 @@ buildBasicBlocks(Function &function)
                     function.terminations.insert(block->bid);
                     block->terminate = true;
                 }
-                else
+                else{
                     function.unRecognised.insert(block->bid);
+                }
             }
         } else {
             for (auto succBlockID: (*query).second) {

@@ -427,6 +427,8 @@ livenessAnalysis(Function *function)
     RegSet *liveRegOut = new RegSet[numBlocks];
 
     RegSet returnSet;
+    RegSet paramSet; //parameters for call instructions
+    RegSet XMMSet; //parameters for call instructions
     /* init */
     memset(regDefs, 0, numBlocks * sizeof(RegSet));
     memset(regUses, 0, numBlocks * sizeof(RegSet));
@@ -435,18 +437,42 @@ livenessAnalysis(Function *function)
 
 #ifdef JANUS_X86
     returnSet.insert(JREG_RAX);
+    paramSet.insert(JREG_RDI); 
+    paramSet.insert(JREG_RSI); 
+    paramSet.insert(JREG_RDX); 
+    paramSet.insert(JREG_RCX); 
+    paramSet.insert(JREG_R8); 
+    paramSet.insert(JREG_R9);
+    XMMSet.insert(JREG_XMM0);
+    XMMSet.insert(JREG_XMM1);
+    XMMSet.insert(JREG_XMM2);
+    XMMSet.insert(JREG_XMM3);
+    XMMSet.insert(JREG_XMM4);
+    XMMSet.insert(JREG_XMM5);
+    XMMSet.insert(JREG_XMM6);
+    XMMSet.insert(JREG_XMM7);
 #elif JANUS_AARCH64
     returnSet.insert(JREG_X0);
 #endif
-
     /* Step 1: conclude the register USE DEF sets */
     for (int b=0; b<numBlocks; b++) {
         BasicBlock &bb = entry[b];
         for (int i=0; i<bb.size; i++) {
             Instruction &instr = bb.instrs[i];
+            if(instr.opcode == Instruction::Call){ //this is because we dont always get a correst set from guessCallArguments
+                instr.regReads.merge(paramSet);
+            }
             //skip invisible reads within the same block
             regUses[b].merge(instr.regReads - regDefs[b]);
             regDefs[b].merge(instr.regWrites);
+        }
+    }
+    //we perform conservative analysis by propagating critical register values upwards for bb for which successor is not known i.e. indirect control flow
+    for (int b=0; b<numBlocks; b++) {
+        if(function->unRecognised.count(b)){  //last instruction is control flow with target unknown.
+           liveRegOut[b].merge(paramSet);
+           liveRegOut[b].merge(XMMSet);
+           liveRegOut[b].merge(returnSet);
         }
     }
 
@@ -480,6 +506,7 @@ livenessAnalysis(Function *function)
         }
     //until it converges
     } while(!converge);
+    
 
     /* Step 3: conclude liveIn and liveOut for each instruction */
     for (int b=0; b<numBlocks; b++) {
@@ -489,7 +516,6 @@ livenessAnalysis(Function *function)
         RegSet liveIn;
         for (int i=bb.size-1; i>=0; i--) {
             Instruction &instr = bb.instrs[i];
-
             iLiveRegOut[instr.id] = liveOut;
             liveIn = liveOut - instr.regWrites + instr.regReads;
             iLiveRegIn[instr.id] = liveIn;
