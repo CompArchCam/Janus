@@ -247,6 +247,7 @@ liftOpcode(MachineInstruction *minstr)
             case X86_INS_SAR:
                 return Instruction::AShr;
             //and
+            case X86_INS_PAND:
             case X86_INS_AND:
             case X86_INS_ANDPD:
             case X86_INS_ANDPS:
@@ -527,6 +528,8 @@ void getInstructionInputs(janus::MachineInstruction *minstr, vector<Variable> &v
         Variable var = minstr->operands[1].lift(minstr->pc + minstr->size);
         v.push_back(var);
     }
+    //how about POP??
+
 }
 
 void linkArchSpecSSANodes(Function &function, map<BlockID, map<Variable, VarState*> *> &globalDefs)
