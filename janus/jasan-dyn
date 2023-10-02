@@ -4,6 +4,11 @@ my_dir="$(dirname "$0")"
 
 source $my_dir/janus_header
 
+blue_color="\e[34m"
+red_color="\e[31m"
+bold_style="\e[1m"
+reset="\e[0m"
+
 function usage {
     echo "Address Sanitizer"
     echo "Usage: "
@@ -19,7 +24,7 @@ fi
 binfile=$1
 shift
 #shift
-
+echo $binfile
 if [ ! -f $binfile ];
 then
    echo "Executable $binfile does not exist in the binaries folder."
@@ -27,10 +32,15 @@ then
 fi
 
 binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
-datadir=/local/scratch-2/ma843/rwdir-re
+scratchdir=/local/scratch/ma843
+datadir=$scratchdir/rwdir-re
+#datadir=/local/scratch/ma843/rwdir-re
 #hintfile="$binfile.jrs" 
 #hintfile="$binname.jrs" 
 hintfile="$datadir/$binname.jrs"
+
+echo -e "${bold_style}Binary: ${red_color} $binfile${reset}"
+echo -e "${bold_style}RWSchedule: ${blue_color} $hintfile ${reset}"
 
 if [ ! -f $hintfile ];
 then 
@@ -39,10 +49,5 @@ then
 fi
 
 
-#echo "$TOOLDIR/bin64/drrun -c $JANUSLIB/libjsbcets.so @$hintfile @1 @0 -- $binfile $*"
-#gdb --args $TOOLDIR/bin64/drrun -debug -c $JANUSLIB/libjsbcets.so @$hintfile @1 @0 -- $binfile $@
-#gdb --args $TOOLDIR/bin64/drrun -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
-#LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
-#LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
-LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
-#$TOOLDIR/bin64/drrun -opt_cleancall 2  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
+LD_PRELOAD=$scratchdir/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
+#LD_PRELOAD=/local/scratch/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -debug -loglevel 2 -checklevel 0 -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@

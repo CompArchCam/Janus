@@ -148,8 +148,11 @@ namespace janus {
         bool                            isVectorInstruction();
         /** \brief returns whether this instruction uses xmm, ymm, or zmm registers */
         bool                            isXMMInstruction();
+        bool                            isFPinstruction();
         /** \brief returns whether this instructions uses the FPU register stack */
-        bool                            isFPU();
+        bool                            isFPU87();
+        bool                            isFP_SSE();
+        bool                            isFP_AVX();
         /** \brief returns whether this instruction reads/writes any register (excluding EFLAGS) 
          *         which is not given as an operand.
          */
@@ -165,6 +168,8 @@ namespace janus {
         uint32_t                        readsStatusFlags();
         uint32_t                        updatesArithFlags(); //AF, CF, ZF, SF, PF, OF
         uint32_t                        readsArithFlags();
+        uint32_t                        readsintArithFlags();
+        uint32_t                        updatesintArithFlags();
         void                            printEFlags();
     };
 

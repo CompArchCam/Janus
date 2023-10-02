@@ -231,6 +231,10 @@ void analyseStack(Function *function)
            function->canaryReadIns = instr.pc;
            function->hasCanary = true;
         }
+        //added for those functions where it may be in entry (for GCC code, see below for clang)
+        if(instr.checksStackCanary()){
+            function->canaryCheckIns = instr.pc;
+        }
     }
     function->totalFrameSize = function->stackFrameSize + size;
     //TODO issue: in some functions, we already have just one entry/exit block

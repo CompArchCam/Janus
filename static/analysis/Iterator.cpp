@@ -443,10 +443,13 @@ bool postIteratorAnalysis(janus::Loop *loop)
             initExprs = miter->initExprs;
             initExprs->extendToFuncScope(loop->parent, loop);
             LOOPLOG("\t\tExpand init expr to: "<<*initExprs<<endl);
+            miter->initExprs = initExprs;
         }
         else if (miter->initKind == Iterator::INTEGER) {
             initExprs = new ExpandedExpr(ExpandedExpr::SUM);
             initExprs->addTerm(Expr(miter->initImm));
+            LOOPLOG("\t\tExpand init expr to: "<<*initExprs<<endl);
+            miter->initExprs = initExprs;
         }
         else if (miter->initKind == Iterator::SINGLE_VAR) {
             initExprs = expandExpr(miter->initVar->expr, loop->parent, loop);
@@ -470,10 +473,13 @@ bool postIteratorAnalysis(janus::Loop *loop)
             finalExprs = miter->finalExprs;
             finalExprs->extendToFuncScope(loop->parent, loop);
             LOOPLOG("\t\tExpand final expr to: "<<*finalExprs<<endl);
+            miter->finalExprs = finalExprs;
         }
         else if (miter->finalKind == Iterator::INTEGER) {
             finalExprs = new ExpandedExpr(ExpandedExpr::SUM);
             finalExprs->addTerm(Expr(miter->finalImm));
+            LOOPLOG("\t\tExpand final expr to: "<<*finalExprs<<endl);
+            miter->finalExprs = finalExprs;
         }
         else if (miter->finalKind == Iterator::SINGLE_VAR) {
             finalExprs = expandExpr(miter->finalVar->expr, loop->parent, loop);

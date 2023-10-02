@@ -26,7 +26,8 @@ else
 fi
 
 dot -Tpdf $dotfile | csplit --quiet --elide-empty-files --prefix=$tempfile - "/%%EOF/+1" "{*}" 
-pdftk $tempfile* cat output $binfile.pdf 
+#pdftk $tempfile* cat output $binfile.pdf 
+qpdf --empty --pages $tempfile* -- $binfile.pdf 
 rm -f $tempfile*
 
 echo "CFG graph $binfile.pdf created"

@@ -32,7 +32,7 @@ VarState::VarState() {
     constLoop = NULL;
     dependsOnMemory = false;
     trackable = false;
-    mallocsite = NULL;
+    mallocsite = 0;
 }
 
 VarState::VarState(Variable var) {
@@ -53,7 +53,7 @@ VarState::VarState(Variable var) {
     constLoop = NULL;
     dependsOnMemory = false;
     trackable = false;
-    mallocsite = NULL;
+    mallocsite = 0;
 }
 
 VarState::VarState(Variable var, BasicBlock *block, Instruction* lastModified)
@@ -74,7 +74,7 @@ VarState::VarState(Variable var, BasicBlock *block, Instruction* lastModified)
     constLoop = NULL;
     dependsOnMemory = false;
     trackable = false;
-    mallocsite = NULL;
+    mallocsite = 0;
 }
 
 VarState::VarState(Variable var, BasicBlock *block, bool isPHI)
@@ -94,7 +94,7 @@ VarState::VarState(Variable var, BasicBlock *block, bool isPHI)
     constLoop = NULL;
     dependsOnMemory = false;
     trackable = false;
-    mallocsite = NULL;
+    mallocsite = 0;
 }
 
 Variable::Variable(const JVar &var)

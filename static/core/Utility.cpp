@@ -122,13 +122,13 @@ janus::operator==(RegSet a, RegSet b)
 /*--- Methods for FlagSet-----*/
 
 void
-FlagSet::insert(uint32_t flag)
+FlagSet::insert(uint64_t flag)
 {
     bits = bits | flag;
 }
 
 void
-FlagSet::remove(uint32_t flag)
+FlagSet::remove(uint64_t flag)
 {
     bits = bits & ~(flag);
 }
@@ -140,7 +140,7 @@ FlagSet::complement()
 }
 
 bool
-FlagSet::contains(uint32_t flag)
+FlagSet::contains(uint64_t flag)
 {
     return (bits & flag);
 }

@@ -17,11 +17,14 @@ then
 fi
 
 stat_mode=$1
-#shift
 binfile=$2
 #shift
+#shift
 
-hintfile="$binfile.jrs"
+blue_color="\e[34m"
+red_color="\e[31m"
+bold_style="\e[1m"
+reset="\e[0m"
 
 if [ ! -f $binfile ];
 then
@@ -29,10 +32,22 @@ then
    exit
 fi
 echo $binfile | rev | cut -d/ -f1 | rev
-binfile_name=$(echo $binfile | rev | cut -d/ -f1 | rev)
-echo "BINFILE: $binfile_name"
-outfile_s=/home/ma843/rwschedule/${binfile_name}.s
-objdump -d $binfile > $outfile_s
+
+
+scratchdir=/local/scratch/ma843
+datadir=$scratchdir/rwdir-re
+binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
+hintfile=$datadir/$binname.jrs
+asmfile="$datadir/$binname.s"
+
+echo -e "${bold_style}Binary: ${red_color} $binfile${reset}"
+echo -e "${bold_style}RWSchedule: ${blue_color} $hintfile ${reset}"
+echo -e "${bold_style}asmfile: ${blue_color} $asmfile ${reset}"
+
+if [ ! -f $asmfile ];
+then
+   objdump -d $binfile > $asmfile
+fi
 if [ $stat_mode == "opt" ];
 then
     $JANUSBIN/analyze -aso $binfile

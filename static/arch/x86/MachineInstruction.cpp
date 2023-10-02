@@ -27,7 +27,7 @@ MachineInstruction::MachineInstruction(InstID id, void *cs_handle, void *cs_inst
     cs_x86 *x86;
     x86 = &(detail->x86);
     eflags = x86->eflags;
-
+   // cout<<"elfags: "<<hex<<eflags<<endl;
     /* Assign instruction names */
     int mnemonicLength = strlen(instr->mnemonic);
     int opLength = strlen(instr->op_str);
@@ -193,14 +193,28 @@ MachineInstruction::readsOFlag(){
 }
 uint32_t
 MachineInstruction::readsArithFlags(){ // AF,SF, ZF, CF, PF,OF
+   if(opcode == X86_INS_SBB || opcode == X86_INS_ADC) return 1;
    return ((eflags & ARITH_FLAGS_READ) ? 1 : 0);
 }
 uint32_t
 MachineInstruction::updatesArithFlags(){
+   cout<<hex<<"eflags: "<<eflags<<endl;
+   return ((eflags & (ARITH_FLAGS_MODIFIED | ARITH_FLAGS_SET | ARITH_FLAGS_RESET)) ? 1 : 0);
+}
+uint32_t
+MachineInstruction::readsintArithFlags(){ // AF,SF, ZF, CF, PF,OF
+   if(isFPU87()) return 0;
+   if(opcode == X86_INS_SBB || opcode == X86_INS_ADC) return 1;
+   return ((eflags & ARITH_FLAGS_READ) ? 1 : 0);
+}
+uint32_t
+MachineInstruction::updatesintArithFlags(){ // AF,SF, ZF, CF, PF,OF
+   if(isFPU87()) return 0;
    return ((eflags & (ARITH_FLAGS_MODIFIED | ARITH_FLAGS_SET | ARITH_FLAGS_RESET)) ? 1 : 0);
 }
 uint32_t
 MachineInstruction::readsStatusFlags(){ //AF,SF, ZF, CF, PF
+   if(opcode == X86_INS_SBB) return 1;
    return ((eflags & STATUS_FLAG_READ) ? 1 : 0);
 
 }
@@ -331,18 +345,60 @@ MachineInstruction::isMOV()
             opcode == X86_INS_MOVUPS    || 
             opcode == X86_INS_MOVSD     ||
             opcode == X86_INS_MOVSS     ||
+            opcode == X86_INS_MOVSXD    ||
             opcode == X86_INS_VMOVSS    ||
             opcode == X86_INS_VMOVAPS   ||
             opcode == X86_INS_VUCOMISS  ||
             opcode == X86_INS_CVTSI2SD  ||
             opcode == X86_INS_CVTSI2SS  ||
+            opcode == X86_INS_CVTTSS2SI ||
+            opcode == X86_INS_CVTDQ2PD  ||
+            opcode == X86_INS_CVTDQ2PS  ||
+            opcode == X86_INS_CVTPD2DQ  ||
+            opcode == X86_INS_CVTPD2PS  ||
+            opcode == X86_INS_CVTPS2DQ  ||
+            opcode == X86_INS_CVTPS2PD  ||
+            opcode == X86_INS_CVTSD2SI  ||
+            opcode == X86_INS_CVTSD2SS  ||
+            opcode == X86_INS_CVTSS2SD  ||
+            opcode == X86_INS_CVTSS2SI   ||
+            opcode == X86_INS_CVTTPD2DQ ||
+            opcode == X86_INS_CVTTPS2DQ ||
+            opcode == X86_INS_CVTTSD2SI ||
             opcode == X86_INS_MOVSXD    ||
             opcode == X86_INS_MOVDQA    ||
+            opcode == X86_INS_MOVDQU    ||
             opcode == X86_INS_MOVZX     ||
             opcode == X86_INS_MOVSX     ||
             opcode == X86_INS_MOVSW     ||
             opcode == X86_INS_MOVABS    ||
-            opcode == X86_INS_CDQE);
+            opcode == X86_INS_CDQ       ||
+            opcode == X86_INS_CDQE      ||
+                      //conditional move
+            opcode == X86_INS_CMOVA     ||
+            opcode == X86_INS_CMOVAE    ||
+            opcode == X86_INS_CMOVB     ||
+            opcode == X86_INS_CMOVBE    ||
+            opcode == X86_INS_FCMOVBE   ||
+            opcode == X86_INS_FCMOVB    ||
+            opcode == X86_INS_CMOVE     ||
+            opcode == X86_INS_FCMOVE    ||
+            opcode == X86_INS_CMOVG     ||
+            opcode == X86_INS_CMOVGE    ||
+            opcode == X86_INS_CMOVL     ||
+            opcode == X86_INS_CMOVLE    ||
+            opcode == X86_INS_FCMOVNBE  ||
+            opcode == X86_INS_FCMOVNB   ||
+            opcode == X86_INS_CMOVNE    ||
+            opcode == X86_INS_FCMOVNE   ||
+            opcode == X86_INS_CMOVNO    ||
+            opcode == X86_INS_CMOVNP    ||
+            opcode == X86_INS_FCMOVNU   ||
+            opcode == X86_INS_CMOVNS    ||
+            opcode == X86_INS_CMOVO     ||
+            opcode == X86_INS_CMOVP     ||
+            opcode == X86_INS_FCMOVU    ||
+            opcode == X86_INS_CMOVS);
 }
 
 bool
@@ -368,15 +424,28 @@ MachineInstruction::isLEA()
 {
     return (opcode == X86_INS_LEA);
 }
-
+//TODO: missing opcodes here. match with opcodes in Disassemble.cpp
 bool
 MachineInstruction::isADD()
 {
     return (opcode == X86_INS_ADD    ||
             opcode == X86_INS_ADDSS  ||
             opcode == X86_INS_ADDSD  ||
+            opcode == X86_INS_ADDPD  ||
+            opcode == X86_INS_ADDPS  ||
+            opcode == X86_INS_FADD  ||
+            opcode == X86_INS_FIADD  ||
+            opcode == X86_INS_FADDP  ||
+            opcode == X86_INS_PADDB  ||
+            opcode == X86_INS_PADDSB  ||
+            opcode == X86_INS_PADDSW  ||
+            opcode == X86_INS_PADDW  ||
+            opcode == X86_INS_PADDUSB  ||
+            opcode == X86_INS_PADDUSW  ||
             opcode == X86_INS_VADDSS ||
             opcode == X86_INS_VADDSD ||
+            opcode == X86_INS_VADDPS ||
+            opcode == X86_INS_VADDPD ||
             opcode == X86_INS_PADDD  ||
             opcode == X86_INS_PADDQ);
 }
@@ -515,9 +584,58 @@ MachineInstruction::hasImplicitOperands() {
     return true;
 }
 
+bool
+MachineInstruction::isFPinstruction(){
+    return (isFPU87() || isFP_SSE() || isFP_AVX());
+}
+
+//TODO: SSE1, SSE2 , SSE3, SSE4
+bool
+MachineInstruction::isFP_SSE(){
+    return   (opcode == X86_INS_ADDPD ||
+            opcode ==  X86_INS_ADDPS ||
+            opcode == X86_INS_ADDSD ||
+            opcode == X86_INS_ADDSS ||
+            opcode == X86_INS_SUBSD ||
+            opcode == X86_INS_SUBSS ||
+            opcode == X86_INS_SUBPD ||
+            opcode == X86_INS_SUBPS ||
+            opcode == X86_INS_MULSD ||
+            opcode == X86_INS_MULPD ||
+            opcode == X86_INS_MULPS ||
+            opcode == X86_INS_MULSS ||
+            opcode == X86_INS_DIVSD ||
+            opcode == X86_INS_DIVSS ||
+            opcode == X86_INS_DIVPD || 
+            opcode == X86_INS_DIVPS ||
+            opcode == X86_INS_ANDPD ||
+            opcode == X86_INS_ANDPS ||
+            opcode ==  X86_INS_ANDNPD || 
+            opcode == X86_INS_ANDNPS );
+}
+//TODO: AVX, AVX2, AVX512
+bool
+MachineInstruction::isFP_AVX(){
+    return  (opcode ==  X86_INS_VADDPD ||
+            opcode == X86_INS_VADDPS ||
+            opcode == X86_INS_VADDSD ||
+            opcode == X86_INS_VADDSS ||
+            opcode == X86_INS_VMULSD ||
+            opcode == X86_INS_VMULSS ||
+            opcode == X86_INS_VMULPD ||
+            opcode == X86_INS_VMULPS ||
+            opcode == X86_INS_VDIVSD ||
+            opcode == X86_INS_VDIVSS ||
+            opcode == X86_INS_VDIVPS ||
+            opcode == X86_INS_VDIVPD ||
+            opcode == X86_INS_VANDNPD || 
+            opcode == X86_INS_VANDNPS ||
+            opcode == X86_INS_VANDPD ||
+            opcode == X86_INS_VANDPS);
+}
 
 bool
-MachineInstruction::isFPU(){
+MachineInstruction::isFPU87(){
     return
         (opcode == X86_INS_FABS ||
         opcode == X86_INS_FADD ||

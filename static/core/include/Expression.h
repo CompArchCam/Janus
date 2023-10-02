@@ -119,7 +119,7 @@ public:
     Expr(ExpandedExpr *ee):kind(EXPANDED),ee(ee),vs(NULL),expandedLoopForm(NULL),expandedFuncForm(NULL),expandedCyclicForm(NULL),iteratorTo(NULL){}
     /** \brief Construct an Expr for given variable state */
     Expr(VarState *vs);
-
+    Expr(ExpandedExpr ee);
     ///Add the value of another expr to the current expr
     void                            add(Expr &expr);
     ///Add the expanded expression into the current expr
@@ -278,6 +278,8 @@ public:
     void                            multiply(Expr expr);
     ///Divide by another Expr
     void                            divide(Expr multi);
+    ///shl
+    ExpandedExpr                    shl(Expr &expr);
     int                             size() {return exprs.size();}
     ///Return true if the expression has no terms that are related to loop iterators
     bool                            isConstant();
@@ -338,6 +340,8 @@ janus::ExpandedExpr *expandExpr(/*IN*/janus::Expr *expr, janus::Loop *loop);
  */
 janus::ExpandedExpr *expandExpr(/*IN*/janus::Expr *expr, janus::Function *func, janus::Loop *loop);
 
+janus::ExpandedExpr *expandExpr(/*IN*/janus::Expr *expr, janus::Function *func);
+
 janus::Expr *newExpr(std::set<janus::Expr*> &exprs);
 janus::Expr *newExpr(int64_t value, std::set<janus::Expr*> &exprs);
 janus::Expr *newExpr(janus::VarState *vs, std::set<janus::Expr*> &exprs);
@@ -348,5 +352,8 @@ bool buildLoopExpr(janus::Expr *expr, janus::ExpandedExpr *expanded, janus::Loop
 bool buildFuncExpr(janus::Expr *expr, janus::ExpandedExpr *expanded,
                    janus::Function *func, janus::Loop *loop,
                    bool stopAtMemory, janus::Variable *stopAtVariable);
-
+/*Graph travel without the loop information */
+bool buildFuncExpr(janus::Expr *expr, janus::ExpandedExpr *expanded,
+                   janus::Function *func,
+                   bool stopAtMemory, janus::Variable *stopAtVariable);
 #endif

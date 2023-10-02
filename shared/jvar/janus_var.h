@@ -14,6 +14,7 @@ typedef enum _jvar_type
 {
     ///Register variables
     JVAR_REGISTER = 0,
+//    JVAR_REGISTER = 1,
     ///Stack variables (only in form stack with displacement)
     JVAR_STACK,
     ///Generic memory variables (in form: [base+index*scale+disp])
@@ -60,6 +61,7 @@ typedef struct _jvar
     uint8_t         shift_value;
     uint8_t         size;
     JVarType        type:16;
+    uint8_t         reg; //added by MA
 } JVar;
 
 /** \brief A package of JVar, can be casted from JVar */
@@ -71,6 +73,8 @@ typedef struct _jvar_compact
         {
             uint64_t data1;
             uint64_t data2;
+            uint64_t data3;
+            uint64_t data4;
         };
     };
 } JVarPack;
