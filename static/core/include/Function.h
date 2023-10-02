@@ -52,6 +52,8 @@ namespace janus {
         std::set<VarState*>                    allStates;
         ///Entry block of the function CFG
         BasicBlock                             *entry;
+        //set of all basic blocks with no incoming edge, including the entry block. this is to deal with the corner cases where we may have a basic block that does not have incoming edge known statically (it could be a target of indirect branch).
+        std::set<BlockID>                      danglingBlocks;
         ///Block size
         uint32_t                               numBlocks;
         ///Actual storage of all the function's basic blocks
@@ -78,6 +80,8 @@ namespace janus {
         std::set<BlockID>                      unRecognised;
         ///Block id which block terminates this function
         std::set<BlockID>                      terminations;
+        ///Instr id which calls a long jmp
+        std::set<InstID>                      longjmps;
         ///Block id which block ends with a return instruction
         std::set<BlockID>                      returnBlocks;
         ///Split point for oversized basic block (only used for dynamic modification)
@@ -87,6 +91,10 @@ namespace janus {
         ///The initial states for all variables found in this function
         std::map<Variable, VarState*>          inputStates;
 
+        ///all instructions which performs a subcall through jump
+        std::map<InstID, Function *>           jumpToFunc;
+        ///all function id that is called by the current function through jump
+        std::set<FuncID>                       jumpCalls;
         /* --------------------------------------------------------------
          *                Architecture specific information
          * ------------------------------------------------------------- */

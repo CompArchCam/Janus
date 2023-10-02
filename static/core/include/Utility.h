@@ -84,16 +84,16 @@ bool operator!=(BitVector &a, BitVector &b);
 
 class FlagSet {
 public:
-    uint32_t            bits;
+    uint64_t            bits;
     /** \brief Constructs an empty *FlagSet* (with all bits set to 0). */
     FlagSet()            {bits = 0;}
     /** \brief Constructs a *FlagSet* with the given bits set. */
-    FlagSet(uint32_t bits):bits(bits){}
+    FlagSet(uint64_t bits):bits(bits){}
 
-    void                insert(uint32_t flag);
-    void                remove(uint32_t flag);
+    void                insert(uint64_t flag);
+    void                remove(uint64_t flag);
     void                complement();
-    bool                contains(uint32_t flag);
+    bool                contains(uint64_t flag);
     void                merge(FlagSet set);
     void                subtract(FlagSet &set);
     void                intersect(FlagSet &set);
