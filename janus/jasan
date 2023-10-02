@@ -1,8 +1,15 @@
 #!/bin/bash     
-set -x
+#set -x
 my_dir="$(dirname "$0")"
 
 source $my_dir/janus_header
+
+blue_color="\e[34m"
+red_color="\e[31m"
+bold_style="\e[1m"
+reset="\e[0m"
+
+
 
 function usage {
     echo "Address Sanitizer"
@@ -21,17 +28,23 @@ stat_mode=$1
 binfile=$2
 shift
 shift
-hintfile="$binfile.jrs"
+#hintfile="$binfile.jrs"
 
 if [ ! -f $binfile ];
 then
    echo "Executable $binfile does not exist in the binaries folder."
    exit
 fi
-
+scratchdir=/local/scratch/ma843
 binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
-datadir=/home/ma843/rwschedule
+datadir=$scratchdir/rwdir-re
+hintfile=$datadir/$binname.jrs
 asmfile="$datadir/$binname.s"
+
+echo -e "${bold_style}Binary: ${red_color} $binfile${reset}"
+echo -e "${bold_style}RWSchedule: ${blue_color} $hintfile ${reset}"
+echo -e "${bold_style}asmfile: ${blue_color} $asmfile ${reset}"
+
 if [ ! -f $asmfile ];
 then
    objdump -d $binfile > $asmfile
@@ -55,8 +68,5 @@ then
     $JANUSBIN/analyze -asn $binfile
 fi
 
-#export LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so
-#gdb --args $TOOLDIR/bin64/drrun -debug -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
-#LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
-LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
+LD_PRELOAD=/local/scratch/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
 #$TOOLDIR/bin64/drrun -debug -checklevel 0 -loglevel 4 -no_vm_base_near_app -vm_base 0x200000000000 -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@

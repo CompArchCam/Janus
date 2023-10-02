@@ -1,0 +1,39 @@
+#!/bin/bash     
+#set -x
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+function usage {
+    echo "DynamoRIO empty client"
+    echo "Usage: "
+    echo "./jnull <executable> [executable_args ...]"
+}
+
+if [ $# -lt "1" ]
+then 
+    usage
+    exit
+fi
+
+binfile=$1
+shift
+
+
+if [ ! -f $binfile ];
+then
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+t1=$(date +%s%N)
+$binfile $@
+t2=$((($(date +%s%N) - $t1)/1000))
+t2=$((($(date +%s%N) - $t1)/1000000))
+t2=$((($tx- $t1)/1000))
+echo "Native Time taken: $t2 us"
+ts=$(date +%s%N)
+$TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000 -- $binfile $@
+tt=$((($(date +%s%N) - $ts)/1000000))
+tt=$((($(date +%s%N) - $ts)/1000))
+echo "DR Time taken: $tt us"
