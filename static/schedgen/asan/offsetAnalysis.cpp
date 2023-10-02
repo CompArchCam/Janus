@@ -29,15 +29,15 @@ isAllocCall(Instruction *instr){
 PCAddress
 traceToAllocPC(VarState  *vs){
 
-   PCAddress pc_malloc = NULL;
+   PCAddress pc_malloc = 0;
    VarState *prevNode;
    //1. check if this node already trackable to malloc call
    //if(vs->trackable) return true;
-   if(vs->mallocsite!=NULL) return vs->mallocsite;
+   if(vs->mallocsite) return vs->mallocsite;
     
    //TODO: if vs alreay being tracked, stop here and return false to avoid loop. else add it to currently tracked
    //TODO: remove from currently tracked list before returning.
-   if(currset.count(vs->id)) {currset.erase(vs->id); return NULL;}
+   if(currset.count(vs->id)) {currset.erase(vs->id); return 0;}
    currset.insert(vs->id);
    //2. If MEMORY NODE, check if this node has an immediate pred which is trackable to malloc, else traverse pred
    if(vs->type == JVAR_MEMORY || vs->type == JVAR_POLYNOMIAL){ //only MEMORY and POLYNOMIAL nodes will have pred
@@ -52,7 +52,7 @@ traceToAllocPC(VarState  *vs){
               for(auto it: pred->pred){
                   if(it != pred){
                       pc_malloc = traceToAllocPC(it); //TODO: could a later false can overwrite an earlier true?
-                      if(pc_malloc !=NULL) {currset.erase(it->id); vs->mallocsite = pc_malloc; return pc_malloc;}
+                      if(pc_malloc) {currset.erase(it->id); vs->mallocsite = pc_malloc; return pc_malloc;}
                   }
               }
           }//added new - end
@@ -61,13 +61,13 @@ traceToAllocPC(VarState  *vs){
 #if VERBOSE
               cout<<"pred:"<<pred<<endl;
 #endif
-              if(!prevNode) {currset.erase(vs->id); return NULL;} //last node here. cannot go further. 
+              if(!prevNode) {currset.erase(vs->id); return 0;} //last node here. cannot go further. 
               //else if(prevNode->trackable)
-              else if(prevNode->mallocsite != NULL)
+              else if(prevNode->mallocsite)
                     {currset.erase(vs->id); vs->mallocsite= prevNode->mallocsite; return prevNode->mallocsite;}
               else{                       //track through the prev node up the SSA graph
                     pc_malloc= traceToAllocPC(prevNode);
-                    if(pc_malloc!=NULL) break; //added
+                    if(pc_malloc) break; //added
                }
           }
        }
@@ -80,8 +80,8 @@ traceToAllocPC(VarState  *vs){
    }
 
    //3. if not found through pred or if JVAR_REGISTER, check thru lasmodified instruction.
-   if(pc_malloc == NULL || vs->type == JVAR_REGISTER){
-      if(vs->lastModified == NULL) return NULL;   //TODO: Also look into going to the next step
+   if(pc_malloc == 0 || vs->type == JVAR_REGISTER){
+      if(vs->lastModified == NULL) return 0;   //TODO: Also look into going to the next step
 #if VERBOSE
       cout<<"last modified:"<<vs->lastModified->id<<endl;
 #endif
@@ -108,7 +108,7 @@ traceToAllocPC(VarState  *vs){
                       if(pred != vs){
                           ip= pred;
                           pc_malloc= traceToAllocPC(ip); //TODO: could a later false can overwrite an earlier true?
-                          if(pc_malloc!=NULL) break;
+                          if(pc_malloc) break;
                       }
                   }
               }
@@ -117,7 +117,7 @@ traceToAllocPC(VarState  *vs){
                   cout<<"searching for ip: "<<ip<<endl;
 #endif
                   pc_malloc= traceToAllocPC(ip); //TODO: could a later false can overwrite an earlier true?
-                  if(pc_malloc!=NULL) break;
+                  if(pc_malloc) break;
               
               }
           }

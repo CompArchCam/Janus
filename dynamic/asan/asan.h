@@ -35,6 +35,7 @@ typedef struct _access {
 
 bool inRegSet(uint64_t bits, uint32_t reg)
 {
+  //if(reg >= 77) reg = reg - 60; //for XMM registers
   if((bits >> (reg-1)) & 1)
       return true;
   if(bits == 0 || bits == 1)

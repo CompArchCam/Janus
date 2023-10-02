@@ -3,7 +3,7 @@
 #include "IO.h"
 #include "Arch.h"
 #include "Alias.h"
-//#include "offsetAnalysis.h"
+#include "offsetAnalysis.h"
 #include <algorithm>
 #include <assert.h>
 #include <regex>
@@ -19,7 +19,7 @@ using namespace std;
 static int count_rule=0;
 static bool has_debug_info = false;
 static bool null_rules = true;
-static int detect_stack_overflows = 0;
+static int detect_stack_overflows = 1;
 std::map<PCAddress, pair<Expr*, Expr*>> malloc_metadata;
 static std::pair<Expr*, Expr*> malloc_bb;
 std::set<PCAddress> safeAccess;
@@ -66,22 +66,16 @@ std::set<PCAddress> asanlib_missing_blocks{140672, 370592, 370320, 371600, 37098
  */
 
 /*----------------- Routine to add security related rules -----------------------*/
-static void insert_asan_rule(Instruction *instr, RuleOp ruleID, int data1, int data2){
+static void insert_asan_rule(Instruction *instr, RuleOp ruleID, int data1, int data2, int data3 = 0, int data4 = 0){
     RewriteRule rule;
     BasicBlock *bb = instr->block;
     if(bb == NULL) return;     
     rule = RewriteRule(ruleID, bb->instrs->pc, instr->pc, instr->id);
     rule.reg0 = data1;
     rule.reg1 = data2;
+    rule.reg2 = data3;
+    rule.reg3 = data4;
     insertRule(0, rule, bb);
-    count_rule++;
-}
-static void insert_null_rule(PCAddress bb){
-    RewriteRule rule;
-    rule = RewriteRule(NO_RULE, bb , bb , 0);
-    rule.reg0 = 0;
-    rule.reg1 = 0;
-    insertRule_null(0, rule);
     count_rule++;
 }
 static string get_binfile_name(string filepath){
@@ -169,25 +163,97 @@ void search_plt(char * filename) {
         }
         fp.close();
 }
-
+void monitor_malloc(JanusContext *jc){
+  for(auto &func: jc->functions){
+     if ((!func.entry && !func.instrs.size()) || func.isExternal) continue;
+     for(auto it: func.calls){
+        Instruction *instr = &(func.instrs[it.first]);
+        if(isAllocCall(instr)){ //do further analysis
+            ExpandedExpr msize(ExpandedExpr::SUM);
+            //ExpandedExpr mbase(ExpandedExpr::SUM);
+            Expr mbase;
+            //Step 1: calculate size of malloc allocation
+            for(auto &vs : instr->inputs){
+              if(vs->type == JVAR_REGISTER && vs->value == JREG_RDI){
+                  if(!vs->expr->expandedFuncForm){
+                      expandExpr(vs->expr, &func);
+                  }
+                  msize.merge(*vs->expr->expandedFuncForm);
+              } 
+            }
+            //Step 2: calculate base of malloc allocation
+            for(auto &vs : instr->outputs){
+               
+               /*if(!vs->expr->expandedFuncForm)
+                   expandExpr(vs->expr, &func);
+               mbase.merge(*vs->expr->expandedFuncForm);
+                 */
+                 mbase = *vs->expr;
+                 break;
+            }
+            //Step 3: build expression for base and base+size, and save for later use 
+            msize.addTerm(mbase);
+            //msize.merge(mbase);
+            malloc_metadata[instr->pc] = make_pair(new Expr(mbase), new Expr(msize));
+        }
+     }
+  }
+}
+static void monitor_loop_access(JanusContext *jc){
+    for(auto &loop:  jc->loops){
+       Iterator *miter = loop.mainIterator;
+       if(miter == NULL) continue;
+       for(auto &mr : loop.memoryReads){
+          VarState* mvs = mr->vs; 
+          if(!traceToAllocPC(mvs)) continue;   //if it does not trace to a malloc, skip
+          ExpandedExpr loopRange(ExpandedExpr::SUM);
+          get_range_expr(mr, &loopRange, miter);
+          //if this memory node is linked to a malloc site (heap access), and loop range is within malloc base+bound, safe access
+          if(mvs->mallocsite && loopRange < *malloc_metadata[mvs->mallocsite].second->ee){
+              for(auto acc : mr->readBy){
+                  safeAccess.insert(acc->pc);
+              }
+          }
+       }
+       for(auto &mw : loop.memoryWrites){
+          VarState* mvs = mw->vs; 
+          if(!traceToAllocPC(mvs)) continue;   //if it does not trace to a malloc, skip
+          //Iterator *miter = loop.mainIterator;
+          ExpandedExpr loopRange(ExpandedExpr::SUM);
+          get_range_expr(mw, &loopRange, miter);
+          if(mvs->mallocsite && loopRange < *malloc_metadata[mvs->mallocsite].second->ee){
+              for(auto acc : mw->writeFrom){
+                  safeAccess.insert(acc->pc);
+              }
+          }
+       }
+    }
+    
+}
 static void monitor_mem_access(JanusContext *jc){
     RewriteRule rule;
     for(auto &func: jc->functions){
         if ((!func.entry && !func.instrs.size() || (func.isExternal))) continue;
         if(gcc_clang_func.count(func.name)) continue;
-#ifdef DEBUG_VERBOSE
-        cout<<"===============Func: "<<func.name<<"================="<<endl;
-#endif
        for(auto &bb : func.blocks){
             for(auto &meminstr : bb.minstrs){              //Memory Instruction
                 Instruction* raw_instr = meminstr.instr;       //Raw Instrcution
                 MachineInstruction* minstr = raw_instr->minstr; //Machine Instruction
                 if(minstr == NULL || minstr->isLEA()) continue;
+                
+
+                //JASAN_OPT = JASAN_SCEV + JASAN_LIVE, optimised version includes both SCEV and liveness
+                //if instruction does not trace back to malloc (intra-procedural) or is deemed safe, skip
+                if(jc->mode == JASAN_OPT || jc->mode ==  JASAN_SCEV){
+                    if(!traceToAlloc(meminstr.mem) || safeAccess.count(raw_instr->pc))continue;
+                }
                 uint32_t bitmask_flags = 0x1; //always live
                 uint32_t bitmask_regs = 0x0;
                 uint32_t size =meminstr.mem->size; //memory operand
+               
                 //add liveness information for advanced/improved analysis
                 if(jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT){
+                    //if(func.name != "main" && func.name != "perl_parse")
                     bitmask_flags = func.liveFlagIn[raw_instr->id].bits;
                     bitmask_regs = func.liveRegIn[raw_instr->id].bits;
                 }
@@ -202,7 +268,6 @@ static void monitor_mem_access(JanusContext *jc){
                 else if (meminstr.type == MemoryInstruction::ReadAndWrite){
                     insert_asan_rule(raw_instr, (RuleOp)MEM_RW_ACCESS,bitmask_flags,bitmask_regs);
                 }
-                //TODO: shall we check if the base is stack
             }
         }
     }
@@ -210,11 +275,12 @@ static void monitor_mem_access(JanusContext *jc){
 static void 
 monitor_stack_access(JanusContext* jc){
   //Step 1: look for functions which have stack canaries
+  int ccount = 0;
   for(auto &func: jc->functions){
-     //cout<<"===============Func: "<<func.name<<"================="<<endl;
      if(!func.hasCanary) continue;
      if ((!func.entry && !func.instrs.size()) || func.isExternal) continue;
-     if(gcc_clang_func.count(func.name) || !func.hasCanary) continue;
+     if(gcc_clang_func.count(func.name)) continue;
+     if(func.name.compare("main") != 0) continue;
      PCAddress cr_instr = func.canaryReadIns;
      PCAddress cc_instr = func.canaryCheckIns;
 #ifdef DEBUG_VERBOSE
@@ -223,31 +289,33 @@ monitor_stack_access(JanusContext* jc){
      BasicBlock* entry = func.entry;
      if(!entry || !(entry->instrs)) continue;
      int size = entry->size;
+     uint32_t bitmask_flags; //always live
+     uint32_t bitmask_regs;
      for(int i=0; i<size; i++){           //checking only the entry block
-         uint32_t bitmask_flags = 0x1; //always live
-         uint32_t bitmask_regs = 0x0;
          Instruction instr = entry->instrs[i]; 
         //look for instruction with canary. the next instruction moves canary to rbp(-0x8). instrumentation after that one.
          if(instr.pc == cr_instr){
-            if(jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT){
-                bitmask_flags = func.liveFlagIn[instr.id].bits;
-                bitmask_regs = func.liveRegIn[instr.id].bits;
-            }
-            insert_asan_rule(&instr, (RuleOp)STORE_CANARY_SLOT, bitmask_flags,bitmask_regs);
             if(i+1 <entry->size){
-                Instruction &next = entry->instrs[i+1];
-                if(next.minstr->isMOV()){ //need to make sure it's the correct move
-                    //Store shadow stack location where canary value is stored
-                    //mov    %fs:0x28,%rax  -> canary load instruction
-                    //mov    %rax,+0x8(%rsp)   -> move canary to current stack frame. store -0x8(rbp) as the canary location 
-                    bitmask_flags = 0x1; //always live
-                    bitmask_regs = 0x0;
-                    if(jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT){
-                        bitmask_flags = func.liveFlagIn[next.id].bits;
-                        bitmask_regs = func.liveRegIn[next.id].bits;
-                    }
-                    insert_asan_rule(&next, (RuleOp)POISON_CANARY_SLOT, bitmask_flags,bitmask_regs);
+                ccount++;
+                //Store shadow stack location where canary value is stored
+                //mov    %fs:0x28,%rax  -> canary load instruction
+                //mov    %rax,+0x8(%rsp)   -> move canary to current stack frame. store -0x8(rbp) as the canary location 
+                //store canary before the second instruction, poison it after the second instruction. 
+                Instruction &instr_after = entry->instrs[i+1];
+                if(instr_after.minstr->isMOV()){ //need to make sure it's the correct move
+
+                    bitmask_flags = (jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT) ? func.liveFlagIn[instr_after.id].bits : 0x1;
+                    bitmask_regs =  (jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT) ? func.liveRegIn[instr_after.id].bits : 0x0;
+
+                    insert_asan_rule(&instr_after, (RuleOp)STORE_CANARY_SLOT, bitmask_flags,bitmask_regs, ccount, 0);
                 }
+            }
+            if(i+2 <entry->size){
+                Instruction &next = entry->instrs[i+2];
+                bitmask_flags = (jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT) ? func.liveFlagIn[next.id].bits : 0x1;
+                bitmask_regs =  (jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT) ? func.liveRegIn[next.id].bits : 0x0;
+
+                insert_asan_rule(&next, (RuleOp)POISON_CANARY_SLOT, bitmask_flags,bitmask_regs, ccount,0);
             }
          } 
      }
@@ -257,15 +325,31 @@ monitor_stack_access(JanusContext* jc){
      //xor    %fs:0x28,%rdi             //checking if canary value has been modified
      int ic=0;
      for(auto &instr : func.instrs){
-         if(instr.minstr->pc == cc_instr && ic>0){
+         if(instr.minstr->checksStackCanary() && ic>0){
              Instruction prev = func.instrs[ic-1];
              if(prev.minstr && prev.minstr->isMOV() && prev.isMemoryAccess()){
-                insert_asan_rule(&prev, (RuleOp)UNPOISON_CANARY_SLOT, 1,0);
-                //cout<<"rule added for unpoison canary"<<endl;
+                bitmask_flags = (jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT) ? func.liveFlagIn[prev.id].bits : 0x1;
+                bitmask_regs =  (jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT) ? func.liveRegIn[prev.id].bits : 0x0;
+                insert_asan_rule(&prev, (RuleOp)UNPOISON_CANARY_SLOT, bitmask_flags,bitmask_regs, ccount,0);
                 break;
              }
          }
          ic++;
+     }
+     for(auto iid : func.longjmps){
+        Instruction &longjmp = func.instrs[iid]; 
+        bitmask_flags = (jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT) ? func.liveFlagIn[iid].bits : 0x1;
+        bitmask_regs =  (jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT) ? func.liveRegIn[iid].bits : 0x0;
+        insert_asan_rule(&longjmp, (RuleOp)UNPOISON_CANARY_LONGJMP, bitmask_flags,bitmask_regs, 0,0);
+        
+        RewriteRule rule2;
+        rule2 = RewriteRule((RuleOp)PROF_START, longjmp.block, PRE_INSERT);
+        insertRule(0, rule2, longjmp.block);
+        
+     }
+     for(auto &it: func.calls){
+         if(it.second->name == "__sigsetjmp@plt"){
+         }
      }
 #else
      //2. Unpoison Stack , need to make sure that it's the same canary slot
@@ -286,7 +370,6 @@ monitor_stack_access(JanusContext* jc){
                      Instruction &next = bb.instrs[i+1];
                      if(next.minstr && next.minstr->isCMP() && next.isMemoryAccess()){
                         insert_asan_rule(&next, (RuleOp)UNPOISON_CANARY_SLOT, bitmask_flags,bitmask_regs);
-                        //cout<<"rule added for unpoison canary"<<endl;
                         break;
                      }
                  }
@@ -297,17 +380,6 @@ monitor_stack_access(JanusContext* jc){
    }
 
 }
-static void mark_null_rules(JanusContext *jc){
-   for(auto &func: jc->functions){
-      //cout<<"===============Func: "<<func.name<<"================="<<endl;
-      //if ((!func.entry && !func.instrs.size())) continue;
-      for(auto &bb : func.blocks){
-         if(!rewriteRules[0].ruleMap.count(bb.instrs->pc)){ //if bb not found in map, insert empty rule
-             insert_null_rule(bb.instrs->pc);
-         } 
-      }
-   }  
-}
 static void
 printplt(JanusContext *jc){
      string filename=string(rs_dir + get_binfile_name(jc->name)+ ".s");
@@ -317,7 +389,6 @@ printplt(JanusContext *jc){
 }
 static void mark_main_entry(JanusContext *jc){
    for(auto &func: jc->functions){
-      //cout<<"===============Func: "<<func.name<<"================="<<endl;
       if(func.name.compare("main")==0){
          if (func.entry){
             RewriteRule rule;
@@ -339,11 +410,65 @@ void mark_null_rules_missing_blocks(){
    }
 
 }
-void mark_noop_blocks(JanusContext *jc){
+static bool inRegSet(uint64_t bits, uint32_t reg){
+  if((bits >> (reg-1)) & 1)
+      return true;
+  return false;
+}
+int save_count = 0;
+int restore_count = 0;
+int callsiteCounter=0;
 
-   for(auto b : jc->nopInstrs){
-        insert_null_rule(b);
-   }
+static void analyze_leaf_functions(JanusContext *jc){
+
+  for(auto &func: jc->functions){
+     if ((!func.entry && !func.instrs.size()) || func.isExternal) continue;
+     if(gcc_clang_func.count(func.name) || func.name == "_plt") continue;
+
+     bool rdi_written = false; 
+     bool rsi_written = false; 
+     int save_rdi = 0; 
+     int save_rsi = 0; 
+     //if function has subcalls, skip
+     if(func.subCalls.size()  || func.jumpCalls.size() ) continue;
+     //if function has no memory instructions, skip
+     bool readWriteMem = false;
+     for(auto &bb : func.blocks){
+       if(bb.minstrs.size()){ //even if one memory instruction found, we proceed
+           readWriteMem = true;
+           break;
+       }
+     }
+     if(!readWriteMem) continue;    //if not memory read/write instruction, no need to save/restore
+     for(auto &instr: func.instrs){
+        for(auto op : instr.outputs){
+           if(op->type == JVAR_REGISTER){
+                 if(op->value == JREG_RDI) //writes RDI, no need to save
+                     rdi_written = true;
+                 if(op->value == JREG_RSI) //writes RSI, no need to save
+                     rsi_written = true;
+           }
+        }
+     }
+     //as far as it is not written by an instr in the function, the caller will assume it does not need to be save.as for reading, we will still need to save as it could be alive in one basic block but not antother, so it will not be saved by the instrumentation at such instructions. so we need to make sure that we save nonetheless. in the worst case, we wll only be saving double.
+     if(!rsi_written) save_rsi = 1;
+     if(!rdi_written) save_rdi = 1;
+     if(save_rsi || save_rdi){
+         //save
+         Instruction* entry_instr = &(func.entry->instrs[0]);
+        save_count++;
+         insert_asan_rule(entry_instr, SAVE_AT_ENTRY,save_rdi, save_rsi, save_count,0);
+         //restore
+        restore_count++;
+         for (auto retID : func.terminations) {
+            BasicBlock &bb = func.blocks[retID];
+            Instruction *exit_instr = bb.lastInstr();
+            if (exit_instr->opcode == Instruction::Return) { //TODO: look for lonjmp as well
+                insert_asan_rule(exit_instr, RESTORE_AT_EXIT, save_rdi, save_rsi, restore_count, 0);
+            }
+         }
+     }
+  }
 }
 void
 generateASANRule(JanusContext *jc)
@@ -351,7 +476,6 @@ generateASANRule(JanusContext *jc)
     //if plt section not identified in disassembler, use the hack to get basicblocks
     if(!jc->pltsection) 
         printplt(jc);
-    
     //for JASAN_NULL, mark all basic blocks with nulli(no-op) rules, to indicate no need to process it dynamically  
     if(jc->mode == JASAN_NULL){
         mark_null_rules(jc);
@@ -365,8 +489,16 @@ generateASANRule(JanusContext *jc)
     //HACK: mark entry of main, to avoid accessing shadow memory set up before it has been set up
     mark_main_entry(jc);
 
+    if(jc->mode == JASAN_OPT || jc->mode == JASAN_SCEV){
+        monitor_malloc(jc);   
+        monitor_loop_access(jc);
+    }
     //analyse remaining memory accesses 
     monitor_mem_access(jc);
+    //use liveness for rsi, rdi and rax around function calls
+    if(jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT){
+        analyze_leaf_functions(jc);
+    }
 
     //add rules for canary value shadowing and poisoning
     if(detect_stack_overflows){
