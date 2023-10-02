@@ -21,7 +21,16 @@ Expr::Expr(VarState *vs)
     expandedFuncForm = NULL;
     iteratorTo = NULL;
 }
-
+Expr::Expr(ExpandedExpr e1){
+   kind = EXPANDED;
+   ee = new ExpandedExpr();
+   ee->kind = e1.kind;
+   ee->exprs = e1.exprs;
+   ee->scope = e1.scope;
+   ee->loop = e1.loop;
+   ee->function = e1.function;
+   iteratorTo = NULL;
+}
 Expr *newExpr(set<janus::Expr*> &exprs)
 {
     Expr *expr = new Expr();
@@ -455,10 +464,12 @@ ExpandedExpr Expr::shl(Expr &expr) {
     if (expr.kind == INTEGER){
         //create a new expanded expr (converting shift to multiply)
         Expr copy;
-        if(kind == VAR)
+        if(kind == VAR){
             copy = *this;
-        else
+            }
+        else{
             copy = Expr(i);
+        }
         int64_t multiplier = 1 << expr.i;
         Expr e1 = Expr(1);
         kind = EXPANDED;
@@ -468,7 +479,18 @@ ExpandedExpr Expr::shl(Expr &expr) {
     }
     return eexpr;
 }
-
+ExpandedExpr ExpandedExpr::shl(Expr &expr) {
+    ExpandedExpr eexpr;
+    eexpr.kind = MUL;
+    if (expr.kind == Expr::INTEGER){
+        //create a new expanded expr (converting shift to multiply)
+        int64_t multiplier = 1 << expr.i;
+        Expr e1 = Expr(1); 
+        eexpr.addTerm(e1, multiplier);
+        this->merge(eexpr);
+    }   
+    return eexpr;
+} 
 bool Expr::isLeaf() {
     if (kind == INTEGER ||
         kind == NONE ||
@@ -928,6 +950,23 @@ ExpandedExpr *expandExpr(Expr *expr, Function *func, Loop *loop)
         delete expr->expandedFuncForm;
         expr->expandedFuncForm = NULL;
     }
+    return expr->expandedFuncForm;
+}
+ExpandedExpr *expandExpr(Expr *expr, Function *func)
+{
+    if (!expr) return NULL;
+    //if already constructed
+    if (expr->expandedFuncForm) return expr->expandedFuncForm;
+
+    //if not, allocate a new expanded expression, defaulting sum
+    expr->expandedFuncForm = new ExpandedExpr(ExpandedExpr::SUM);
+
+    //call internal func expression constructor
+    if (!buildFuncExpr(expr, expr->expandedFuncForm, func,false, NULL)) {
+        delete expr->expandedFuncForm;
+        expr->expandedFuncForm = NULL;
+    }
+    expr->expandedFuncForm->simplify();
     return expr->expandedFuncForm;
 }
 
@@ -1409,6 +1448,161 @@ bool buildFuncExpr(Expr *expr, ExpandedExpr *expanded,
     }
     return true;
 }
+
+
+bool buildFuncExpr(Expr *expr, ExpandedExpr *expanded,
+                   Function *func,
+                   bool stopAtMemory, Variable *stopAtVariable)
+{
+    if (expr == NULL) return false;
+
+    /* Step 1: if it is leaf node, simply add into the expanded and return */
+    if (stopAtMemory) {
+        if (expr->vs && expr->vs->type != JVAR_REGISTER) {
+            expanded->addTerm(expr);
+            return true;
+        }
+    } else {
+        if (expr->isLeaf()) {
+            expanded->addTerm(expr);
+            return true;
+        }
+    }
+        /* Stop at particular variable */
+    if (stopAtVariable) {
+        if (expr->vs && *(Variable *)expr->vs == *stopAtVariable) {
+            expanded->addTerm(expr);
+            return true;
+        }
+    }
+
+    switch (expr->kind) {
+        case Expr::INTEGER:
+        case Expr::MEM:
+            expanded->addTerm(expr);
+        break;
+        case Expr::VAR:
+            //if it is an expression created outside AST construction, the real expection is wrapped
+            if (expr->vs->expr && expr->vs->expr->kind != Expr::VAR) {
+                if (!buildFuncExpr(expr->vs->expr, expanded, func, stopAtMemory, stopAtVariable)) return false;
+            }
+            else
+                expanded->addTerm(expr);
+        break;
+        case Expr::UNARY:
+            if (expr->u.op == Expr::MOV) {
+                if (!buildFuncExpr(expr->u.e, expanded, func, stopAtMemory, stopAtVariable)) return false;
+            } else if (expr->u.op == Expr::NEG) {
+                ExpandedExpr negExpr(ExpandedExpr::SUM);
+                if (!buildFuncExpr(expr->u.e, &negExpr, func,stopAtMemory, stopAtVariable)) return false;
+                negExpr.negate();
+                expanded->merge(negExpr);
+            } else {
+                //LOOPLOG("\t\t\tUnrecognised unary expressions" <<endl);
+            }
+        break;
+                case Expr::BINARY:
+            if (expr->b.op == Expr::ADD) {
+                if (!buildFuncExpr(expr->b.e1, expanded, func, stopAtMemory, stopAtVariable)) return false;
+                if (!buildFuncExpr(expr->b.e2, expanded, func, stopAtMemory, stopAtVariable)) return false;
+            } else if (expr->b.op == Expr::SUB) {
+                if (!buildFuncExpr(expr->b.e1, expanded, func, stopAtMemory, stopAtVariable)) return false;
+                ExpandedExpr negExpr(ExpandedExpr::SUM);
+                if (!buildFuncExpr(expr->b.e2, &negExpr, func, stopAtMemory, stopAtVariable)) return false;
+                negExpr.negate();
+                expanded->merge(negExpr);
+            } else if (expr->b.op == Expr::SHL) {
+                if (!buildFuncExpr(expr->b.e1, expanded, func, stopAtMemory, stopAtVariable)) return false;
+                ExpandedExpr shiftExpr;
+                if (expr->b.e2->kind == Expr::INTEGER){
+                    int64_t multiplier = 1 << expr->b.e2->i;
+                    Expr e1 = Expr(1);
+                    expr->b.e1->kind = Expr::EXPANDED;
+                    shiftExpr = ExpandedExpr(ExpandedExpr::MUL);
+                    shiftExpr.addTerm(e1, multiplier);
+                }
+                //ExpandedExpr shiftExpr = expanded->shl(*expr->b.e2);
+                //ExpandedExpr shiftExpr = expr->b.e1->shl(*expr->b.e2);
+                expanded->merge(shiftExpr);
+                cout<<"expanded expression after shift"<<*expanded<<endl;
+            }//added the following code to fix the issue with creating proper expressions for multiplication
+            else if (expr->b.op == Expr::MUL && expanded->kind != ExpandedExpr::SENSI) {
+                if (expr->b.e2->kind == Expr::INTEGER) {
+                    ExpandedExpr *ee1 = new ExpandedExpr(ExpandedExpr::SUM);
+                    if (!buildFuncExpr(expr->b.e1, ee1, func,stopAtMemory, stopAtVariable)) return false;
+                    ee1->multiply(Expr(expr->b.e2->i));
+                    expanded->merge(ee1);
+                    delete ee1;
+                } else {
+                    expanded->kind = ExpandedExpr::SENSI;
+                    if (!buildFuncExpr(expr->b.e1, expanded, func, stopAtMemory, stopAtVariable)) return false;
+                    if (!buildFuncExpr(expr->b.e2, expanded, func, stopAtMemory, stopAtVariable)) return false;
+               }
+
+            } else {
+                //LOOPLOG("\t\t\tUnrecognised binary expressions" <<endl);
+            }
+        break;
+        case Expr::PHI: {
+            //for this phi node, we first need to check if this phi belongs to
+            //an iterator of the parent loops
+            /*if (expr->iteratorTo) {
+                Iterator *sit = expr->iteratorTo;
+                Loop *suspect = sit->loop;
+
+                //if the suspect loop iterator is the descendants of the current loop
+                //Use the final value of the iterator
+                if (loop->descendants.find(suspect) != loop->descendants.end()) {
+                    if (!sit->main) {
+                        LOOPLOG("\t\t\tFound phi loop iterator but not a main iterator "<<dec<<suspect->id<<endl);
+                        return false;
+                    }
+                    //add its final values to the cyclic expression
+                    if (sit->finalKind == Iterator::INTEGER) {
+                        expanded->addTerm(Expr(sit->finalImm));
+                    }
+                    else if (sit->finalKind == Iterator::EXPANDED_EXPR) {
+                        bool cycle = false;
+                        for (auto term: sit->finalExprs->exprs) {
+                            Expr t = term.first;
+                           if (t.kind == Expr::INTEGER) {
+                                expanded->addTerm(t,term.second);
+                            } else
+                            //try to find cycles from the final expressions
+                            buildFuncExpr(&t, expanded, func, loop, stopAtMemory, stopAtVariable);
+                        }
+                    }
+                } else {
+                    //if it is the ancestor
+                    //simply add the term for range propagation
+                    expanded->addTerm(expr);
+                }
+            } else {*/
+                //expand the expression for both paths
+                ExpandedExpr *ee1 = expandExpr(expr->p.e1, func);
+                ExpandedExpr *ee2 = expandExpr(expr->p.e2, func);
+                if (!ee1 || !ee2) return false;
+                if (ee1->size() == 0 || ee2->size() == 0) return false;
+                //if two expressions are exactly the same, simply add one
+                if (*ee1 == *ee2) {
+                    expanded->merge(ee1);
+                } else {
+                    expr->expandedFuncForm = new ExpandedExpr(ExpandedExpr::PHI);
+                    expr->expandedFuncForm->addTerm(Expr(ee1));
+                    expr->expandedFuncForm->addTerm(Expr(ee2));
+                    expanded->addTerm(expr);
+                }
+            /*}*/
+        }
+        break;
+        default:
+            //LOOPLOG("\t\t\tUnrecognised expr expressions" <<endl);
+        break;
+    }
+    return true;
+}
+
+
 
 ExpandedExpr *ExpandedExpr::getArrayBase(Loop *loop)
 {
