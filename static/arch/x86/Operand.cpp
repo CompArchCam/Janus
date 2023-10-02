@@ -178,6 +178,7 @@ Variable Operand::lift(PCAddress nextInstrPc)
         {
             var.type = JVAR_REGISTER;
             var.value = get_full_reg_id(reg);
+            var.reg = reg;
             const char *c = get_reg_name(var.value);
             if ((c[1] == 'M') && (c[2] == 'M')) {
                 if (c[0] == 'X') var.size = 16;

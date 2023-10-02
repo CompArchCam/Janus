@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 extern char rs_dir[];
-
+//extern int client_mode;
 /* Rewrite Rules Specification */
 typedef enum _rr_type {
     GNORMAL = 0,
@@ -108,22 +108,6 @@ typedef enum _rr_type {
      * ----------------------------------------------------*/
     ///Insert a thread private counter at given address, supply a counter id
     STATS_INSERT_COUNTER,
-    /* ----------------------------------------------------
-     * Bounds Checking for Security Rewrite Rules 
-     * ----------------------------------------------------*/
-    /* record the base and bound of pointer at malloc*/
-    BND_RECORD_SIZE,
-    BND_RECORD_BASE,
-    /* check the bounds of memory access at pointer derefence*/
-    BND_CHECK,
-    BND_LEA_LOAD,
-    BND_ARITHMETIC,
-    /*table maintenance rules for bound checking and traking*/
-    TABLE_REG_REG_COPY,
-    TABLE_REG_MEM_STORE,
-    TABLE_MEM_REG_LOAD,
-    TABLE_VALUE_REG,
-    TABLE_VALUE_MEM,
     /* ----------------------------------------------------
      * The following rewrite rules are out-dated
      * ----------------------------------------------------*/
@@ -244,14 +228,80 @@ typedef enum _rr_type {
     //debug instructions
     JANUS_DEBUG,
     /*------ ASAN ------*/
+    SAVE_AT_ENTRY,
     ENABLE_MONITORING,
     UNPOISON_CANARY_SLOT,
+    UNPOISON_CANARY_LONGJMP,
+    //SAVE_CALLER_REG,
+    //RESTORE_CALLER_REG,
     MEM_R_ACCESS,
     MEM_W_ACCESS,
     MEM_RW_ACCESS,
     STORE_CANARY_SLOT,
     POISON_CANARY_SLOT,
-    NO_RULE
+    NO_RULE,
+    RESTORE_AT_EXIT,
+    /* ----------------------------------------------------
+     * Bounds Checking for Security Rewrite Rules 
+     * ----------------------------------------------------*/
+    /*----- SBCETS -----*/
+    STORE_STACK_BOUNDS, //should store bounds before move
+    BND_REMOVE_RAX, //should also be before any mov statements
+    /* record the base and bound of pointer at malloc*/
+    BND_RECORD_SIZE_MALLOC,
+    BND_RECORD_SIZE_CALLOC,
+    RESTORE_STACK_BOUNDS,
+    BND_RECORD_BASE,
+    /* check the bounds of memory access at pointer derefence*/
+    BND_CHECK,
+    BND_LEA_LOAD,
+    BND_ARITHMETIC,
+    //RESTORE_STACK_BOUNDS,
+    PUSH_REG,
+    PUSH_MEM,
+    PUSH_ABS,
+    PUSH_GLOBAL,
+    PUSH_CONSTANT,
+    PUSH_STACK_VAR,
+    PUSH_STACK,
+    PUSH_STACK_REG,
+    /*table maintenance rules for bound checking and traking*/
+    TABLE_REG_REG_COPY,
+    TABLE_REG_MEM_STORE,
+    TABLE_MEM_REG_LOAD,
+       TABLE_VALUE_REG,
+    TABLE_VALUE_MEM,
+    GLOBAL_VALUE_REG,
+    GLOBAL_REG_MEM_STORE,
+    GLOBAL_MEM_REG_LOAD,
+    ABS_GLOBAL_MEM_REG_LOAD,
+    GLOBAL_ARITH_VALUE_MEM,
+    GLOBAL_TABLE_VALUE_MEM,
+    ABS_VALUE_MEM,
+    ABS_REG_MEM_STORE,
+    ABS_MEM_REG_LOAD,
+    MONITOR_FREE_CALL,
+    MONITOR_GLOBAL_BUFFER,
+    MONITOR_STACK_BUFFER,
+    //SAVE_STACK_BOUNDS,
+    //RESTORE_STACK_BOUNDS,
+    SAVE_GLOBAL_BOUNDS,
+    LEA_COPY_BASE,
+    LEA_COPY_STACK_BASE,
+    GLOBAL_LEA_COPY_BASE,
+    ARITH_MEM_REG_LOAD,
+    ARITH_REG_MEM_STORE,
+    ARITH_VALUE_MEM,
+    GLOBAL_ARITH_MEM_REG_LOAD,
+    GLOBAL_ARITH_REG_MEM_STORE,
+    SAVE_STACK_BOUNDS,
+    POP_STACK,
+    POP_STACK_REG,
+    POP_REG,
+    PASS_STACK_ARGS,
+    REMOVE_STACK_BOUNDS //last thing to do in a function
+
+
 } RuleOp;
 
 typedef struct rule_reg_t {
@@ -280,6 +330,14 @@ typedef struct rule_instr {
     union {
         uint64_t        reg1;
         RuleReg         ureg1;
+    };
+    union {
+        uint64_t        reg2;
+        RuleReg         ureg2;
+    };
+    union {
+        uint64_t        reg3;
+        RuleReg         ureg3;
     };
 
     struct              rule_instr *next;   //TODO, remove this in the future

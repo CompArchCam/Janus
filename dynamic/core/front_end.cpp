@@ -26,6 +26,7 @@ using namespace std;
 /* Public information panel */
 //Header of the rule file, contains meta informations
 
+int client_mode;
 RSchedHeader         ruleHeader;
 
 /* The current channel which is loaded (Loop ID) */
@@ -38,6 +39,8 @@ static char *       file_buffer;
 static char         rulepath[MAX_OPTION_STRING_LENGTH];
 map<PCAddress, hashtable_t> rule_table;
 set<uint64_t>  addrmap;
+map<int, int> index_map;
+int global_index = 0;
 typedef struct node{
     node* left;
     node* right;
@@ -49,10 +52,10 @@ PCAddress curr_base;
 int nmodules = 0;
 module_data_t* loaded_modules[MAX_MODULES];
 static char        dummy_schedule[] = "dummy.jrs";
-
+bool dynamic_modules_enabled = true;
 /* load static rules from static rule file */
 void         load_static_rules(char *rule_path, uint64_t base);
-void         load_static_rules_asan(char *rule_path, const module_data_t *info);
+void         load_static_rules_security(char *rule_path, const module_data_t *info);
 static void  fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t size, JMode mode, uint64_t base);
 
 static void  check_options(client_id_t id);
@@ -126,9 +129,9 @@ get_static_rule(PCAddress addr)
     return (RRule *)hashtable_lookup(&rule_table[0],(void *)(addr-KEYBASE));
 }
 RRule *
-get_static_rule_asan(PCAddress addr)
+get_static_rule_security(PCAddress addr)
 {
-    int count=0;
+    int index=0;
     int id;
     uint64_t base=0;
     for (id = 0; id < nmodules; ++id) {
@@ -140,7 +143,12 @@ get_static_rule_asan(PCAddress addr)
         }
     }
     if(base == 0) return NULL;  //for the case of dynamically generated code
-    return (RRule *)hashtable_lookup(&rule_table[id],(void *)(addr-base));
+    //return (RRule *)hashtable_lookup(&rule_table[id],(void *)(addr-base));
+    if(index_map.count(id)){ //if rewrite schedule for this has been loaded
+        index = index_map[id];
+        return (RRule *)hashtable_lookup(&rule_table[index],(void *)(addr-base));
+    }
+    return NULL;
 }
 /* Static rule format 
  * Rule Type: 4-byte int
@@ -214,8 +222,15 @@ load_static_rules(char *rule_path, uint64_t base)
     rsched_info.header = header;
     fclose(file);
 }
+void set_client_mode(int mode){
+    client_mode = mode;
+    dr_fprintf(STDOUT,"Client mode:  %s!\n",print_janus_mode((JMode)client_mode));
+}
+int get_client_mode(){
+     return client_mode;
+}
 void
-load_static_rules_asan(char *rule_path, const module_data_t *info)
+load_static_rules_security(char *rule_path, const module_data_t *info)
 {
     long file_size;
     uint32_t rule_size;
@@ -225,7 +240,7 @@ load_static_rules_asan(char *rule_path, const module_data_t *info)
 
     if(addrmap.find(base) != addrmap.end()) return;
 
-    int index = nmodules - 1;
+    int id = nmodules - 1;
     //loaded_modules[nmodules++] =  dr_copy_module_data(info);
 
     FILE *file = fopen(rule_path, "r");
@@ -233,19 +248,27 @@ load_static_rules_asan(char *rule_path, const module_data_t *info)
     RSchedHeader *header;
     static char *       file_buffer;
 
-    //this will be done only first time when called from janus_init
-    char *dummy_found = NULL;
-    dummy_found = strstr (rule_path,dummy_schedule);
-    if(dummy_found){
-        rsched_info.mode = JASAN_DYN;
-        cout<<"dynamic mode"<<endl;
-        return;
-    }
+    
     if(file == NULL) {
-        dr_fprintf(STDERR,"Error: static rule file %s not found\n",rule_path);
-        exit(-1);
+        if(dynamic_modules_enabled){//TODO: make it based on the type of mode
+            //this will be done only first time when called from janus_init
+            char *dummy_found = NULL;
+            dummy_found = strstr (rule_path,dummy_schedule);
+            if(dummy_found){
+//                rsched_info.mode = JASAN_DYN;
+                cout<<"dynamic mode"<<endl;
+                return;
+            }
+            return;
+           
+        }
+        else{
+            dr_fprintf(STDERR,"Error: static rule file %s not found\n",rule_path);
+            exit(-1);
+        }
     }
-           //obtain file size
+    
+    //obtain file size
     fseek(file,0,SEEK_END);
     file_size = ftell(file);
     rewind(file);
@@ -253,7 +276,7 @@ load_static_rules_asan(char *rule_path, const module_data_t *info)
 #ifdef JANUS_VERBOSE
     dr_fprintf(STDERR,"Rule file \"%s\" loaded: %ld bytes\n",rule_path,file_size);
 #endif
-
+    cout<<"loading rules for "<<rule_path<<endl;
     //read the file
     file_buffer= (char *)malloc(file_size);
     status = fread(file_buffer, file_size, 1, file);
@@ -267,7 +290,11 @@ load_static_rules_asan(char *rule_path, const module_data_t *info)
 
     rsched_info.mode = (JMode)header->ruleFileType;
     rsched_info.number_of_functions = header->numFuncs;
-
+    cout<<"MODE: "<<print_janus_mode((JMode)rsched_info.mode)<<endl;
+    if(rsched_info.mode != client_mode) {
+        dr_fprintf(STDOUT,"Static rules not intended for %s!\n",print_janus_mode((JMode)client_mode));
+        return;
+    }
     //if it is in parallel mode, we need to get the number of actual cores
 #ifdef BIND_THREAD_WITH_CORE
     if(rsched_info.mode == JPARALLEL) {
@@ -290,11 +317,13 @@ load_static_rules_asan(char *rule_path, const module_data_t *info)
     //add base into the set
     addrmap.insert(base);
 
+    index_map[id] = global_index;
     //initialise hash table
-    hashtable_init(&rule_table[index], HASH_KEY_WIDTH, HASH_INTPTR , false);
+    hashtable_init(&rule_table[global_index], HASH_KEY_WIDTH, HASH_INTPTR , false);
     //fill all rules into the hashtable
-    fill_in_hashtable(&rule_table[index], channel, rule_buffer, header->numRules, rsched_info.mode, base);
-
+    fill_in_hashtable(&rule_table[global_index], channel, rule_buffer, header->numRules, rsched_info.mode, base);
+    
+    global_index++;
     //copy to shared structure
     rsched_info.header = header;
     fclose(file);
@@ -417,7 +446,8 @@ fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t s
                         hashtable_add_replace(table,(void *)(start_addr-KEYBASE),curr);
                     else{
                         curr->pc = curr->pc + base;
-                        hashtable_add_replace(table,(void *)(start_addr-KEYBASE),curr);
+                        //hashtable_add_replace(table,(void *)(start_addr-KEYBASE),curr);
+                        hashtable_add_replace(table,(void *)(start_addr),curr);
                     }
 
                 }
@@ -439,7 +469,7 @@ void front_end_exit() {
     for(int i=0; i< nmodules; i++){
         hashtable_delete(&rule_table[i]);
     }
-    //free(file_buffer);
+    free(file_buffer);
 }
 bool search_base_key(base_tree* node, PCAddress addr){
     bool found = false;

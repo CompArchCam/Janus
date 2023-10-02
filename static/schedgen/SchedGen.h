@@ -23,6 +23,14 @@ public:
         uint64_t             reg1;
         RuleReg              ureg1;
     };
+    union {
+        uint64_t             reg2;
+        RuleReg              ureg2;
+    };
+    union {
+        uint64_t             reg3;
+        RuleReg              ureg3;
+    };
 
     uint32_t                 id;
     RuleOp                   opcode;
@@ -55,4 +63,8 @@ removeRule(uint32_t channel, janus::RewriteRule rule, janus::BasicBlock *block);
 void encodeJVar(JVar var, janus::RewriteRule &rule);
 /** \brief Decode the the rewrite rule and get JVar */
 JVar decodeJVar(janus::RewriteRule &rule);
+void insert_null_rule(PCAddress bb);
+void mark_null_rules(JanusContext *jc);
+void mark_noop_blocks(JanusContext *jc);
+//std::string get_binfile_name(std::string filepath);
 #endif

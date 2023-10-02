@@ -19,11 +19,12 @@ void janus_init_asan(client_id_t id);
 
 //Find the corresponding static rule from specified address
 RRule *get_static_rule(PCAddress addr);
-RRule *get_static_rule_asan(PCAddress addr);
+RRule *get_static_rule_security(PCAddress addr);
 
 void   load_static_rules(char *rule_path, uint64_t base);
-
-void  load_static_rules_asan(char *rule_path, const module_data_t *info);
+void set_client_mode(int mode);
+int get_client_mode();
+void  load_static_rules_security(char *rule_path, const module_data_t *info);
 #ifdef __cplusplus
 }
 #endif

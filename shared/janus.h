@@ -86,7 +86,14 @@ typedef enum _jmode {
     //address sanitizer (dynamic only)
     JASAN_DYN,
     //address sanitizer (null for shared object standard lib)
-    JASAN_NULL
+    JASAN_NULL,
+    //softbound
+    JSOFTBOUND,
+    //softbound + CETS
+    JSBCETS,
+    //sofbouts+CETS NULL
+    JSBCETS_NULL,
+    JSBCETS_LIVE
 } JMode;
 
 /* Rule ISA header defines the supported static rules */

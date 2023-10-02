@@ -2,7 +2,8 @@
 
 #include <stdio.h>
 //location for storing rewrite schedule. change accordinly. //TODO: make this an input argument
-char rs_dir[] = "/local/scratch-2/ma843/rwdir-re/";
+char rs_dir[] = "/local/scratch/ma843/rwdir-re/";
+//char rs_dir[] = "/local/scratch-2/ma843/rwdir-re/";
 const char *print_janus_mode(JMode mode) {
     switch(mode) {
         case JPARALLEL: return "Automatic Parallelisation";
@@ -22,6 +23,10 @@ const char *print_janus_mode(JMode mode) {
         case JASAN_LIVE: return "Address Sanitizer with liveness opt";
         case JASAN_DYN: return "Address Sanitizer dynamic version";
         case JASAN_NULL: return "Address Sanitizer null version";
+        case JSOFTBOUND: return "Softbound Spatial Safety";
+        case JSBCETS: return "Softbound + CETS";
+        case JSBCETS_NULL: return "Softbound + CETS null rules";
+        case JSBCETS_LIVE: return "Softbound + CETS with livenes";
         default: return "Free Mode";
     }
 }
@@ -185,19 +190,68 @@ const char *print_rule_opcode(RuleOp op)
         case STORE_CANARY_SLOT: return "STORE_CANARY";
         case POISON_CANARY_SLOT: return "POISON_CANARY";
         case UNPOISON_CANARY_SLOT: return "UNPOISON_CANARY";
+        case UNPOISON_CANARY_LONGJMP: return "UNPOISON_CANARY_LONGJMP";
         case NO_RULE: return "NO_RULE";
+        case SAVE_AT_ENTRY: return "SAVE_AT_ENTRY";
+        case RESTORE_AT_EXIT: return "RESTORE_AT_EXIT";
         case ENABLE_MONITORING: return "ENABLE_MONITORING";
+        case BND_CHECK: return "BND_CHECK";
+        //case BND_RECORD_SIZE: return "BND_RECORD_SIZE";
+        case BND_RECORD_SIZE_MALLOC: return "BND_RECORD_SIZE_MALLOC";
+        case BND_RECORD_SIZE_CALLOC: return "BND_RECORD_SIZE_CALLOC";
+        case BND_RECORD_BASE: return "BND_RECORD_BASE";
+        case BND_LEA_LOAD: return "BND_LEA_LOAD";
+        case BND_ARITHMETIC: return "BND_ARITHMETIC";
+        case TABLE_REG_REG_COPY: return "TABLE_REG_REG_COPY";
+        case TABLE_REG_MEM_STORE: return "TABLE_REG_MEM_STORE";
+        case TABLE_MEM_REG_LOAD: return "TABLE_MEM_REG_LOAD";
+        case TABLE_VALUE_REG: return "TABLE_VALUE_REG";
+        case TABLE_VALUE_MEM: return "TABLE_VALUE_MEM";
+        case ABS_REG_MEM_STORE: return "ABS_REG_MEM_STORE";
+        case ABS_MEM_REG_LOAD: return "ABS_MEM_REG_LOAD";
+        case BND_REMOVE_RAX: return "BND_REMOVE_RAX";
+        case MONITOR_FREE_CALL: return "MONITOR_FREE_CALL";
+        case STORE_STACK_BOUNDS: return "STORE_STACK_BOUNDS";
+        case REMOVE_STACK_BOUNDS: return "REMOVE_STACK_BOUNDS";
+        case SAVE_STACK_BOUNDS:   return "SAVE_STACK_BOUNDS";
+        case RESTORE_STACK_BOUNDS: return "RESTORE_STACK_BOUNDS";
+        case LEA_COPY_BASE: return "LEA_COPY_BASE";
+        case LEA_COPY_STACK_BASE: return "LEA_COPY_STACK_BASE";
+        case ARITH_MEM_REG_LOAD: return "ARITH_MEM_REG_LOAD";
+        case ARITH_REG_MEM_STORE: return "ARITH_REG_MEM_STORE";
+        case ARITH_VALUE_MEM: return "ARITH_VALUE_MEM";
+        case GLOBAL_VALUE_REG: return "GLOBAL_VALUE_REG";
+        case GLOBAL_REG_MEM_STORE: return "GLOBAL_REG_MEM_STORE";
+        case GLOBAL_MEM_REG_LOAD: return "GLOBAL_MEM_REG_LOAD";
+        case GLOBAL_ARITH_MEM_REG_LOAD: return "GLOBAL_ARITH_MEM_REG_LOAD";
+        case GLOBAL_ARITH_REG_MEM_STORE: return "GLOBAL_ARITH_REG_MEM_STORE";
+        case PUSH_REG: return "PUSH_REG";
+        case PUSH_MEM: return "PUSH_MEM";
+        case PUSH_ABS: return "PUSH_ABS";
+        case    PUSH_GLOBAL: return "PUSH_GLOBAL";
+        case    PUSH_CONSTANT: return "PUSH_CONSTANT";
+        case   PUSH_STACK_VAR: return "PUSH_STACK_VAR";
+        case    PUSH_STACK: return "PUSH_STACK";
+        case   PUSH_STACK_REG: return "PUSH_STACK_REG";
+        case     POP_STACK: return "POP_STACK";
+        case POP_STACK_REG: return "POP_STACK_REG";
+        case POP_REG: return "POP_REG";
+        case PASS_STACK_ARGS: return "PASS_STACK_ARGS";
+
         default: return "Null";
     }
 }
 
 void print_rule(RRule *rule)
 {
-    printf("%s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx\n",print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1);
+    //printf("%s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx\n",print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1);
+    if(rule->pc == 0x4046a2) printf("rule for 4046a2: %lx\n",rule->block_address);
+    printf("%s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx, reg2:0x%lx, reg3:0x%lx\n",print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1, (uint64_t)rule->reg2,(uint64_t)rule->reg3);
 }
 
 void thread_print_rule(int tid, RRule *rule)
 {
-    printf("Thread %d %s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx\n",tid,print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1);
+    //printf("Thread %d %s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx\n",tid,print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1);
+    printf("Thread %d %s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx, reg2:0x%lx, reg3:0x%lx\n",tid,print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1, (uint64_t)rule->reg2,(uint64_t)rule->reg3);
 }
 

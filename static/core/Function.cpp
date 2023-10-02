@@ -83,34 +83,41 @@ Function::translate()
     scanMemoryAccess(this);
 
     /* For other mode, memory accesses are enough,
-     * Only paralleliser and analysis mode needs to go further */
+     * Only paralleliser and analysis mode needs to go further
+     ADD: we also need further analysis for different versions of security */
     if (context->mode != JPARALLEL &&
         context->mode != JPROF &&
         context->mode != JANALYSIS &&
         context->mode != JVECTOR &&
         context->mode != JOPT &&
-        context->mode != JSECURE &&
         context->mode != JASAN &&
         context->mode != JASAN_NULL &&
         context->mode != JASAN_OPT &&
         context->mode != JASAN_LIVE &&
         context->mode != JASAN_SCEV &&
+        context->mode != JSBCETS &&
+        context->mode != JSBCETS_NULL &&
+        context->mode != JSBCETS_LIVE &&
         context->mode != JFETCH)
         return;
 
     /* Construct the abstract syntax tree of the function */
     buildASTGraph(this);
 
-    if(context->mode == JASAN_NULL) return;
+    /* for security analysis to mark null rules, we dont need to do further analysis*/
+    if(context->mode == JASAN_NULL || context->mode == JSBCETS_NULL) return;
+
     /* Perform variable analaysis */
     variableAnalysis(this);
 
-    /* Peform liveness analysis */
-    if(context->mode != JASAN && context->mode != JASAN_SCEV)
+    /* Peform liveness analysis for security - only for liveness version */
+    if(context->mode != JASAN && context->mode != JASAN_SCEV && context->mode != JSBCETS){
         livenessAnalysis(this);
+    }
 
-    if(context->mode == JASAN_LIVE || context->mode == JASAN_OPT) //only needed for asan-liveness or full opt
+    if(context->mode == JASAN_LIVE || context->mode == JASAN_OPT || context->mode == JSBCETS_LIVE){ //only needed for asan-liveness or full opt
         flagsAnalysis(this);
+    }
 }
 
 static void
