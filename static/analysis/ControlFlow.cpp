@@ -94,7 +94,6 @@ buildBasicBlocks(Function &function)
     marks[0] += BB_LEADER;
 
     uint32_t instrCount = instrs.size();
-   
     for (InstID id=0; id<instrCount; id++) {
 
         Instruction &instr = instrs[id];
@@ -128,9 +127,9 @@ buildBasicBlocks(Function &function)
 
                         auto query2 = functionMap.find(target);
                         if(query2 != functionMap.end()){ //if it is also not found in functionMap i.e. jumps to a function
-                            if(instr.opcode == Instruction::DirectBranch){
-                                //TODO:
-                            }      
+                            Function *targetFunc = (*query2).second;
+                            function.jumpToFunc[id] = targetFunc;
+                            function.jumpCalls.insert(targetFunc->fid);
                         }
                         notRecognised.insert(id);
                     }
@@ -158,7 +157,8 @@ buildBasicBlocks(Function &function)
                 //Currently assume all calls would return except indirect call
                 if (id+offset<instrCount)
                     edges[id].insert(id+offset);
-
+               
+                bool isLongJmp = false;
                 PCAddress callTarget = instr.minstr->getTargetAddress();
                 if (callTarget) {
                     //find this target in the function map
@@ -169,9 +169,14 @@ buildBasicBlocks(Function &function)
                     //if found in the function map
                     else {
                         Function *targetFunc = (*query).second;
+                        if(targetFunc->name == "__longjmp_chk@plt"){
+                            //isLongJmp = true;
+                            function.longjmps.insert(instr.id);
+                        }
                         function.calls[id] = targetFunc;
                         function.subCalls.insert(targetFunc->fid);
                     }
+                    //updated: assumes all all calls would return except indirect call or call to longjmp
                 }
                 //whether it is register or memory operands, it is an indirect call which we don't bother to perform extensive analysis on it
                 else {
@@ -202,6 +207,7 @@ buildBasicBlocks(Function &function)
     for (auto mark=marks.begin(); mark != marks.end(); mark++) {
 
         InstID boundary = (*mark).first;
+        PCAddress inst_pc = instrs[boundary].pc;
         //if mark is out of function boundary
         if (boundary >= instrCount) break;
         uint32_t property = (*mark).second;
@@ -215,7 +221,6 @@ buildBasicBlocks(Function &function)
             nextMark++;
             if (nextMark == marks.end()) break;
             InstID blockEnd = (*nextMark).first;
-
             //find the first LEADER
             auto prevMark = mark;
             while(1) {
@@ -237,7 +242,7 @@ buildBasicBlocks(Function &function)
                                     blockID++,
                                     boundary,
                                     blockEnd,
-                                    (*nextMark).second % 2 == 0);
+                                    (*nextMark).second % 2 == 0); //sets if the block is fake or not i.e. whether the next block is BB_LEADER = 2(so its the target of jump), or BB_TERMINATOR = 1(the instruction next to the CTI) 
             } else {
                 trueBlockEnd = trueBlockStart + MAX_BLOCK_INSTR_COUNT;
                 function.blockSplitInstrs[blockID].insert(trueBlockEnd);
@@ -313,6 +318,7 @@ buildBasicBlocks(Function &function)
             if (block->lastInstr()->isControlFlow()) {
                 if (notRecognised.find(endID)==notRecognised.end()) {
                     function.terminations.insert(block->bid);
+                    //function.longjmps.insert(block->bid);
                     block->terminate = true;
                 }
                 else{
@@ -350,8 +356,12 @@ buildBasicBlocks(Function &function)
     for(auto &bb : function.blocks){
        if(bb.pred.empty()){
             function.danglingBlocks.insert(bb.bid);
+
        }
+       function.danglingBlocks.insert(function.blocks[0].bid); //corner case when entry is also target of jump
     }
+   
+
 }
 
 //Update dominance frontiers for other nodes (called for Y)
