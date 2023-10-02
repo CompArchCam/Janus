@@ -386,8 +386,9 @@ variableAnalysis(janus::Function *function)
 {
     for (auto &instr : function->instrs) {
         for (auto vi: instr.inputs) {
-            if (vi->type == JVAR_REGISTER)
+            if (vi->type == JVAR_REGISTER){
                 instr.regReads.insert(vi->value);
+            }
             else if (vi->type == JVAR_MEMORY || vi->type == JVAR_POLYNOMIAL) {
                 for (auto vm : vi->pred)
                     if (vm->type == JVAR_REGISTER)
@@ -395,8 +396,10 @@ variableAnalysis(janus::Function *function)
             }
         }
         for (auto vo: instr.outputs) {
-            if (vo->type == JVAR_REGISTER)
-                instr.regWrites.insert(vo->value);
+            if (vo->type == JVAR_REGISTER){
+                if(vo->value > vo->reg) // if it is smaller than full version. only then kill it
+                    instr.regWrites.insert(vo->value);
+            }
             else if (vo->type == JVAR_MEMORY || vo->type == JVAR_POLYNOMIAL) {
                 for (auto vm : vo->pred)
                     if (vm->type == JVAR_REGISTER)
@@ -552,10 +555,8 @@ flagsAnalysis(Function *function)
     memset(liveFlagOut, 0, numBlocks * sizeof(FlagSet));
     /* Step 1: flags reads and writes for each instruction */
     for (auto &instr : function->instrs) {
-       //instr.flagReads = (instr.minstr->readsOFlag()<<1) | instr.minstr->readsStatusFlags();
-       //instr.flagWrites = (instr.minstr->updatesOFlag()<<1) | instr.minstr->updatesStatusFlags();
-       instr.flagReads.insert(instr.minstr->readsArithFlags());
-       instr.flagWrites.insert(instr.minstr->updatesArithFlags());
+       instr.flagReads.insert(instr.minstr->readsintArithFlags());
+       instr.flagWrites.insert(instr.minstr->updatesintArithFlags());
     }
     /* Step 2: conclude the flag USE DEF sets */
     for (int b=0; b<numBlocks; b++) {
@@ -567,7 +568,13 @@ flagsAnalysis(Function *function)
             flagDefs[b].merge(instr.flagWrites);
         }
     }
-        bool converge;
+    for (int b=0; b<numBlocks; b++) {
+        if(function->unRecognised.count(b)){  //last instruction is control flow with target unknown.
+           liveFlagOut[b].bits = 1 ;
+        }
+    }
+
+    bool converge;
 
     /* Step 3: live analysis at basic block granularity */
     do {
