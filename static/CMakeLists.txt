@@ -2,8 +2,8 @@
 include_directories(../include)
 
 #use c11 features
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -m32")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -m32")
 
 ## a modified castone disassembler engine
 add_definitions(-DCAPSTONE_USE_SYS_DYN_MEM)
@@ -238,6 +238,7 @@ set(SCHEDGEN_SOURCES
     schedgen/asan/offsetAnalysis.cpp
     #sbcets
     schedgen/sbcets/sbCETSRule.cpp
+    schedgen/cfi/cfiRule.cpp
     #schedgen/vector/FindInduction.cpp
     #schedgen/vector/MemoryCheck.cpp
     #schedgen/vector/FindReduction.cpp
@@ -259,6 +260,7 @@ set(SCHEDGEN_INCLUDE
     schedgen/dll/
     schedgen/asan/
     schedgen/sbcets/
+    schedgen/cfi/
 )
 
 set(SCHEDUMP_SOURCES

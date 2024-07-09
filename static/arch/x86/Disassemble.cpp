@@ -1,3 +1,4 @@
+#include<sstream>
 #include "Disassemble.h"
 #include "JanusContext.h"
 #include "Function.h"
@@ -12,6 +13,7 @@ using namespace std;
 /* Generate output states for a given instruction */
 static void liftInstruction(Instruction &instr, Function *function);
 static void linkRelocation(JanusContext *jc, Function *pltFunc);
+static void parseFlatPLT(JanusContext *jc, Function *pltFunc);
 
 void disassembleAll(JanusContext *jc)
 {
@@ -19,7 +21,9 @@ void disassembleAll(JanusContext *jc)
     cs_err      err;
     //initialise capstone disassembly engine
     //TODO, recognise architecture automatically
-    err = cs_open(CS_ARCH_X86, CS_MODE_64, (csh *)(&jc->program.capstoneHandle));
+    //err = cs_open(CS_ARCH_X86, CS_MODE_64, (csh *)(&jc->program.capstoneHandle));
+    //for 32-bit arch
+    err = cs_open(CS_ARCH_X86, CS_MODE_32, (csh *)(&jc->program.capstoneHandle));
 
     if (err) {
         printf("Failed on cs_open() in capstone with error returned: %u\n", err);
@@ -52,7 +56,22 @@ void disassembleAll(JanusContext *jc)
     for (auto &func: jc->functions) {
         if (func.name == string(".plt") || func.name == string("_plt")) {
             func.isExecutable = false;
+            if(jc->program.pltAlternative)          //if plt.sec is available,link symbols there
+                 parseFlatPLT(jc, &func);
+            else
+                linkRelocation(jc, &func);
+               
+            
+            continue;
+        }
+        if (func.name == string("_plt_sec")) {
+            func.isExecutable = false;
             linkRelocation(jc, &func);
+            continue;
+        }
+        if (func.name == string("_plt_got")){
+            func.isExecutable = false;
+            parseFlatPLT(jc, &func);
             continue;
         }
         if (func.name == string("main") && !foundFortranMain) {
@@ -76,26 +95,27 @@ static void linkRelocation(JanusContext *jc, Function *pltFunc)
 {
     if (!pltFunc) return;
 
-    uint32_t size = pltFunc->minstrs.size();
-
+    uint32_t size = pltFunc->endAddress - pltFunc->startAddress;
     if (!size) return;
 
-    if (size % 3) {  //TODO: this is not portable for binaries where .plt section may not be multiple of 3
+    if (size % 16) {  //TODO: this is not portable for binaries where .plt section may not be multiple of 3
         cout << "function "<<pltFunc->name<<" may not be a PLT section" << endl;
         return;
     }
     jc->pltsection = true;
 
-    uint32_t nPltSym = size / 3;
+    uint32_t nPltSym = size / 16;
 
-    uint32_t i = 1;
-
+    uint32_t i;
+    i = (pltFunc->name == "_plt") ? 1 : 0;
+    /* address of functions are adjusted here */
     for (auto synthetic: jc->externalFunctions)
     {
         Function *synFunc = synthetic.second;
-        synFunc->startAddress = pltFunc->minstrs[3*i].pc;
-        synFunc->endAddress = pltFunc->minstrs[3*i+2].pc;
-        synFunc->size = synFunc->endAddress - synFunc->startAddress;
+        //assuming 16-byte plt entries
+        synFunc->startAddress = pltFunc->startAddress + (i*16);
+        synFunc->endAddress = pltFunc->startAddress +  (i*16 + 15); //16-1
+        synFunc->size = 16;
         synFunc->name += "@plt";
         synFunc->isExternal = true;
         //update in the function map
@@ -109,13 +129,71 @@ static void linkRelocation(JanusContext *jc, Function *pltFunc)
         if (i==nPltSym) break;
     }
 }
+static void parseFlatPLT(JanusContext *jc, Function *pltFunc)
+{
+    if (!pltFunc) return;
+
+    uint32_t size = pltFunc->endAddress - pltFunc->startAddress;
+    if (!size) return;
+
+    //if size > 16, we need to make sure that it is multiple of 16 to be aligned at 16 bytes. 
+    if (size > 16 && size % 16) {  
+        cout << "function "<<pltFunc->name<<" may not be a PLT section" << endl;
+        return;
+    }
+    //if size < 16, then there might be just one entry. but we need to make sure that the first entry is aligned at 16 bytes
+    if(size < 16 && (pltFunc->startAddress %16)){
+        cout << "function "<<pltFunc->name<<" may not be a PLT section" << endl;
+        return;
+       
+    }
+    uint32_t nPltSym;
+    nPltSym = (size > 16) ? size / 16 : 1;
+
+    jc->pltsection = true;
+
+    int index;
+    if(pltFunc->name == "_plt")
+        index = jc->program.pltSectionIndex;
+    else if(pltFunc->name == "_plt_got")
+        index = jc->program.pltGOTSectionIndex;
+
+
+    uint32_t fid = jc->functions.size();
+    uint32_t i;
+   
+    i = (pltFunc->name == "_plt") ? 1 : 0;
+    /* address of functions are adjusted here */
+    stringstream ss;
+    PCAddress PLTstartAddress = pltFunc->startAddress;
+    string pltname = pltFunc->name;
+    for ( ; i< nPltSym; i++)
+    {
+        ss << "Function_"<<i<<"@"<<pltname;
+        //ss << "Function_"<<i<<"@";
+        PCAddress startAddress = PLTstartAddress + (i*16);
+        Symbol s(ss.str(), startAddress, &jc->program.sections[index], SYM_FUNC);
+        jc->program.symbols.insert(s);
+        //ss.str(string());
+        int pos = jc->functions.size();
+        jc->functions.emplace_back(jc, fid, s, size); 
+        fid++;
+        //update in the function map
+        Function *synFunc = &jc->functions[pos];
+        synFunc->isExternal = true;
+        jc->functionMap[synFunc->startAddress] = synFunc;
+        //HACK: to build BB for plt stubs to be used for instrumentation
+        disassemble(synFunc);
+    }
+    cout<<"finished parsing: "<<pltname<<endl;
+}
 
 ///Disassemble for the given function
 void disassemble(Function *function)
 {
     //if already disassembled, return
     if(function->minstrs.size()) return;
-
+    JanusContext *jc = function->context;  
     uint64_t handle = function->context->program.capstoneHandle;
     cs_insn             *instr;
     InstID              id = 0;
@@ -149,6 +227,9 @@ void disassemble(Function *function)
 
     for (int i=0; i<instrCount; i++) {
         function->instrs.emplace_back(minstrs + i);
+    }
+    for(auto &instr : function->instrs){
+        jc->instructionSet[instr.pc] = instr;
     }
 }
 

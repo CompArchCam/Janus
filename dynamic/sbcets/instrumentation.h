@@ -96,7 +96,7 @@ DR_REG_R15W 48
                                                  if(inRegSet(bitmask_reg,2)) RESTORE_REG(DR_REG_RCX,SPILL_SLOT_10);\
                                                  if(inRegSet(bitmask_reg,3)) RESTORE_REG(DR_REG_RDX,SPILL_SLOT_11)
 
-#define INSERT_LABEL(x)         instrlist_meta_preinsert(bb,trigger, x)           
+#define LABEL(x)         instrlist_meta_preinsert(bb,trigger, x)           
 #define PREINSERT(instr)        instrlist_meta_preinsert(bb, trigger, instr)
 #define INSERT_add(dst, src) PREINSERT( XINST_CREATE_add(drcontext,dst, src))
 #define INSERT_sub(dst, src) PREINSERT( XINST_CREATE_sub(drcontext,dst, src))
@@ -172,6 +172,7 @@ DR_REG_R15W 48
                                         if(inRegSet(bitmask_reg,2)) RESTORE_REG(DR_REG_RCX,SPILL_SLOT_10);\
                                         if(inRegSet(bitmask_reg,3)) RESTORE_REG(DR_REG_RDX,SPILL_SLOT_11)
 
+
 int get_64bit(int id);
 int get_32bit(int id);
 int get_16bit(int id);
@@ -186,16 +187,13 @@ void copy_reg_table(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uin
 //void copy_reg_table(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
 void monitor_free_call(JANUS_CONTEXT, instr_t *trigger,uint64_t bitmask_flags, uint64_t bitmask_reg);
 void record_size_calloc(JANUS_CONTEXT, instr_t *instr);
-void check_deref_mem_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg, int dest_id, int base_reg_id, int mem_access);
 //void check_deref_abs_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
 void remove_reg_table(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags,uint64_t bitmask_reg, int dest_id );
 void copy_global_bounds(JANUS_CONTEXT, instr_t *trigger, int dest_id, uint64_t base/*base*/, uint64_t total_bound/*size*/, uint64_t bitmask_reg);
+void check_deref_mem_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg, int dest_id, int base_reg_id, int mem_access);
 void check_deref_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uint64_t bitmask_reg,int src_id, int base_reg_id, int mem_access/*MEM_REF, CONST_MEM, ABS_MEM, CONST_ABS_MEM, ARITH_MEM*/);
 //void check_deref_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
-void check_deref_abs_store(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
-void check_deref_const_mem_store(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
-void check_deref_const_abs_store(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
 void check_lea_mem(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
 void check_lea_stack(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
-void check_deref_arith_mem_load(JANUS_CONTEXT , instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
-void check_deref_arith_mem_store(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
+void check_deref_global_mem_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg, int dest_id, uint64_t global_base, uint64_t global_bound, int mem_access);
+void check_deref_global_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uint64_t bitmask_reg,int src_id, uint64_t global_base, uint64_t global_bound, int mem_access/*MEM_REF, CONST_MEM, ABS_MEM, CONST_ABS_MEM, ARITH_MEM*/);

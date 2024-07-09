@@ -3,6 +3,11 @@
 my_dir="$(dirname "$0")"
 
 source $my_dir/janus_header
+blue_color="\e[34m"
+red_color="\e[31m"
+bold_style="\e[1m"
+reset="\e[0m"
+
 
 function usage {
     echo "Janus Secure Execution with SOFTBOUND+CETS"
@@ -22,7 +27,6 @@ stat_mode=$1
 binfile=$2
 shift
 shift
-hintfile="$binfile.jrs"
 
 if [ ! -f $binfile ];
 then
@@ -30,10 +34,15 @@ then
    exit
 fi
 
+scratchdir=/local/scratch/ma843
+datadir=$scratchdir/rwdir-sb
 binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
-#datadir=/local/scratch-2/ma843/rwdir-re
-datadir=/local/scratch/ma843/rwdir-re
+hintfile=$datadir/$binname.jrs
 asmfile="$datadir/$binname.s"
+echo -e "${bold_style}Binary: ${red_color} $binfile${reset}"
+echo -e "${bold_style}RWSchedule: ${blue_color} $hintfile ${reset}"
+echo -e "${bold_style}asmfile: ${blue_color} $asmfile ${reset}"
+
 if [ ! -f $asmfile ];
 then
    objdump -d $binfile > $asmfile

@@ -33,7 +33,7 @@ fi
 
 binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
 scratchdir=/local/scratch/ma843
-datadir=$scratchdir/rwdir-re
+datadir=$scratchdir/rwdir-final
 #datadir=/local/scratch/ma843/rwdir-re
 #hintfile="$binfile.jrs" 
 #hintfile="$binname.jrs" 

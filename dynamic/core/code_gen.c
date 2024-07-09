@@ -13,8 +13,9 @@ opnd_t create_opnd(const JVar v) {
             return opnd_create_base_disp(v.base, DR_REG_NULL, 0, v.value, opsz(v.size));
         case JVAR_MEMORY:
             return opnd_create_base_disp(v.base, v.index, v.scale, v.value, opsz(v.size));
-        case JVAR_ABSOLUTE:
+        /*case JVAR_ABSOLUTE:
             return opnd_create_rel_addr((void *)(v.value), opsz(v.size));
+        */
         case JVAR_CONSTANT:
             return opnd_create_immed_int((int32_t)v.value, OPSZ_4);
         case JVAR_POLYNOMIAL:

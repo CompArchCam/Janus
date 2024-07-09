@@ -3,7 +3,7 @@
 #include <string.h>
 
 using namespace std;
-std::set<int> security_modes({JASAN, JASAN_LIVE, JASAN_NULL, JASAN_OPT, JASAN_SCEV, JSBCETS, JSBCETS_NULL, JSBCETS_LIVE});
+std::set<int> security_modes({JCFI, JCFI_LIVE,JASAN, JASAN_LIVE, JASAN_NULL, JASAN_OPT, JASAN_SCEV, JSBCETS, JSBCETS_NULL, JSBCETS_LIVE});
 static void usage()
 {
     cout<<"Usage: analyze + <option> + <executable> + [profile_info]"<<endl;
@@ -16,6 +16,7 @@ static void usage()
     cout<<"  -scet: generate rules for softbound + CETS"<<endl;
     cout<<"  -sn: generate NULL rules for softbound + CETS"<<endl;
     cout<<"  -sl: generate rules for softbound + CETS with liveness"<<endl;
+    cout<<"  -cfi: generate rules for CFI"<<endl;
     cout<<"  -c: generate custom analysis and rules from Cinnamon DSL"<<endl;
     cout<<"  -cfg: generate CFG from the binary"<<endl;
     cout<<"  -s: generate rules for secure execution"<<endl;
@@ -78,6 +79,12 @@ int main(int argc, char **argv) {
                 if (argv[1][2] == 'f' && argv[1][3] == 'g') {
                     mode = JGRAPH;
                     IF_VERBOSE(cout<<"Control flow graph mode enabled"<<endl);
+                } else if (argv[1][2] == 'f' && argv[1][3] == 'i') {
+                    if(argv[1][4] == 'l')
+                        mode = JCFI_LIVE;
+                    else
+                        mode = JCFI;
+                    IF_VERBOSE(cout<<"CFI - Control flow integrity enabled"<<endl);
                 } else {
                     mode = JCUSTOM;
                     IF_VERBOSE(cout<<"Custom Cinnamon DSL mode enabled"<<endl);
@@ -166,10 +173,11 @@ int main(int argc, char **argv) {
     //build CFG
     jc->buildProgramDependenceGraph();
 
-    if(mode != JASAN &&  mode != JASAN_LIVE && mode != JASAN_NULL && mode != JSBCETS && mode != JSBCETS_LIVE && mode != JSBCETS_NULL){ //do loop analysis for JASAN only for SCEV and full opt
+    if(mode != JASAN &&  mode != JASAN_LIVE && mode != JASAN_NULL && mode != JSBCETS && mode != JSBCETS_LIVE && mode != JSBCETS_NULL && mode != JCFI && mode != JCFI_LIVE){ //do loop analysis for JASAN only for SCEV and full opt
         jc->analyseLoop();
     }
-    if( mode == JASAN || mode == JASAN_OPT || mode == JASAN_LIVE || mode == JASAN_SCEV || mode == JASAN_NULL || mode == JSBCETS || mode == JSBCETS_NULL || mode == JSBCETS_LIVE)
+    //if( mode == JASAN || mode == JASAN_OPT || mode == JASAN_LIVE || mode == JASAN_SCEV || mode == JASAN_NULL || mode == JSBCETS || mode == JSBCETS_NULL || mode == JSBCETS_LIVE)
+    if(security_modes.count(mode))
         jc->translateFunctions();
 
 

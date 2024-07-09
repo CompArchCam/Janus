@@ -18,7 +18,10 @@
 
 //globals
 #define HASH_KEY_WIDTH 8
-#define KEYBASE 0x400000
+//#define HASH_KEY_WIDTH 4
+//#define KEYBASE 0x400000
+//For 32-bit 
+#define KEYBASE 0x8048000
 #define MAX_OPTION_STRING_LENGTH 256
 
 #define MAX_MODS 32
@@ -276,7 +279,6 @@ load_static_rules_security(char *rule_path, const module_data_t *info)
 #ifdef JANUS_VERBOSE
     dr_fprintf(STDERR,"Rule file \"%s\" loaded: %ld bytes\n",rule_path,file_size);
 #endif
-    cout<<"loading rules for "<<rule_path<<endl;
     //read the file
     file_buffer= (char *)malloc(file_size);
     status = fread(file_buffer, file_size, 1, file);
@@ -290,7 +292,6 @@ load_static_rules_security(char *rule_path, const module_data_t *info)
 
     rsched_info.mode = (JMode)header->ruleFileType;
     rsched_info.number_of_functions = header->numFuncs;
-    cout<<"MODE: "<<print_janus_mode((JMode)rsched_info.mode)<<endl;
     if(rsched_info.mode != client_mode) {
         dr_fprintf(STDOUT,"Static rules not intended for %s!\n",print_janus_mode((JMode)client_mode));
         return;
@@ -313,10 +314,9 @@ load_static_rules_security(char *rule_path, const module_data_t *info)
     }
     else
         rule_buffer= (RRule *)(file_buffer + sizeof(RSchedHeader));
-
+     
     //add base into the set
     addrmap.insert(base);
-
     index_map[id] = global_index;
     //initialise hash table
     hashtable_init(&rule_table[global_index], HASH_KEY_WIDTH, HASH_INTPTR , false);
@@ -368,11 +368,11 @@ fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t s
     for(i=0;i<size;i++)
     {
         curr = instr+i;
-
         if ((mode == JPROF) && (!(curr->channel==0 || curr->channel==channel)))
             continue;
 
         start_addr = curr->block_address;
+        //cout<<"BB: "<<hex<<start_addr<<endl;
 
         if(base == KEYBASE)
             query = (RRule *)hashtable_lookup(table,(void *)(start_addr-KEYBASE));
@@ -380,8 +380,9 @@ fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t s
             query = (RRule *)hashtable_lookup(table,(void *)(start_addr));
         
         if(query==NULL) {
-            if(base == KEYBASE)
+            if(base == KEYBASE){
                 hashtable_add(table,(void *)(start_addr-KEYBASE),curr);
+            }
             else{
                 curr->pc = curr->pc + base;
                 hashtable_add(table,(void *)(start_addr),curr);
@@ -411,8 +412,9 @@ fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t s
                 if(exist) continue;
                 if(prev == NULL) {
                     curr->next = query;
-                    if(base == KEYBASE)
+                    if(base == KEYBASE){
                         hashtable_add_replace(table,(void *)(start_addr-KEYBASE),curr);
+                    }
                     else{
                         curr->pc = curr->pc + base;
                         hashtable_add_replace(table,(void *)(start_addr),curr);
@@ -442,8 +444,10 @@ fill_in_hashtable(hashtable_t *table, uint32_t channel, RRule *instr, uint32_t s
                 
                 if(prev == NULL) {
                     curr->next = query;
-                    if(base == KEYBASE)
+                    if(base == KEYBASE){
+                        cout<<"adding rule with: "<<hex<<curr->block_address<<" offset: "<<hex<<start_addr-KEYBASE<<endl;
                         hashtable_add_replace(table,(void *)(start_addr-KEYBASE),curr);
+                    }
                     else{
                         curr->pc = curr->pc + base;
                         //hashtable_add_replace(table,(void *)(start_addr-KEYBASE),curr);

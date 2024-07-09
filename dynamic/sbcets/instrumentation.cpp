@@ -1,6 +1,7 @@
 #include<map>
 #include<unordered_map>
 #include "instrumentation.h"
+
 #define SB_VERBOSE_DETAIL
 #define REG_MIN DR_REG_RAX
 //#define REG_MAX DR_REG_BND3
@@ -137,6 +138,12 @@ unordered_map<int, pairdata>::iterator find_key(unordered_map<int, pairdata> &m,
 }
 unordered_map<int, pairdata>::iterator get_iterator(unordered_map<int, pairdata> &m, int k) {
     return m.begin();
+}
+void print_LEA(uintptr_t pc){
+   cout<<"instr:"<<hex<<pc<<" LEADRR: "<<hex<<LEAddr<<endl;
+}
+void print_stage(uintptr_t pc){
+   cout<<"instr:"<<hex<<pc<<" checking for overflow"<<endl;
 }
 char is_key_found_regtable(int k) {
     auto it = reg_table.find(k);
@@ -359,7 +366,8 @@ void record_size_calloc(JANUS_CONTEXT, instr_t *trigger){
 }
 //BND_RECORD_BASE
 void record_base_pointer(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg){
-    instr_t *LBB34_2 = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL = INSTR_CREATE_label(drcontext);
+
     SAVE_REG(DR_REG_RAX,SPILL_SLOT_1);
     SAVE_CALLEE_REG_SET1(bitmask_reg);
     SAVE_CALLEE_REG_SET2(bitmask_reg);
@@ -384,7 +392,7 @@ void record_base_pointer(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags
     INSERT_load( opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&ptr_base, OPSZ_8));
     INSERT_call(opnd_create_pc((app_pc)(void *)&resetFreedValue));
     
-    INSERT_LABEL(LBB34_2);
+    LABEL(LBB_RESTORE_ALL);
    //INSERT_CLEAN_CALL(print_base_2,1, OPND_CREATE_INT64(instr_get_app_pc(trigger)));
     RESTORE_REG(DR_REG_RAX,SPILL_SLOT_1);
     RESTORE_CALLEE_REG_SET1(bitmask_reg);
@@ -400,9 +408,9 @@ void record_base_pointer(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags
 }
 //MONITOR_FREE_CALL
 void monitor_free_call(JANUS_CONTEXT, instr_t *trigger,uint64_t bitmask_flags, uint64_t bitmask_reg){
-    instr_t *LBB38_1 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB38_5 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB38_7 = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_SET_BASE_AS_FREED = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL = INSTR_CREATE_label(drcontext);
+
     //saving in slots 1-10, arith flags in 11
     SAVE_REG(DR_REG_RAX,SPILL_SLOT_1);
     SAVE_CALLEE_REG_SET1(bitmask_reg);
@@ -415,26 +423,24 @@ void monitor_free_call(JANUS_CONTEXT, instr_t *trigger,uint64_t bitmask_flags, u
     INSERT_store(OPND_CREATE_ABSMEM((byte *)&ptr_to_free, OPSZ_8), opnd_create_reg(DR_REG_RDI));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
     INSERT_test( opnd_create_reg(DR_REG_AL),opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB38_1);
-    JUMP_to_label(LBB38_5);
+    INSERT_jz(LBB_SET_BASE_AS_FREED);
 
-    INSERT_LABEL(LBB38_1);
     INSERT_load( opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&ptr_to_free, OPSZ_8));
     INSERT_call(opnd_create_pc((byte *)&getFreedValue));
     INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
-    INSERT_jnz(LBB38_5);
+    INSERT_jnz(LBB_SET_BASE_AS_FREED);
     
     //TODO: if(doublefree), only pass the value, not the memory address
     //INSERT_cmp(OPND_CREATE_ABSMEM((byte *)&double_free, OPSZ_4),OPND_CREATE_INT32(0));
 
     INCREMENT_error_counter;
-    JUMP_to_label(LBB38_7);
+    JUMP_to_label(LBB_RESTORE_ALL);
     
-    INSERT_LABEL(LBB38_5);
+    LABEL(LBB_SET_BASE_AS_FREED);
     INSERT_load( opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&ptr_to_free, OPSZ_8));
     INSERT_call(opnd_create_pc((byte *)&setFreedValue));
     
-    INSERT_LABEL(LBB38_7);
+    LABEL(LBB_RESTORE_ALL);
     RESTORE_REG(DR_REG_RAX,SPILL_SLOT_1);
     RESTORE_CALLEE_REG_SET1(bitmask_reg);
     RESTORE_CALLEE_REG_SET2(bitmask_reg);
@@ -448,9 +454,9 @@ std::map<int, int> save_restore_set;
 
 void copy_reg_table(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uint64_t bitmask_reg, int src_id, int dest_id){
     app_pc pc = instr_get_app_pc(trigger);
-    instr_t *LBB33_2 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB33_1 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB33_3 = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_REMOVE_DSTREG = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL = INSTR_CREATE_label(drcontext);
+
     SAVE_REG(DR_REG_RAX,SPILL_SLOT_1);          //RAX in SPILL_SLOT_9
     SAVE_CALLEE_REG_SET1(bitmask_reg);
    // SAVE_CALLEE_REG_SET2_RAX(bitmask_reg);
@@ -467,25 +473,21 @@ void copy_reg_table(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uin
     INSERT_load_int( opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(src_id));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
     INSERT_test( opnd_create_reg(DR_REG_AL),opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB33_1); //src key is found
-    //JUMP_to_label(LBB33_3); //TODO: LBB33_2, src key not found
-    JUMP_to_label(LBB33_2); //src key not found
-
-    INSERT_LABEL(LBB33_1);
+    INSERT_jz(LBB_REMOVE_DSTREG); //src key not found
     if(dest_id != src_id){
         INSERT_load_int( opnd_create_reg(DR_REG_ESI), OPND_CREATE_INT32(dest_id));
         INSERT_load_int( opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(src_id));
         INSERT_call(opnd_create_pc((byte *)&copyRegValues));
-        JUMP_to_label(LBB33_3);
+        JUMP_to_label(LBB_RESTORE_ALL);
     }
     //erase dest from reg
     //else. map_erase_entry(&reg_table, dest);
     //else. map_erase_entry(&split_reg_table, dest);
-    INSERT_LABEL(LBB33_2);
+    LABEL(LBB_REMOVE_DSTREG);
     ERASE_dst_reg_from_reg_table(dest_id);
    // ERASE_dst_reg_from_split_reg_table(dest_id);
     //restore context
-    INSERT_LABEL(LBB33_3);
+    LABEL(LBB_RESTORE_ALL);
    // RESTORE_REG(DR_REG_RSP,SPILL_SLOT_1);
     RESTORE_CALLEE_REG_SET1(bitmask_reg);
     RESTORE_CALLEE_REG_SET2(bitmask_reg);
@@ -510,26 +512,20 @@ void check_deref_mem_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flag
        if(opnd_is_memory_reference(operand1))
           mem_operand = operand1;
     }
-    cout<<"check_deref_mem_load"<<endl;
-    instr_t *LBB51_1 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_3 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_5 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_6 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_7 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_8 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_12 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_14 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_17 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_18 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_19 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_20 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_22 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB51_30 = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_SET_BOUNDS_DESTREG             = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_BASEREG                  = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_BASE_NOT_RBP             = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_INC_ERROR                      = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_DSTREG                   = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_REMOVE_DST                     = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_OVERFLOW_ERROR           = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL                    = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_BOUNDS_FROM_BASEREG      = INSTR_CREATE_label(drcontext);
    
     //LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);
     //START. save reg, flags and increment SP
 
-    //SAVE_REG(DR_REG_RSP,SPILL_SLOT_1);
+    SAVE_REG(DR_REG_RSP,SPILL_SLOT_1);
     SAVE_CALLEE_REG_SET1(bitmask_reg);
     SAVE_CALLEE_REG_SET2_RAX(bitmask_reg);
     if(bitmask_flags){
@@ -537,25 +533,23 @@ void check_deref_mem_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flag
         SAVE_REG(DR_REG_RAX,SPILL_SLOT_12);
         RESTORE_REG(DR_REG_RAX,SPILL_SLOT_9);
     }
-    //INSERT_sub(opnd_create_reg(DR_REG_RSP), OPND_CREATE_INT32(24));
+    INSERT_sub(opnd_create_reg(DR_REG_RSP), OPND_CREATE_INT32(24));
 
     LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);            //puts address in RSI register, and then in LEAddr
     //A. if(is_key_found(memory_table, LEAddr))
     INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_memtable));
     INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB51_1); //if key found (result of AND is not zero)
     if(mem_access == ABS_MEM)
-        JUMP_to_label(LBB51_19);
+        INSERT_jz(LBB_CHECK_DSTREG);    //if key not found
     else{
         if(base_reg_id != DR_REG_NULL)
-            JUMP_to_label(LBB51_7);
+            INSERT_jz(LBB_CHECK_BASEREG);
         else
-            JUMP_to_label(LBB51_19);
+            INSERT_jz(LBB_CHECK_DSTREG);
     }
     // A1. base = memory_table[LEAddr].base; OR base = pairGetFirst(mapGet2(&memory_table, LEAddr));
-    //LBB51_1:  
-    INSERT_LABEL(LBB51_1);
+    //if key found
     INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
     INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&memory_table));
     INSERT_call(opnd_create_pc((byte *)&mapGet2));   //memory_table[LEAddr]
@@ -567,57 +561,59 @@ void check_deref_mem_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flag
     RESTORE_REG(DR_REG_RDI,SPILL_SLOT_13);
     INSERT_call(opnd_create_pc((byte *)&pairGetSecond)); ////memory_table[LEAddr].bound
     INSERT_store(OPND_CREATE_MEM64(DR_REG_RSP, 8), opnd_create_reg(DR_REG_RAX));
+
     //A3.1. if(is_key_found(freed, base) && mapGet0(&freed, base) == 1)
     INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
     INSERT_test(opnd_create_reg(DR_REG_AL),opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB51_3);
-    
     if(mem_access == ARITH_MEM)
-        JUMP_to_label(LBB51_19); //remove dest reg
+        INSERT_jz(LBB_CHECK_DSTREG); //remove dest reg
     else 
-        JUMP_to_label(LBB51_5);
+        INSERT_jz(LBB_SET_BOUNDS_DESTREG);
     //if mapGet0(&freed, base) == 1
-    //LBB51_3:
     
-    INSERT_LABEL(LBB51_3);
     INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
     INSERT_call(opnd_create_pc((byte *)&getFreedValue)); //freed[base]
     INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1)); //if both are same i.e. freed=1, zf=1 increment error
     if(mem_access == ARITH_MEM)
-        INSERT_jnz(LBB51_19);
+        INSERT_jnz(LBB_CHECK_DSTREG);
     else
-        INSERT_jnz(LBB51_5);
+        INSERT_jnz(LBB_SET_BOUNDS_DESTREG);
+    //if freed[base]=1, double free error
     INCREMENT_error_counter;
+
     if(mem_access == ARITH_MEM)
-        JUMP_to_label(LBB51_19); //remove dest reg
-    //LBB51_5:
-    INSERT_LABEL(LBB51_5);
+        JUMP_to_label(LBB_CHECK_DSTREG); //remove dest reg
+
+    //LBB_SET_BOUNDS_DESTREG:
+    LABEL(LBB_SET_BOUNDS_DESTREG);
     INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(dest_id));
     INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_MEM64(DR_REG_RSP, 16)); //base
     INSERT_load(opnd_create_reg(DR_REG_RDX), OPND_CREATE_MEM64(DR_REG_RSP, 8));  //bound
     INSERT_call(opnd_create_pc((byte *)&setRegValues));
-    JUMP_to_label(LBB51_22);
+    JUMP_to_label(LBB_RESTORE_ALL);
     //B. else if(is_key_found(reg_table, base_reg_id) && (base_reg_id != DR_REG_RBP && base_reg != DR_REG_RSP)){
-    //LBB51_7:
-    INSERT_LABEL(LBB51_7);
+    //LBB_CHECK_BASEREG:
+    LABEL(LBB_CHECK_BASEREG);
     INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(base_reg_id));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
     INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
     if(mem_access  == ARITH_MEM)
-        INSERT_jnz(LBB51_30);
+        INSERT_jnz(LBB_CHECK_BOUNDS_FROM_BASEREG);
     else
-        INSERT_jnz(LBB51_8);
-    JUMP_to_label(LBB51_19);
-    //LBB51_8:
-    INSERT_LABEL(LBB51_8);
+        INSERT_jnz(LBB_CHECK_BASE_NOT_RBP);
+    JUMP_to_label(LBB_CHECK_DSTREG);
+
+    //LBB_CHECK_BASE_NOT_RBP:
+    LABEL(LBB_CHECK_BASE_NOT_RBP);
     INSERT_load_int(opnd_create_reg(DR_REG_EAX), OPND_CREATE_INT32(base_reg_id));
     INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(DR_REG_RBP));
-    INSERT_jz(LBB51_19);
+    INSERT_jz(LBB_CHECK_DSTREG);
     INSERT_load_int(opnd_create_reg(DR_REG_EAX), OPND_CREATE_INT32(base_reg_id));
     INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(DR_REG_RSP));
-    INSERT_jz(LBB51_19);
-    INSERT_LABEL(LBB51_30);      //NEW for ARITH_MEM
+    INSERT_jz(LBB_CHECK_DSTREG);
+
+    LABEL(LBB_CHECK_BOUNDS_FROM_BASEREG);      //NEW for ARITH_MEM
     //B1. base = reg_table[base_reg].base; OR base = pairGetFirst(mapGet1(&reg_table, base_reg));
     INSERT_load_int(opnd_create_reg(DR_REG_ESI), OPND_CREATE_INT32(base_reg_id));
     INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&reg_table));
@@ -634,48 +630,42 @@ void check_deref_mem_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flag
     INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
     INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB51_12);
-    JUMP_to_label(LBB51_14);
-    INSERT_LABEL(LBB51_12);
+    INSERT_jz(LBB_CHECK_OVERFLOW_ERROR);
+
     INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
     INSERT_call(opnd_create_pc((byte *)&getFreedValue));
     INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
-    INSERT_jnz(LBB51_14);
+    INSERT_jnz(LBB_CHECK_OVERFLOW_ERROR);
     INCREMENT_error_counter;
-    INSERT_LABEL(LBB51_14);
+
+    LABEL(LBB_CHECK_OVERFLOW_ERROR);
     //B4. if( LEAddr < base || LEAddr > bound){ error_counter++}
     INSERT_load(opnd_create_reg(DR_REG_RAX), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
     INSERT_cmp(opnd_create_reg(DR_REG_RAX),OPND_CREATE_MEM64(DR_REG_RSP, 16));
-    INSERT_jb(LBB51_17);
-    INSERT_load(opnd_create_reg(DR_REG_RAX), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+    INSERT_jb(LBB_INC_ERROR);
     INSERT_cmp(opnd_create_reg(DR_REG_RAX),OPND_CREATE_MEM64(DR_REG_RSP, 8));
-    INSERT_jbe(LBB51_18);
-    //LBB51_17:
-    INSERT_LABEL(LBB51_17);
+    INSERT_jbe(LBB_REMOVE_DST);
+    //LBB_INC_ERROR:
+    LABEL(LBB_INC_ERROR);
     INCREMENT_error_counter;
-    //LBB51_18:
-    INSERT_LABEL(LBB51_18);
-    ERASE_dst_reg_from_reg_table(dest_id);
-    ERASE_dst_reg_from_split_reg_table(dest_id);
-    JUMP_to_label(LBB51_22);
+    JUMP_to_label(LBB_REMOVE_DST);
     //C. else if(is_key_found(reg_table, dest_id)){remove dest_id from reg tables} 
-    //LBB51_19:
-    INSERT_LABEL(LBB51_19);
+    //LBB_CHECK_DSTREG:
+    LABEL(LBB_CHECK_DSTREG);
     INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(dest_id));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
     INSERT_test(opnd_create_reg(DR_REG_AL),opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB51_20);
-    JUMP_to_label(LBB51_22);
-    //LBB51_20:
-    INSERT_LABEL(LBB51_20);
+    INSERT_jz(LBB_RESTORE_ALL);
+    //LBB_REMOVE_DST:
+    LABEL(LBB_REMOVE_DST);
     ERASE_dst_reg_from_reg_table(dest_id);
     ERASE_dst_reg_from_split_reg_table(dest_id);
     //END. restore SP, registers and flags
-    //LBB51_22:
+    //LBB_RESTORE_ALL:
 
-    INSERT_LABEL(LBB51_22); //TODO : redundant
-    //INSERT_add(opnd_create_reg(DR_REG_RSP), OPND_CREATE_INT32(24));
-    //RESTORE_REG(DR_REG_RSP,SPILL_SLOT_1);
+    LABEL(LBB_RESTORE_ALL); //TODO : redundant
+    INSERT_add(opnd_create_reg(DR_REG_RSP), OPND_CREATE_INT32(24));
+    RESTORE_REG(DR_REG_RSP,SPILL_SLOT_1);
     RESTORE_CALLEE_REG_SET1(bitmask_reg);
     RESTORE_CALLEE_REG_SET2_RAX(bitmask_reg);
     if(bitmask_flags){
@@ -776,21 +766,15 @@ void check_deref_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_fla
           mem_operand = operand1;
     }
 
-   LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);
 
-    instr_t *LBB55_1 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_3 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_6 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_7 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_8 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_10 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_13 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_14 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_15 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_17 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_20 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_22 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB55_26 = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_COPY_BOUNDS_TO_MEMTAB          = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_LEA_IN_MEMTAB            = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_GET_BOUNDS_FROM_MEMTAB         = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_REMOVE_LEA_FROM_MEMTAB         = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_BASE_IN_REGTAB           = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_OVERFLOW_ERROR           = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_INC_ERROR                      = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL                    = INSTR_CREATE_label(drcontext);
 
     SAVE_REG(DR_REG_RSP,SPILL_SLOT_1);
     SAVE_CALLEE_REG_SET1(bitmask_reg);
@@ -800,15 +784,18 @@ void check_deref_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_fla
         SAVE_REG(DR_REG_RAX,SPILL_SLOT_12);
         RESTORE_REG(DR_REG_RAX,SPILL_SLOT_9);
     }
+
+    LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);
+
     INSERT_sub(opnd_create_reg(DR_REG_RSP), OPND_CREATE_INT32(24));
+    
     //if(reg_table.find(src) != reg_table.end())
-    if(mem_access == MEM_REF_STORE || mem_access == ABS_MEM_STORE || mem_access == ARITH_MEM_STORE){
+    if(mem_access == MEM_REF_STORE || mem_access == ABS_MEM_STORE ){
         INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(src_id));
         INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
         INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-        INSERT_jnz(LBB55_1);
-        JUMP_to_label(LBB55_7);
-        INSERT_LABEL(LBB55_1);
+        INSERT_jz(LBB_CHECK_LEA_IN_MEMTAB); //if key not found (result of AND is zero)
+        
         INSERT_load_int(opnd_create_reg(DR_REG_ESI), OPND_CREATE_INT32(src_id));
         INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&reg_table));
         INSERT_call(opnd_create_pc((byte *)&mapGet1));
@@ -823,16 +810,17 @@ void check_deref_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_fla
         INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
         INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
         INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-        INSERT_jnz(LBB55_3);
-        JUMP_to_label(LBB55_6);
-        INSERT_LABEL(LBB55_3);
+        INSERT_jz(LBB_COPY_BOUNDS_TO_MEMTAB);   //if key not found
+
+        //if key found, check for doubel free error
         INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
         INSERT_call(opnd_create_pc((byte *)&getFreedValue));
         INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
-        INSERT_jnz(LBB55_6);
+        INSERT_jnz(LBB_COPY_BOUNDS_TO_MEMTAB);
         INCREMENT_error_counter;
+        
         // memory_table[LEAddr].base = base; memory_table[LEAddr].bound = bound;
-        INSERT_LABEL(LBB55_6);
+        LABEL(LBB_COPY_BOUNDS_TO_MEMTAB);
         INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
         INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&memory_table));
         INSERT_call(opnd_create_pc((byte *)&mapGet2));
@@ -843,52 +831,56 @@ void check_deref_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_fla
         RESTORE_REG(DR_REG_RDI,SPILL_SLOT_13);
         INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_MEM64(DR_REG_RSP, 8));
         INSERT_call(opnd_create_pc((byte *)&pairSetSecond));
-        JUMP_to_label(LBB55_26);
+        JUMP_to_label(LBB_RESTORE_ALL);
     }
-    INSERT_LABEL(LBB55_7);
-    //if(memory_table.find(LEAddr) != memory_table.end())
-    INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
-    INSERT_call(opnd_create_pc((byte *)&is_key_found_memtable));
-    INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB55_8);
-    if(mem_access == ABS_MEM_STORE || mem_access == CONST_ABS_MEM_STORE)
-        JUMP_to_label(LBB55_26);
-    else
-        JUMP_to_label(LBB55_14);
-    INSERT_LABEL(LBB55_8);
-    INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
-    INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&memory_table));
-    INSERT_call(opnd_create_pc((byte *)&mapGet2));
-    INSERT_move(opnd_create_reg(DR_REG_RDI), opnd_create_reg(DR_REG_RAX));
-    SAVE_REG(DR_REG_RDI,SPILL_SLOT_13);
-    INSERT_call(opnd_create_pc((byte *)&pairGetFirst));
-    INSERT_store(OPND_CREATE_MEM64(DR_REG_RSP, 16), opnd_create_reg(DR_REG_RAX));
-    RESTORE_REG(DR_REG_RDI,SPILL_SLOT_13);
-    INSERT_call(opnd_create_pc((byte *)&pairGetSecond));
-    INSERT_store(OPND_CREATE_MEM64(DR_REG_RSP, 8), opnd_create_reg(DR_REG_RAX));
-    INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
-    INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
-    INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB55_10);
-    JUMP_to_label(LBB55_13);
-    INSERT_LABEL(LBB55_10);
-    INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
-    INSERT_call(opnd_create_pc((byte *)&getFreedValue));
-    INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
-    INSERT_jnz(LBB55_13);
-    INCREMENT_error_counter;
-    INSERT_LABEL(LBB55_13);
-    ERASE_lea_addr_from_memory_table;
-    JUMP_to_label(LBB55_26);
+    if( mem_access != ARITH_MEM_STORE ){
+        LABEL(LBB_CHECK_LEA_IN_MEMTAB);
+        //if(memory_table.find(LEAddr) != memory_table.end())
+        INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_memtable));
+        INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
+        if(mem_access == ABS_MEM_STORE || mem_access == CONST_ABS_MEM_STORE)
+            INSERT_jz(LBB_RESTORE_ALL);                 //key not found
+        else
+            INSERT_jz(LBB_CHECK_BASE_IN_REGTAB);        //key not found
+        
+        //if key found in memtable
+        LABEL(LBB_GET_BOUNDS_FROM_MEMTAB);
+        INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+        INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&memory_table));
+        INSERT_call(opnd_create_pc((byte *)&mapGet2));
+        INSERT_move(opnd_create_reg(DR_REG_RDI), opnd_create_reg(DR_REG_RAX));
+        SAVE_REG(DR_REG_RDI,SPILL_SLOT_13);
+        INSERT_call(opnd_create_pc((byte *)&pairGetFirst));
+        INSERT_store(OPND_CREATE_MEM64(DR_REG_RSP, 16), opnd_create_reg(DR_REG_RAX));
+        RESTORE_REG(DR_REG_RDI,SPILL_SLOT_13);
+        INSERT_call(opnd_create_pc((byte *)&pairGetSecond));
+        INSERT_store(OPND_CREATE_MEM64(DR_REG_RSP, 8), opnd_create_reg(DR_REG_RAX));
+        INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
+        INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
+        INSERT_jz(LBB_REMOVE_LEA_FROM_MEMTAB); //if key not found in freed, proceed
+        
+        //if key found in freed table, check for double free error
+        INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
+        INSERT_call(opnd_create_pc((byte *)&getFreedValue));
+        INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
+        INSERT_jnz(LBB_REMOVE_LEA_FROM_MEMTAB);
+        INCREMENT_error_counter;
+
+        LABEL(LBB_REMOVE_LEA_FROM_MEMTAB);
+        ERASE_lea_addr_from_memory_table;
+        JUMP_to_label(LBB_RESTORE_ALL);
+    }
     //if(reg_table.find(base_reg) != reg_table.end())
-    INSERT_LABEL(LBB55_14);
+    LABEL(LBB_CHECK_BASE_IN_REGTAB);
     if(base_reg_id != DR_REG_NULL){
         INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(base_reg_id));
         INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
         INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-        INSERT_jnz(LBB55_15);
-        JUMP_to_label(LBB55_26);
-        INSERT_LABEL(LBB55_15);
+        INSERT_jz(LBB_RESTORE_ALL); //key not found
+        
+        //if key found
         INSERT_load_int(opnd_create_reg(DR_REG_ESI), OPND_CREATE_INT32(base_reg_id));
         INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&reg_table));
         INSERT_call(opnd_create_pc((byte *)&mapGet1));
@@ -902,27 +894,27 @@ void check_deref_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_fla
         INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
         INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
         INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-        INSERT_jnz(LBB55_17);
-        JUMP_to_label(LBB55_20);
-        INSERT_LABEL(LBB55_17);
+        INSERT_jz(LBB_CHECK_OVERFLOW_ERROR);
+
         INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
         INSERT_call(opnd_create_pc((byte *)&getFreedValue));
         INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
-        INSERT_jnz(LBB55_20);
+        INSERT_jnz(LBB_CHECK_OVERFLOW_ERROR);
         INCREMENT_error_counter;
-        INSERT_LABEL(LBB55_20);
+
+        LABEL(LBB_CHECK_OVERFLOW_ERROR);
         INSERT_load(opnd_create_reg(DR_REG_RAX), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
         //DOUBLE CHECK
         INSERT_cmp(opnd_create_reg(DR_REG_RAX),OPND_CREATE_MEM64(DR_REG_RSP, 16));
-        INSERT_jb(LBB55_22);
-        INSERT_load(opnd_create_reg(DR_REG_RAX), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+        INSERT_jb(LBB_INC_ERROR);
         INSERT_cmp(opnd_create_reg(DR_REG_RAX),OPND_CREATE_MEM64(DR_REG_RSP, 8));
-        INSERT_jbe(LBB55_26);
-        INSERT_LABEL(LBB55_22);
+        INSERT_jbe(LBB_RESTORE_ALL);
+
+        LABEL(LBB_INC_ERROR);
         INCREMENT_error_counter;
     }
     //RESTORE
-    INSERT_LABEL(LBB55_26);
+    LABEL(LBB_RESTORE_ALL);
     INSERT_add(opnd_create_reg(DR_REG_RSP), OPND_CREATE_INT32(24));
     RESTORE_REG(DR_REG_RSP,SPILL_SLOT_1);
     RESTORE_CALLEE_REG_SET1(bitmask_reg);
@@ -956,15 +948,12 @@ void check_lea_mem(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint
 
     dest_id = get_64bit(opnd_get_reg(dest));
 
-    LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);
 
-    instr_t *LBB59_3 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB59_4 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB59_5 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB59_6 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB59_7 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB59_8 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB59_11 = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_COPY_BOUNDS_MEM_TO_DSTREG      = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_LEA_IN_MEMTAB            = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_REMOVE_DSTREG                  = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL                    = INSTR_CREATE_label(drcontext);
+    
     SAVE_REG(DR_REG_RSP,SPILL_SLOT_1);
     //save full set with RAX in the start
     SAVE_CALLEE_REG_SET(bitmask_reg);
@@ -973,53 +962,41 @@ void check_lea_mem(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint
         SAVE_REG(DR_REG_RAX,SPILL_SLOT_12);
         RESTORE_REG(DR_REG_RAX,SPILL_SLOT_2);
     }
+    LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);
     if(base != DR_REG_NULL){
         if(base_reg_id == DR_REG_XBP || base_reg_id == DR_REG_XSP){
             INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
             INSERT_call(opnd_create_pc((byte *)&is_key_found_memtable));
             INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-            INSERT_jnz(LBB59_3);
-            JUMP_to_label(LBB59_4);
-            
-            INSERT_LABEL(LBB59_3);
-            INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(dest_id));
-            INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
-            INSERT_call(opnd_create_pc((byte *)&copyMemToReg));
-            JUMP_to_label(LBB59_11);
+            INSERT_jnz(LBB_COPY_BOUNDS_MEM_TO_DSTREG);
         }
-     //   else{
-            INSERT_LABEL(LBB59_4);
-            INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(base_reg_id));
-            INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
-            INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-            INSERT_jnz(LBB59_5);
-            JUMP_to_label(LBB59_6);
+        INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(base_reg_id));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
+        INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
+        INSERT_jz(LBB_CHECK_LEA_IN_MEMTAB);
 
-            INSERT_LABEL(LBB59_5);
-            INSERT_load_int( opnd_create_reg(DR_REG_ESI), OPND_CREATE_INT32(dest_id));
-            INSERT_load_int( opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(base_reg_id));
-            INSERT_call(opnd_create_pc((byte *)&copyRegValues));
-            JUMP_to_label(LBB59_11);
-       // }
+        INSERT_load_int( opnd_create_reg(DR_REG_ESI), OPND_CREATE_INT32(dest_id));
+        INSERT_load_int( opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(base_reg_id));
+        INSERT_call(opnd_create_pc((byte *)&copyRegValues));
+        JUMP_to_label(LBB_RESTORE_ALL);
     }
-    INSERT_LABEL(LBB59_6);
+    LABEL(LBB_CHECK_LEA_IN_MEMTAB);
     INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_memtable));
     INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB59_7);
-    JUMP_to_label(LBB59_8);
+    INSERT_jz(LBB_REMOVE_DSTREG);
 
-    INSERT_LABEL(LBB59_7);
+    LABEL(LBB_COPY_BOUNDS_MEM_TO_DSTREG);
     INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(dest_id));
     INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
     INSERT_call(opnd_create_pc((byte *)&copyMemToReg));
-    JUMP_to_label(LBB59_11);
+    JUMP_to_label(LBB_RESTORE_ALL);
 
-    INSERT_LABEL(LBB59_8);
+    LABEL(LBB_REMOVE_DSTREG);
     ERASE_dst_reg_from_reg_table(dest_id);
     ERASE_dst_reg_from_split_reg_table(dest_id);
 
-    INSERT_LABEL(LBB59_11);
+    LABEL(LBB_RESTORE_ALL);
     RESTORE_REG(DR_REG_RSP,SPILL_SLOT_1);
     RESTORE_CALLEE_REG_SET(bitmask_reg);
     if(bitmask_flags){
@@ -1042,8 +1019,9 @@ void check_lea_stack(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags,uin
 
     dest_id = get_64bit(opnd_get_reg(dest));
 
-    instr_t *LBB60_1 = INSTR_CREATE_label(drcontext);
-    instr_t *LBB60_2 = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_COPY_BOUNDS_TO_DST = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL = INSTR_CREATE_label(drcontext);
+
     SAVE_REG(DR_REG_RSP,SPILL_SLOT_1);
     SAVE_CALLEE_REG_SET1(bitmask_reg);
     SAVE_CALLEE_REG_SET2_RAX(bitmask_reg);
@@ -1056,15 +1034,269 @@ void check_lea_stack(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags,uin
     INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(DR_REG_RSP));
     INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
     INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
-    INSERT_jnz(LBB60_1);
-    JUMP_to_label(LBB60_2);
+    INSERT_jnz(LBB_COPY_BOUNDS_TO_DST);
+    JUMP_to_label(LBB_RESTORE_ALL);
 
-    INSERT_LABEL(LBB60_1);
+    LABEL(LBB_COPY_BOUNDS_TO_DST);
     INSERT_load_int( opnd_create_reg(DR_REG_ESI), OPND_CREATE_INT32(dest_id));
     INSERT_load_int( opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(DR_REG_RSP));
     INSERT_call(opnd_create_pc((byte *)&copyRegValues));
 
-    INSERT_LABEL(LBB60_2);
+    LABEL(LBB_RESTORE_ALL);
+    RESTORE_REG(DR_REG_RSP,SPILL_SLOT_1);
+    RESTORE_CALLEE_REG_SET1(bitmask_reg);
+    RESTORE_CALLEE_REG_SET2_RAX(bitmask_reg);
+    if(bitmask_flags){
+        RESTORE_REG(DR_REG_RAX,SPILL_SLOT_12);
+        RESTORE_ARITH_FLAGS(SPILL_SLOT_12);
+        RESTORE_REG(DR_REG_RAX,SPILL_SLOT_9);
+    }
+}
+
+void check_deref_global_mem_load(JANUS_CONTEXT, instr_t *trigger, uint64_t bitmask_flags, uint64_t bitmask_reg, int dest_id, uint64_t global_base, uint64_t global_bound, int mem_access){
+
+    opnd_t mem_operand;
+    int i, num_srcs;
+    
+    num_srcs = instr_num_srcs(trigger);
+    for(i=0; i< num_srcs; i++){
+       opnd_t operand1 = instr_get_src(trigger, i);
+       if(opnd_is_memory_reference(operand1))
+          mem_operand = operand1;
+    }
+    instr_t *LBB_INC_ERROR                      = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_DSTREG                   = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_OVERFLOW_ERROR           = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL                    = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_COPY_GLOBAL_BOUNDS             = INSTR_CREATE_label(drcontext);
+   
+    //LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);
+    //START. save reg, flags and increment SP
+
+    SAVE_CALLEE_REG_SET1(bitmask_reg);
+    SAVE_CALLEE_REG_SET2_RAX(bitmask_reg);
+    if(bitmask_flags){
+        SAVE_ARITH_FLAGS(SPILL_SLOT_12);
+        SAVE_REG(DR_REG_RAX,SPILL_SLOT_12);
+        RESTORE_REG(DR_REG_RAX,SPILL_SLOT_9);
+    }
+
+    if(mem_access == GLOBALVAL_TO_REG){
+        INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(dest_id));
+        INSERT_load_int(opnd_create_reg(DR_REG_RSI), OPND_CREATE_INTPTR(global_base)); //base
+        INSERT_load_int(opnd_create_reg(DR_REG_RDX), OPND_CREATE_INTPTR(global_bound));  //bound
+        INSERT_call(opnd_create_pc((byte *)&setRegValues));
+        JUMP_to_label(LBB_RESTORE_ALL);
+    
+    }
+    else{
+        LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);            //puts address in RSI register, and then in LEAddr
+
+        //A. if(is_key_found(memory_table, LEAddr))
+        
+        INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_memtable));
+        INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
+        if(mem_access == ABS_GLOBALMEM_TO_REG){
+            INSERT_jz(LBB_COPY_GLOBAL_BOUNDS);
+        }
+        else 
+            INSERT_jz(LBB_CHECK_OVERFLOW_ERROR);    //if key not found
+
+        if(mem_access == MEM_REF || mem_access == ABS_GLOBALMEM_TO_REG){
+            // A1 reg_table[dest].base= memory_table[LEAddr].base;    
+            INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(dest_id));
+            INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+            INSERT_call(opnd_create_pc((byte *)&copyMemToReg));
+            JUMP_to_label(LBB_RESTORE_ALL);
+        }
+        else if (mem_access == ARITH_MEM){
+            INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+            INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&memory_table));
+            INSERT_call(opnd_create_pc((byte *)&mapGet2));   //memory_table[LEAddr]
+            INSERT_move(opnd_create_reg(DR_REG_RDI), opnd_create_reg(DR_REG_RAX));
+            INSERT_call(opnd_create_pc((byte *)&pairGetFirst)); //memory_table[LEAddr].base
+            INSERT_move(opnd_create_reg(DR_REG_RDI), opnd_create_reg(DR_REG_RAX));
+            SAVE_REG(DR_REG_RDI,SPILL_SLOT_13); //put base value in RDI in spill slot
+            //A3.1. if(is_key_found(freed, base) && mapGet0(&freed, base) == 1)
+            INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
+            INSERT_test(opnd_create_reg(DR_REG_AL),opnd_create_reg(DR_REG_AL));
+            INSERT_jz(LBB_RESTORE_ALL);
+            //if mapGet0(&freed, base) == 1
+            RESTORE_REG(DR_REG_RDI,SPILL_SLOT_13); //use base value in spill slot and pass as argument to next call
+            INSERT_call(opnd_create_pc((byte *)&getFreedValue)); //freed[base]
+            INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1)); //if both are same i.e. freed=1, zf=1 increment error
+            INSERT_jnz(LBB_RESTORE_ALL);
+            //if freed[base]=1, double free error
+            INCREMENT_error_counter;
+        }
+        if(mem_access == ABS_GLOBALMEM_TO_REG){
+            LABEL(LBB_COPY_GLOBAL_BOUNDS);
+            INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(dest_id));
+            INSERT_load_int(opnd_create_reg(DR_REG_RSI), OPND_CREATE_INTPTR(global_base)); //base
+            INSERT_load_int(opnd_create_reg(DR_REG_RDX), OPND_CREATE_INTPTR(global_bound));  //bound
+            INSERT_call(opnd_create_pc((byte *)&setRegValues));
+            JUMP_to_label(LBB_RESTORE_ALL);
+        }
+        //B4. if( LEAddr < global_base || LEAddr > global_bound){ error_counter++}
+        LABEL(LBB_CHECK_OVERFLOW_ERROR);
+        INSERT_load(opnd_create_reg(DR_REG_RAX), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+        INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64(global_base));
+        INSERT_cmp(opnd_create_reg(DR_REG_RAX),opnd_create_reg(DR_REG_RDI));
+        INSERT_jb(LBB_INC_ERROR);
+        INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64(global_bound));
+        INSERT_cmp(opnd_create_reg(DR_REG_RAX),opnd_create_reg(DR_REG_RDI));
+        INSERT_jbe(LBB_CHECK_DSTREG);
+
+        //LBB_INC_ERROR:
+        LABEL(LBB_INC_ERROR);
+        INCREMENT_error_counter;
+
+        //if(is_key_found(reg_table, dest_id)){remove dest_id from reg tables} 
+        //LBB_CHECK_DSTREG:
+        LABEL(LBB_CHECK_DSTREG);
+        INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(dest_id));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
+        INSERT_test(opnd_create_reg(DR_REG_AL),opnd_create_reg(DR_REG_AL));
+        INSERT_jz(LBB_RESTORE_ALL);
+        ERASE_dst_reg_from_reg_table(dest_id);
+        ERASE_dst_reg_from_split_reg_table(dest_id);
+        //END. restore SP, registers and flags
+        //LBB_RESTORE_ALL:
+
+    }
+
+    LABEL(LBB_RESTORE_ALL); 
+    RESTORE_CALLEE_REG_SET1(bitmask_reg);
+    RESTORE_CALLEE_REG_SET2_RAX(bitmask_reg);
+    if(bitmask_flags){
+        RESTORE_REG(DR_REG_RAX,SPILL_SLOT_12);
+        RESTORE_ARITH_FLAGS(SPILL_SLOT_12);
+        RESTORE_REG(DR_REG_RAX,SPILL_SLOT_9);
+    }
+}
+void check_deref_global_mem_store(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uint64_t bitmask_reg,int src_id, uint64_t global_base, uint64_t global_bound, int mem_access/*MEM_REF, CONST_MEM, ABS_MEM, CONST_ABS_MEM, ARITH_MEM*/){
+    
+    opnd_t mem_operand;
+    int i, num_dsts;
+
+    num_dsts = instr_num_dsts(trigger);
+    for(i=0; i< num_dsts; i++){
+       opnd_t operand1 = instr_get_dst(trigger, i);
+       if(opnd_is_memory_reference(operand1))
+          mem_operand = operand1;
+    }
+
+
+    instr_t *LBB_COPY_BOUNDS_TO_MEMTAB          = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_REMOVE_LEA_FROM_MEMTAB         = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_CHECK_OVERFLOW_ERROR           = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_INC_ERROR                      = INSTR_CREATE_label(drcontext);
+    instr_t *LBB_RESTORE_ALL                    = INSTR_CREATE_label(drcontext);
+
+    SAVE_REG(DR_REG_RSP,SPILL_SLOT_1);
+    SAVE_CALLEE_REG_SET1(bitmask_reg);
+    SAVE_CALLEE_REG_SET2_RAX(bitmask_reg);
+    if(bitmask_flags){
+        SAVE_ARITH_FLAGS(SPILL_SLOT_12);
+        SAVE_REG(DR_REG_RAX,SPILL_SLOT_12);
+        RESTORE_REG(DR_REG_RAX,SPILL_SLOT_9);
+    }
+
+    LOAD_EFFECTIVE_ADDR_LEADDR(mem_operand);
+
+    INSERT_sub(opnd_create_reg(DR_REG_RSP), OPND_CREATE_INT32(8));
+    //if(reg_table.find(src) != reg_table.end())
+    if(mem_access == MEM_REF_STORE){
+        INSERT_load_int(opnd_create_reg(DR_REG_EDI), OPND_CREATE_INT32(src_id));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_regtable));
+        INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
+        INSERT_jz(LBB_CHECK_OVERFLOW_ERROR); //if key not found (result of AND is zero)
+        
+        INSERT_load_int(opnd_create_reg(DR_REG_ESI), OPND_CREATE_INT32(src_id));
+        INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&reg_table));
+        INSERT_call(opnd_create_pc((byte *)&mapGet1));
+        INSERT_move(opnd_create_reg(DR_REG_RDI), opnd_create_reg(DR_REG_RAX));
+        SAVE_REG(DR_REG_RDI,SPILL_SLOT_13);
+        INSERT_call(opnd_create_pc((byte *)&pairGetFirst));
+        INSERT_store(OPND_CREATE_MEM64(DR_REG_RSP, 16), opnd_create_reg(DR_REG_RAX));
+        RESTORE_REG(DR_REG_RDI,SPILL_SLOT_13);
+        INSERT_call(opnd_create_pc((byte *)&pairGetSecond));
+        INSERT_store(OPND_CREATE_MEM64(DR_REG_RSP, 8), opnd_create_reg(DR_REG_RAX));
+        
+        INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
+        INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
+        INSERT_jz(LBB_COPY_BOUNDS_TO_MEMTAB);   //if key not found
+
+        //if key found, check for doubel free error
+        INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
+        INSERT_call(opnd_create_pc((byte *)&getFreedValue));
+        INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
+        INSERT_jnz(LBB_COPY_BOUNDS_TO_MEMTAB);
+        INCREMENT_error_counter;
+        
+        // memory_table[LEAddr].base = base; memory_table[LEAddr].bound = bound;
+        LABEL(LBB_COPY_BOUNDS_TO_MEMTAB);
+        INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+        INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&memory_table));
+        INSERT_call(opnd_create_pc((byte *)&mapGet2));
+        INSERT_move(opnd_create_reg(DR_REG_RDI), opnd_create_reg(DR_REG_RAX));
+        SAVE_REG(DR_REG_RDI,SPILL_SLOT_13);
+        INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_MEM64(DR_REG_RSP, 16));
+        INSERT_call(opnd_create_pc((byte *)&pairSetFirst));
+        RESTORE_REG(DR_REG_RDI,SPILL_SLOT_13);
+        INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_MEM64(DR_REG_RSP, 8));
+        INSERT_call(opnd_create_pc((byte *)&pairSetSecond));
+        JUMP_to_label(LBB_RESTORE_ALL);
+        
+    }
+    else{
+        //if(memory_table.find(LEAddr) != memory_table.end())
+        INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_memtable));
+        INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
+        INSERT_jz(LBB_CHECK_OVERFLOW_ERROR);                 //key not found
+        
+        //if key found in memtable
+        INSERT_load(opnd_create_reg(DR_REG_RSI), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+        INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64((uint64_t)&memory_table));
+        INSERT_call(opnd_create_pc((byte *)&mapGet2));  //memory_table[LEAddr]
+        INSERT_move(opnd_create_reg(DR_REG_RDI), opnd_create_reg(DR_REG_RAX));
+        INSERT_call(opnd_create_pc((byte *)&pairGetFirst)); //get memory_table[LEAddr].base and put on the stack 0x8(%RSP)
+        INSERT_store(OPND_CREATE_MEM64(DR_REG_RSP, 8), opnd_create_reg(DR_REG_RAX));
+        INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 8));
+        INSERT_call(opnd_create_pc((byte *)&is_key_found_freed));
+        INSERT_test(opnd_create_reg(DR_REG_AL), opnd_create_reg(DR_REG_AL));
+        INSERT_jz(LBB_REMOVE_LEA_FROM_MEMTAB); //if key not found in freed, proceed
+        
+        //if key found in freed table, check for double free error
+        INSERT_load(opnd_create_reg(DR_REG_RDI), OPND_CREATE_MEM64(DR_REG_RSP, 8));
+        INSERT_call(opnd_create_pc((byte *)&getFreedValue));
+        INSERT_cmp(opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
+        INSERT_jnz(LBB_REMOVE_LEA_FROM_MEMTAB);
+        INCREMENT_error_counter;
+
+        LABEL(LBB_REMOVE_LEA_FROM_MEMTAB);
+        ERASE_lea_addr_from_memory_table;
+        JUMP_to_label(LBB_RESTORE_ALL);
+    }
+    LABEL(LBB_CHECK_OVERFLOW_ERROR);
+    INSERT_load(opnd_create_reg(DR_REG_RAX), OPND_CREATE_ABSMEM((byte *)&LEAddr, OPSZ_8));
+    INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64(global_base));
+    INSERT_cmp(opnd_create_reg(DR_REG_RAX),opnd_create_reg(DR_REG_RDI));
+    INSERT_jb(LBB_INC_ERROR);
+    INSERT_load_int(opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64(global_bound));
+    INSERT_cmp(opnd_create_reg(DR_REG_RAX),opnd_create_reg(DR_REG_RDI));
+    INSERT_jbe(LBB_RESTORE_ALL);
+
+    LABEL(LBB_INC_ERROR);
+    INCREMENT_error_counter;
+   
+
+    //RESTORE
+    LABEL(LBB_RESTORE_ALL);
+    INSERT_add(opnd_create_reg(DR_REG_RSP), OPND_CREATE_INT32(8));
     RESTORE_REG(DR_REG_RSP,SPILL_SLOT_1);
     RESTORE_CALLEE_REG_SET1(bitmask_reg);
     RESTORE_CALLEE_REG_SET2_RAX(bitmask_reg);

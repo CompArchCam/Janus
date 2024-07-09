@@ -38,7 +38,7 @@ int temporal_safety = 1;
 int spatial_safety = 1;
 int detect_heap_overflows = 1;
 int detect_stack_overflows = 1;
-int detect_global_overflows = 0;
+int detect_global_overflows = 1;
 int trace_func_boundaries = 0;
 int trace_stack_args = 0;
 int enable_push_pop = 0;
@@ -220,17 +220,6 @@ void monitor_mem_access(JanusContext *jc){
 #endif
         push_count = 0;
         pop_count = 0;
-        if(func.danglingBlocks.size() > 1) {
-            //continue;
-            /*int count = 0;
-             cout<<"Func "<<func.name<<" has "<<func.danglingBlocks.size()<<" dangling blocks"<<endl;
-            for(auto bb : func.danglingBlocks){
-                 count++;
-                 if(count > 1 && func.entry[bb].size > 1){
-                     cout<<hex<<func.entry[bb].instrs->pc<<" size: "<<dec<<func.entry[bb].size<<endl;
-                 }
-            }*/
-        }
         for(auto &instr : func.instrs){
            if(jc->mode == JSBCETS_LIVE){
                 bitmask_flags = func.liveFlagIn[instr.id].bits;
@@ -278,7 +267,7 @@ bool generate_rule_MOV_instr(Instruction *instr, VarState *ip, VarState *op,  ui
 #ifdef DEBUG_DETAIL_2
                             cout<<"GLOBAL_MEM_REG_LOAD - instr: "<<dec<<instr->id<<endl;
 #endif
-                            insert_security_rule(instr, (RuleOp)GLOBAL_MEM_REG_LOAD, ip->value, global_sym_table[ip->value]); 
+                            insert_security_rule(instr, (RuleOp)GLOBAL_MEM_REG_LOAD, bitmask_flags, bitmask_regs, ip->value, ip->value + global_sym_table[ip->value]); 
                      }
                   }
                 }
@@ -286,7 +275,7 @@ bool generate_rule_MOV_instr(Instruction *instr, VarState *ip, VarState *op,  ui
             break;
             case JVAR_ABSOLUTE:                                            //abs mem ->reg load
                 if(detect_global_overflows && has_debug_info && global_sym_table.count(ip->value)){
-                    insert_security_rule(instr, (RuleOp)ABS_GLOBAL_MEM_REG_LOAD, bitmask_flags, bitmask_regs, ip->value,global_sym_table[ip->value]);    
+                    insert_security_rule(instr, (RuleOp)ABS_GLOBAL_MEM_REG_LOAD, bitmask_flags, bitmask_regs, ip->value, ip->value+global_sym_table[ip->value]);    
                 }
                 else{
                     insert_security_rule(instr, (RuleOp)ABS_MEM_REG_LOAD,bitmask_flags,bitmask_regs, op->value/*dest_reg*/, 0/*no base*/);    
@@ -324,7 +313,7 @@ bool generate_rule_MOV_instr(Instruction *instr, VarState *ip, VarState *op,  ui
 #ifdef DEBUG_DETAIL_2
                         cout<<"GLOBAL_REG_MEM_STORE - instr: "<<dec<<instr->id<<endl;
 #endif
-                        insert_security_rule(instr, GLOBAL_REG_MEM_STORE, bitmask_flags, bitmask_regs, op->value, global_sym_table[op->value]); 
+                        insert_security_rule(instr, GLOBAL_REG_MEM_STORE, bitmask_flags, bitmask_regs, op->value, op->value + global_sym_table[op->value]); 
                         //insert_security_rule(instr, MONITOR_GLOBAL_BUFFER, op->value, global_sym_table[op->value]); 
                       }
                   }
@@ -339,7 +328,7 @@ bool generate_rule_MOV_instr(Instruction *instr, VarState *ip, VarState *op,  ui
 #ifdef DEBUG_DETAIL_2
                         cout<<"GLOBAL_TABLE_VALUE_MEM - instr: "<<dec<<instr->id<<endl;
 #endif
-                        insert_security_rule(instr, GLOBAL_TABLE_VALUE_MEM, bitmask_flags, bitmask_regs, op->value, global_sym_table[op->value]); 
+                        insert_security_rule(instr, GLOBAL_TABLE_VALUE_MEM, bitmask_flags, bitmask_regs, op->value, op->value + global_sym_table[op->value]); 
                        } 
                  }
             }
@@ -406,7 +395,7 @@ bool generate_rule_LEA_instr(Instruction *instr, VarState *ip, VarState *op,  ui
 #ifdef DEBUG_DETAIL_2
                         cout<<"GLOBAL_LEA_COPY_BASE - instr: "<<dec<<instr->id<<endl;
 #endif
-                           insert_security_rule(instr, GLOBAL_LEA_COPY_BASE, ip->value, global_sym_table[op->value]); 
+                           insert_security_rule(instr, GLOBAL_LEA_COPY_BASE, bitmask_flags, bitmask_regs, ip->value, ip->value + global_sym_table[ip->value]); 
                   }
                   else{
                      rule_applied = false;
@@ -437,7 +426,7 @@ bool generate_rule_ARITH_instr(Instruction *instr, VarState *ip, VarState *op,  
 #ifdef DEBUG_DETAIL_2
                         cout<<"GLOBAL_ARITH_MEM_REG_LOAD - instr: "<<dec<<instr->id<<endl;
 #endif
-                        insert_security_rule(instr, GLOBAL_ARITH_MEM_REG_LOAD, ip->value, global_sym_table[ip->value]); 
+                        insert_security_rule(instr, GLOBAL_ARITH_MEM_REG_LOAD, ip->value, ip->value + global_sym_table[ip->value]); 
                      }else
                         rule_applied = false;
                   }else{
@@ -468,7 +457,7 @@ bool generate_rule_ARITH_instr(Instruction *instr, VarState *ip, VarState *op,  
 #ifdef DEBUG_DETAIL_2
                         cout<<"GLOBAL_ARITH_REG_MEM_STORE - instr: "<<dec<<instr->id<<endl;
 #endif
-                        insert_security_rule(instr, GLOBAL_ARITH_REG_MEM_STORE, bitmask_flags, bitmask_regs, op->value, global_sym_table[op->value]); 
+                        insert_security_rule(instr, GLOBAL_ARITH_REG_MEM_STORE, bitmask_flags, bitmask_regs, op->value, op->value + global_sym_table[op->value]); 
                       }
                   }
               } 
@@ -483,7 +472,7 @@ bool generate_rule_ARITH_instr(Instruction *instr, VarState *ip, VarState *op,  
 #ifdef DEBUG_DETAIL_2
                         cout<<"GLOBAL_ARITH_REG_MEM_STORE - instr: "<<dec<<instr->id<<endl;
 #endif
-                        insert_security_rule(instr, GLOBAL_ARITH_VALUE_MEM, bitmask_flags, bitmask_regs, op->value, global_sym_table[op->value]); 
+                        insert_security_rule(instr, GLOBAL_ARITH_VALUE_MEM, bitmask_flags, bitmask_regs, op->value, op->value + global_sym_table[op->value]); 
                       }
                   }
              
@@ -522,7 +511,7 @@ bool generate_rule_PUSH_instr(Instruction *instr, VarState *ip,  uint64_t bitmas
             push_count++;
         }else{
             if(has_debug_info && global_sym_table.count(ip->value)){
-                applied = insert_security_rule(instr, PUSH_GLOBAL, ip->value, global_sym_table[ip->value]); 
+                applied = insert_security_rule(instr, PUSH_GLOBAL, ip->value, ip->value + global_sym_table[ip->value]); 
             push_count++;
             }
         }
@@ -533,7 +522,7 @@ bool generate_rule_PUSH_instr(Instruction *instr, VarState *ip,  uint64_t bitmas
    }
    else if(ip->type == JVAR_CONSTANT){
       if(has_debug_info && global_sym_table.count(ip->value)){
-            applied = insert_security_rule(instr, PUSH_GLOBAL, ip->value, global_sym_table[ip->value]); 
+            applied = insert_security_rule(instr, PUSH_GLOBAL, ip->value, ip->value + global_sym_table[ip->value]); 
             push_count++;
       }
       else{
@@ -568,12 +557,6 @@ bool generate_table_main_rule(Instruction *instr, Function &func, uint64_t bitma
     //if(instr->minstr->isMOV()){
     if(instr->opcode == Instruction::Mov){
         if(instr->inputs.size() == 0){
-
-           cout<<"SIZE 0 instr: "<<hex<<instr->pc<<" "<<*instr<<" input: "<<instr->inputs.size()<<" output: "<<instr->outputs.size()<<endl;
-            for(auto vs: instr->inputs){
-
-              cout<<"ip: "<<*vs<<endl; //assumption: only one i/p //need to make sure these are correct
-            }
            return false;
         }
         else{
@@ -701,7 +684,8 @@ void monitor_stack_access(JanusContext *jc){
             for(int i=0; i<entry->size; i++){
                Instruction *instr = &(entry->instrs[i]);
                if(instr->pc == func.prologueEnd){
-                    assert(i+1 < func.entry->size);
+                    //assert(i+1 < func.entry->size);
+                    if(i+1 >= func.entry->size) continue;
                     Instruction *next_instr = &(func.entry->instrs[i+1]);
                     insert_security_rule(next_instr, STORE_STACK_BOUNDS, func.totalFrameSize, func.hasBasePointer ? 1 : 0);
                     break;
@@ -735,8 +719,9 @@ void monitor_stack_access(JanusContext *jc){
                      instr_rule = instr; 
                    }
                 }
-                assert(instr_rule != NULL);
-                insert_security_rule(instr_rule, STORE_STACK_BOUNDS, func.totalFrameSize, func.hasBasePointer);
+                //assert(instr_rule != NULL);
+                if(instr_rule != NULL)
+                    insert_security_rule(instr_rule, STORE_STACK_BOUNDS, func.totalFrameSize, func.hasBasePointer);
                  /*if(func.hasBasePointer){//has BP, insert rule after last PUSH?
 
                  }
@@ -980,56 +965,54 @@ printplt(JanusContext *jc){
 
 }
 static void analyze_leaf_functions(JanusContext *jc){
-  //TODO: here we are analyzing memory, reg move and other instructions too. need to save all the caller saved registers
+//  initially set all the caller-saved registers as live (RDI, RSI, RCD, RDX, R8, R9, R10, R11)
+
   for(auto &func: jc->functions){
      if ((!func.entry && !func.instrs.size()) || func.isExternal) continue;
      if(gcc_func.count(func.name) || func.name == "_plt") continue;
 
-     bool rdi_written = false; 
-     bool rsi_written = false; 
-     int save_rdi = 0; 
-     int save_rsi = 0; 
      //if function has subcalls, skip
      if(func.subCalls.size()  || func.jumpCalls.size() ) continue;
-     //if function has no memory instructions, skip
-     bool readWriteMem = false;
-     for(auto &bb : func.blocks){
-       if(bb.minstrs.size()){ //even if one memory instruction found, we proceed
-           readWriteMem = true;
-           break;
-       }
-     }
-     if(!readWriteMem) continue;    //if not memory read/write instruction, no need to save/restore
+      uint64_t bitmask_reg = 0xFC6; // b'1111 1100 0110
+      RegSet WriteSet;
      for(auto &instr: func.instrs){
         for(auto op : instr.outputs){
            if(op->type == JVAR_REGISTER){
-                 if(op->value == JREG_RDI) //writes RDI, no need to save
-                     rdi_written = true;
-                 if(op->value == JREG_RSI) //writes RSI, no need to save
-                     rsi_written = true;
+                 WriteSet.insert(op->value);
+                 bitmask_reg = bitmask_reg & ~(WriteSet.bits); //reset the bits for registers that has been written to
            }
         }
      }
      //as far as it is not written by an instr in the function, the caller will assume it does not need to be save.as for reading, we will still need to save as it could be alive in one basic block but not antother, so it will not be saved by the instrumentation at such instructions. so we need to make sure that we save nonetheless. in the worst case, we wll only be saving double.
-     if(!rsi_written) save_rsi = 1;
-     if(!rdi_written) save_rdi = 1;
-     if(save_rsi || save_rdi){
+     if(bitmask_reg){
          //save
          Instruction* entry_instr = &(func.entry->instrs[0]);
-        //save_count++;
-        //insert_asan_rule(entry_instr, SAVE_AT_ENTRY,save_rdi, save_rsi, save_count,0);
-
+         insert_security_rule(entry_instr, SAVE_AT_ENTRY,bitmask_reg,0);
          //restore
-       // restore_count++;
          for (auto retID : func.terminations) {
             BasicBlock &bb = func.blocks[retID];
             Instruction *exit_instr = bb.lastInstr();
             if (exit_instr->opcode == Instruction::Return) { //TODO: look for lonjmp as well
-         //       insert_asan_rule(exit_instr, RESTORE_AT_EXIT, save_rdi, save_rsi, restore_count, 0);
+                insert_security_rule(exit_instr, RESTORE_AT_EXIT, bitmask_reg, 0);
             }
          }
      }
   }
+}
+static void mark_main_entry(JanusContext *jc){
+   for(auto &func: jc->functions){
+      if(func.name.compare("main")==0){
+         if (func.entry){
+            RewriteRule rule;
+            BasicBlock *bb = func.entry;
+            if(bb == NULL) return;
+            rule = RewriteRule((RuleOp)ENABLE_MONITORING, bb->instrs->pc, bb->instrs->pc, bb->instrs->id);
+            rule.reg0 = 0;
+            rule.reg1 = 0;
+            insertRule(0, rule, bb);
+         }
+      }
+   }
 }
 void
 generateSBCETSRule(JanusContext *jc)
@@ -1045,6 +1028,7 @@ generateSBCETSRule(JanusContext *jc)
         mark_noop_blocks(jc); //to solve the issue of DR starting bb from noop sometimes.
         return;
     }
+    mark_main_entry(jc);
    
     if(detect_global_overflows){
         load_symbol_table(jc);
@@ -1057,6 +1041,12 @@ generateSBCETSRule(JanusContext *jc)
     }
     //print_stack_details(jc);
     monitor_mem_access(jc);
+    //use liveness for rsi, rdi and rax around function calls
+    if(jc->mode == JSBCETS_LIVE){
+        analyze_leaf_functions(jc);
+    /*    analyze_call_sites(jc);
+    */
+    }
     
     if(temporal_safety){ 
         if(detect_heap_overflows)// free() call sites

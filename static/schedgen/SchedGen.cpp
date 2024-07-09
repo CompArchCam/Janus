@@ -15,6 +15,7 @@
 #include "PlanRule.h"
 #include "asanRule.h"
 #include "sbCETSRule.h"
+#include "cfiRule.h"
 #include <cstdlib>
 #include <cstdio>
 
@@ -46,7 +47,7 @@ generateRules(JanusContext *gc)
 
     //skip generating rules if there are no loops. for jasan, we still want to generate rules so we move forward
     if (gc->mode != JFCOV && !numLoops 
-        && (gc->mode!=JDLL && gc->mode!=JASAN && gc->mode!=JASAN_SCEV && gc->mode!=JASAN_LIVE &&  gc->mode!=JASAN_OPT && gc->mode != JASAN_NULL && gc->mode!=JSBCETS && gc->mode!=JSBCETS_NULL && gc->mode!=JSBCETS_LIVE)) {
+        && (gc->mode != JCFI && gc->mode != JCFI_LIVE && gc->mode!=JDLL && gc->mode!=JASAN && gc->mode!=JASAN_SCEV && gc->mode!=JASAN_LIVE &&  gc->mode!=JASAN_OPT && gc->mode != JASAN_NULL && gc->mode!=JSBCETS && gc->mode!=JSBCETS_NULL && gc->mode!=JSBCETS_LIVE)) {
         GSTEP("No rules generated"<<endl);
         return;
     }
@@ -103,6 +104,10 @@ generateRules(JanusContext *gc)
     case JSBCETS_LIVE:
         generateSBCETSRule(gc);
     break;
+    case JCFI:
+    case JCFI_LIVE:
+       generateCFIRule(gc);
+   break;
     default:
         break;
     }
@@ -130,8 +135,6 @@ void insert_null_rule(PCAddress bb){
 }
 void mark_null_rules(JanusContext *jc){
    for(auto &func: jc->functions){
-      //cout<<"===============Func: "<<func.name<<"================="<<endl;
-      //if ((!func.entry && !func.instrs.size())) continue;
       for(auto &bb : func.blocks){
          if(!rewriteRules[0].ruleMap.count(bb.instrs->pc)){ //if bb not found in map, insert empty rule
              insert_null_rule(bb.instrs->pc);

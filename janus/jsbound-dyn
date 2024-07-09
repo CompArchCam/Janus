@@ -1,5 +1,5 @@
 #!/bin/bash     
-set -x
+#set -x
 my_dir="$(dirname "$0")"
 
 source $my_dir/janus_header
@@ -28,7 +28,7 @@ then
 fi
 
 binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
-datadir=/local/scratch/ma843/rwdir-re
+datadir=/local/scratch/ma843/rwdir-sb
 #hintfile="$binfile.jrs" 
 #hintfile="$binname.jrs" 
 hintfile="$datadir/$binname.jrs"

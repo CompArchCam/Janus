@@ -588,6 +588,9 @@ bool
 MachineInstruction::isFPinstruction(){
     return (isFPU87() || isFP_SSE() || isFP_AVX());
 }
+bool MachineInstruction::isEndBranch(){
+    return (opcode == X86_INS_ENDBR64 || opcode == X86_INS_ENDBR32);
+}
 
 //TODO: SSE1, SSE2 , SSE3, SSE4
 bool

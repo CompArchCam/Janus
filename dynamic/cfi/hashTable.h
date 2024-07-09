@@ -16,11 +16,13 @@ struct HashTable{
     Node **table;
     int size;
     int p;
+    unsigned int curr_size;
     // Function to calculate the hash index
 };
 int hashFunction(HashTable *hashTable, uint32_t key) {
     //return key % size;
     return ((uint32_t)(key * 2654435769) >> (32 - hashTable->p));
+ //   return ((uint32_t)((key >> 4 ))) & (hashTable->size-1);
 }
 
 // Function to initialize the hash table
@@ -28,6 +30,7 @@ void initHashTable(HashTable *hashTable, int init_size) {
     hashTable->table = (Node **)malloc(init_size * sizeof(Node *));
     hashTable->size = init_size;
     int p = 0;
+    hashTable->curr_size = 0;
     // Initialize each slot to NULL
     for (int i = 0; i < init_size; i++) {
         hashTable->table[i] = NULL;
@@ -38,12 +41,14 @@ void initHashTable(HashTable *hashTable, int init_size) {
         p++;   // Increment the power
     }
     hashTable->p = p;
+    
 }
 // Function to insert a key-value pair into the hash table
 void insert(HashTable *hashTable, uint32_t key, int value) {
-    //int index = hashTable->hashFunction(key);
+   // int index = hashTable->hashFunction(key);
     int index  = ((uint32_t)(key * 2654435769) >> (32 - hashTable->p));
-    // Create a new node
+//     int index = ((uint32_t)((key >> 4 ))) & (hashTable->size - 1);
+    // Create a new node if the first slot is not empty
     Node *newNode = (Node *)malloc(sizeof(Node));
     newNode->key = key;
     newNode->value = value;
@@ -52,11 +57,13 @@ void insert(HashTable *hashTable, uint32_t key, int value) {
     // Insert at the beginning of the linked list
     newNode->next = hashTable->table[index];
     hashTable->table[index] = newNode;
+    hashTable->curr_size++;
 }
 // Function to retrieve the value associated with a key
 int lookupAddr(const HashTable *hashTable, uint32_t key) {
     //int index = hashTable->hashFunction(key);
     int index  = ((uint32_t)(key * 2654435769) >> (32 - hashTable->p));
+ //   int index  = ((uint32_t)(key >> 4 ) & (hashTable->size - 1));
     // Traverse the linked list at the hash index
     Node *current = hashTable->table[index];
     while (current != NULL) {
@@ -82,6 +89,9 @@ void freeHashTable(HashTable *hashTable) {
     }
 
     free(hashTable->table);
+}
+int get_size(HashTable *hashTable){
+   return hashTable->curr_size;
 }
 
 

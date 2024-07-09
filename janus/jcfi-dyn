@@ -1,0 +1,50 @@
+#!/bin/bash     
+#set -x
+my_dir="$(dirname "$0")"
+
+source $my_dir/janus_header
+
+blue_color="\e[34m"
+red_color="\e[31m"
+bold_style="\e[1m"
+reset="\e[0m"
+
+function usage {
+    echo "Janus Secure Execution with CFI"
+    echo "Usage: "
+    echo "./jcfi-dyn <executable> [executable_args ...]"
+}
+
+if [ $# -lt "1" ]
+then 
+    usage
+    exit
+fi
+
+
+binfile=$1
+shift
+#shift
+echo $binfile
+if [ ! -f $binfile ];
+then
+   echo "Executable $binfile does not exist in the binaries folder."
+   exit
+fi
+
+binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
+scratchdir=/local/scratch/ma843
+datadir=$scratchdir/rwdir-cfi
+#datadir=/local/scratch/ma843/rwdir-re
+#hintfile="$binfile.jrs" 
+#hintfile="$binname.jrs" 
+hintfile="$datadir/$binname.jrs"
+
+echo -e "${bold_style}Binary: ${red_color} $binfile${reset}"
+echo -e "${bold_style}RWSchedule: ${blue_color} $hintfile ${reset}"
+
+#asmfile="$datadir/$binname.s"
+#echo "$TOOLDIR/bin64/drrun -c $JANUSLIB/libjguard.so @$hintfile @1 @0 -- $binfile $*"
+#gdb --args $TOOLDIR/bin64/drrun -c $JANUSLIB/libjguard.so @$hintfile @1 @0 -- $binfile $@
+#$TOOLDIR/bin32/drrun -c $JANUSLIB/libjcfi.so @$hintfile @1 @0 -- $binfile $@
+$TOOLDIR/bin64/drrun -max_bb_instrs 64 -c $JANUSLIB/libjcfi.so @$hintfile @1 @0 -- $binfile $@

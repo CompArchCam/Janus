@@ -401,8 +401,9 @@ variableAnalysis(janus::Function *function)
         for (auto vo: instr.outputs) {
             if (vo->type == JVAR_REGISTER){
                 function->writeSet.insert(vo->value);
-                if(vo->value >= vo->reg){ // if it is smaller than full version. only then kill it
-                    //TODO: check if we need equality here i.e. vo->value >= vo->reg
+                //vo->value = 64bit version rax, vo->reg = actual byte size register e.g. eax, ah, al
+                //vo->value (64 bit version values) are always less than shorter bit versions
+                if(vo->value == vo->reg){ // 
                     instr.regWrites.insert(vo->value);
                 }
             }

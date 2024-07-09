@@ -17,7 +17,7 @@ using namespace std;
 
 typedef uintptr_t   addr_t;
 typedef uintptr_t   pc_t;
-enum {MEM_REF = 0, ABS_MEM, ARITH_MEM};
+enum {MEM_REF = 0, ABS_MEM, ARITH_MEM, GLOBALVAL_TO_REG, ABS_GLOBALMEM_TO_REG};
 enum {MEM_REF_STORE = 0, ABS_MEM_STORE, ARITH_MEM_STORE, CONST_MEM_STORE, CONST_ABS_MEM_STORE};
 /* Intermediate operation for beep event generation */
 typedef enum _opcode {

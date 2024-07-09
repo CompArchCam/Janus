@@ -257,6 +257,7 @@ static void monitor_mem_access(JanusContext *jc){
                     bitmask_flags = func.liveFlagIn[raw_instr->id].bits;
                     bitmask_regs = func.liveRegIn[raw_instr->id].bits;
                 }
+                if(raw_instr->pc == 0x43bf83){ cout<<" input: "<<raw_instr->inputs.size()<<" output: "<<raw_instr->outputs.size()<<endl; exit(0);}
 
                 if (meminstr.type == MemoryInstruction::Read ||
                                         meminstr.type == MemoryInstruction::ReadAndRead) {
@@ -526,6 +527,7 @@ generateASANRule(JanusContext *jc)
         monitor_malloc(jc);   
         monitor_loop_access(jc);
     }
+    cout<<"CAME HRE"<<endl;
     //analyse remaining memory accesses 
     monitor_mem_access(jc);
     //use liveness for rsi, rdi and rax around function calls

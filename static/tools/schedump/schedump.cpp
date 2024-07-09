@@ -137,6 +137,9 @@ int main(int argc, char **argv) {
 
     /* Bypass the header and parse static rules */
     RRule *ruleArray = (RRule *)(buffer + sizeof(RSchedHeader));
+    cout<<"RRheader size:"<<sizeof(RSchedHeader)<<endl;
+    cout<<"RRule size:"<<sizeof(RRule)<<endl;
+    cout<<"RRule* size:"<<sizeof(RRule*)<<endl;
 
     if (mode == 3) {
         cout <<"Selected channel : "<<channel<<endl;

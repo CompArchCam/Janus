@@ -34,4 +34,9 @@ static std::set<std::string> gcc_clang_func = {
     "__cxa_atexit",
     "__cxa_finalize"
 };
+static std::set<std::string> plt_func = {
+   "_plt"
+   "_plt_got"
+   "_plt_sec"
+};
 #endif

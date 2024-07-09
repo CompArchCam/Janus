@@ -162,7 +162,8 @@ DR_REG_R15W 48
                                         if(inRegSet(bitmask_reg,2)) RESTORE_REG(DR_REG_RCX,SPILL_SLOT_10);\
                                         if(inRegSet(bitmask_reg,3)) RESTORE_REG(DR_REG_RDX,SPILL_SLOT_11)
 
-#define MAX_STACK_DEPTH 512
+#define MAX_STACK_DEPTH 32768  //32768 sufficient for 483, + 512 for 400
+//#define MAX_STACK_DEPTH 512 //sufficient for all benchmarks except 483 and 400
 typedef struct{
     uintptr_t stack[MAX_STACK_DEPTH];
     int top;
