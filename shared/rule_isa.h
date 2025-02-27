@@ -10,7 +10,8 @@ extern char rs_dir[];
 //extern int client_mode;
 /* Rewrite Rules Specification */
 typedef enum _rr_type {
-    GNORMAL = 0,
+    /*GNORMAL = 0,*/
+    NO_RULE = 0,
     /* Generic Rewrite Rules */
     APP_SPLIT_BLOCK,
     /* -----------------------------------------------------
@@ -239,7 +240,7 @@ typedef enum _rr_type {
     MEM_RW_ACCESS,
     STORE_CANARY_SLOT,
     POISON_CANARY_SLOT,
-    NO_RULE,
+    /*NO_RULE,*/
     /* ----------------------------------------------------
      * Bounds Checking for Security Rewrite Rules 
      * ----------------------------------------------------*/

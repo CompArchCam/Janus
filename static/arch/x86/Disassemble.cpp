@@ -21,9 +21,9 @@ void disassembleAll(JanusContext *jc)
     cs_err      err;
     //initialise capstone disassembly engine
     //TODO, recognise architecture automatically
-    //err = cs_open(CS_ARCH_X86, CS_MODE_64, (csh *)(&jc->program.capstoneHandle));
+    err = cs_open(CS_ARCH_X86, CS_MODE_64, (csh *)(&jc->program.capstoneHandle));
     //for 32-bit arch
-    err = cs_open(CS_ARCH_X86, CS_MODE_32, (csh *)(&jc->program.capstoneHandle));
+    //err = cs_open(CS_ARCH_X86, CS_MODE_32, (csh *)(&jc->program.capstoneHandle));
 
     if (err) {
         printf("Failed on cs_open() in capstone with error returned: %u\n", err);
@@ -57,7 +57,7 @@ void disassembleAll(JanusContext *jc)
         if (func.name == string(".plt") || func.name == string("_plt")) {
             func.isExecutable = false;
             if(jc->program.pltAlternative)          //if plt.sec is available,link symbols there
-                 parseFlatPLT(jc, &func);
+                parseFlatPLT(jc, &func);
             else
                 linkRelocation(jc, &func);
                
@@ -185,7 +185,6 @@ static void parseFlatPLT(JanusContext *jc, Function *pltFunc)
         //HACK: to build BB for plt stubs to be used for instrumentation
         disassemble(synFunc);
     }
-    cout<<"finished parsing: "<<pltname<<endl;
 }
 
 ///Disassemble for the given function

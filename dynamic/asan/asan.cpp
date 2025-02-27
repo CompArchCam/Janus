@@ -13,35 +13,38 @@
 
 #define DEF_REG_S1 DR_REG_RSI //default register 1
 #define DEF_REG_S2 DR_REG_RDI //default register 2
-//#define DEBUG_VERBOSE
+#define DEBUG_VERBOSE   0     //Verbose debugging version
 
 //execution mode
 //settings for saving arithmetic flags
-#define HYBRID_MODE 1
-#define STAT_ONLY_MODE 0
-#define DYN_ONLY_MODE 0
-
-#define EFLAGS_PUSH_POP 0
-#define EFLAGS_DR_SAVE 1
-#define EFLAGS_SETO 0
+#define HYBRID_MODE 1           //default mode: static analysis + dynamic analysis + dynamic instrumentation
+#define STAT_ONLY_MODE 0        //static analysis + dynamic instrumentation (misses code that appears only dynamically) 
+#define DYN_ONLY_MODE 0         //dynamic analysis + dynamic instrumentation for all acode
 
 
+//Configuration for saving arithmetic flags. 
+#define EFLAGS_DR_SAVE 1        //default mode: save arith flags using DR APIs
+#define EFLAGS_PUSH_POP 0       //save arith flags by pushing/popping from stack
+#define EFLAGS_SETO 0           //save arith flags through seto instructions
+
+
+#define POISON_CLEANCALL 0      //default: disabled
 #define MAX_STR_LEN 256
 #define MAX_MODULES 1024
-#define POISON_CLEANCALL 0
-#define MAX_STACK_DEPTH 30
 # define MAX_SYM_RESULT 256
 
 using namespace std;
+
+typedef uintptr_t uptr;
+typedef uint64_t u64;
+typedef uint8_t u8;
+typedef int8_t s8;
+
 
 char name[MAX_SYM_RESULT];
 char file[MAX_SYM_RESULT];
 const char* app_name;
 const char* main_module;
-typedef uintptr_t uptr;
-typedef uint64_t u64;
-typedef uint8_t u8;
-typedef int8_t s8;
 bool flag_live_on = true;
 bool reg_live_on = true;
 int modNo = -1;
@@ -50,6 +53,7 @@ uint64_t error_counter;
 uint32_t monitor_enable = 0;
 uint32_t counter = 0;
 guard_t instbuff[MAX_BB_SIZE];
+uint64_t bbcount = 0;
 guard_t *iList;
 FILE* ofile;
 std::map<opnd_size_t, int> op_size={
@@ -59,13 +63,12 @@ std::map<opnd_size_t, int> op_size={
     {OPSZ_8, 8},
     {OPSZ_16, 16}
 };
-uint64_t addrstack[MAX_STACK_DEPTH];
 int top = 0;
 uint64_t canarySlot;
 std::stack<addr_t> canarySlots;
 std::stack<int> Slots;
 int stackTop=0;
-std::set<string> exclude_mod = {"libc.so.6","libclang_rt.asan-x86_64.so"};
+std::set<string> exclude_mod;
 struct reg_slots{
     uint64_t slot1; 
     uint64_t slot2;
@@ -96,21 +99,42 @@ static const u64 kFreeBSD_ShadowOffset32 = 1ULL << 30;  // 0x40000000
 static const u64 kFreeBSD_ShadowOffset64 = 1ULL << 46;  // 0x400000000000
 static const u64 kDefaultShadowOffset32 = 1ULL << 29;   // 0x20000000
 static const u64 kDefaultShadowOffset64 = 1ULL << 44;   // 0x100000000000
-uint64_t instrument_count=0;
-int count_BB = 0;
+
+/*==============Function definitions ============*/
+static void mem_rw_event(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
+
+/* routines for cleancall based instrumentation */
+static bool load_mem_addr(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
+void store_canary_clean(int id);
+void poison_canary_clean(void);
+void unpoison_canary_clean(void);
+void unpoison_longjmp_clean(jmp_buf jmp_buffer, uintptr_t curr_sp);
+
+/* inlined instrumentation */
+static void store_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
+static void poison_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
+static void unpoison_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
+static void unpoison_longjmp(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
+
+static dr_emit_flags_t event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, bool translating);
+
+static void generate_asan_events(JANUS_CONTEXT);
+static void generate_dynamic_events(JANUS_CONTEXT);
+static void generate_events_by_rule(JANUS_CONTEXT, instr_t *instr);
+/*================== exit routine ===============*/
 static void
 exit_summary(void *drcontext) {
-   cout<<"Total overflow error: "<<dec<<error_counter<<endl;
+#ifdef DEBUG_VERBOSE
+   cerr<<" app: "<<app_name<<" Total overflow error: "<<dec<<error_counter<<endl;
+#endif
    for (uint32_t i = 0; i < nmodules; ++i) {
      dr_free_module_data(loaded_modules[i]);
   }
 }
+/*========routine to extract binary name==========*/
 char* get_binfile_name(string filepath){
-    // Returns first token
     char *token = strtok(const_cast<char*>(filepath.c_str()), "/");
     char *filename = token;
-    // Keep printing tokens while one of the
-    // delimiters present in str.
     while (token != NULL)
     {
         token = strtok(NULL, "/");
@@ -121,33 +145,9 @@ char* get_binfile_name(string filepath){
     }
     return filename;
 }
-void check_mem_rw_access(int id, int size);
-static void mem_rw_event_flags(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
-static bool load_mem_addr(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
 
 
-void unpoison_longjmp_clean(jmp_buf jmp_buffer, uintptr_t curr_sp);
 
-#if POISON_CLEANCALL
-void poison_canary(void);
-void unpoison_canary(void);
-void store_canary(int id);
-#else
-static void unpoison_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
-static void poison_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
-static void store_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
-#endif
-static void poison_canary_single(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
-static void unpoison_canary_memaddr(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
-static void unpoison_longjmp(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg);
-
-static dr_emit_flags_t
-event_basic_block(void *drcontext, void *tag, instrlist_t *bb,
-                  bool for_trace, bool translating);
-
-static void generate_asan_events(JANUS_CONTEXT);
-static void generate_dynamic_events(JANUS_CONTEXT);
-static void generate_events_by_rule(JANUS_CONTEXT, instr_t *instr);
 static void
 event_module_load(void *drcontext, const module_data_t *info, bool loaded){
     char  filepath[MAX_STR_LEN];
@@ -161,7 +161,6 @@ event_module_load(void *drcontext, const module_data_t *info, bool loaded){
     dr_fprintf(STDOUT, " entry" PFX "\n", info->entry_point);
     dr_fprintf(STDOUT, " start" PFX "\n", info->start);
 #endif
-    /*only check for main binary for dynamic only. TODO: we need to remove this for evaluation that includes all binaries*/
     /*if(strcmp(dr_module_preferred_name(info), main_module) != 0){ 
         dr_module_set_should_instrument(info->handle, false);
         load_schedule = false;
@@ -176,7 +175,7 @@ event_module_load(void *drcontext, const module_data_t *info, bool loaded){
     
 #if DYN_ONLY_MODE
     /*get the start address of main function. Note: for static or hybrid versions, we will have a rewrite rule for this*/
-    if(strcmp(dr_module_preferred_name(info), main_module) == 0){ 
+    if(strcmp(dr_module_preferred_name(info), app_name) == 0){ 
         char* MAIN = "main";
         size_t offs;
         if (drsym_lookup_symbol(info->full_path, MAIN, &offs, DRSYM_DEMANGLE) == DRSYM_SUCCESS) {
@@ -202,6 +201,7 @@ event_module_load(void *drcontext, const module_data_t *info, bool loaded){
         }
         if(rules_found){
             load_static_rules_security(binfilepath, info);
+            
        }
     }
 #endif
@@ -237,7 +237,7 @@ dr_init(client_id_t id)
     /* Initialise janus components */
     janus_init_asan(id);
     
-    cout<<"\033[32m"<<"ENTERNED JANUS for  "<<print_janus_mode((JMode)get_client_mode())<<endl;
+#ifdef DEBUG_VERBOSE
 #if STAT_ONLY_MODE
     cout<<"MODE is STATIC ONLY with flag_liveness="<<flag_live_on<<" reg_liveness="<<reg_live_on<<"\033[0m"<<endl;
 #endif
@@ -247,6 +247,7 @@ dr_init(client_id_t id)
 #if DYN_ONLY_MODE
     cout<<"MODE is DYN_ONLY"<<"\033[0m"<<endl;
 #endif
+#ifdef DEBUG_VERBOSE
     iList = instbuff;
 #ifdef JANUS_VERBOSE
     dr_fprintf(STDOUT,"Dynamorio client initialised\n");
@@ -254,7 +255,6 @@ dr_init(client_id_t id)
 }
 
 void enable_monitoring(app_pc main_pc){
-    cout<<"ENABLED..."<<endl;
     dr_mcontext_t mc = { sizeof(mc), DR_MC_ALL };
     dr_get_mcontext(dr_get_current_drcontext(), &mc);
     monitor_enable = 1;
@@ -317,10 +317,7 @@ generate_dynamic_events(JANUS_CONTEXT){
         //if(opcode  == OP_call || opcode  == OP_callq){
         if(instr_is_call(instr)){  
             app_pc trg_addr = opnd_get_pc(instr_get_target(instr));
-            if((uintptr_t)trg_addr == 0x4024c0) //TODO:longjmp, works only for 400 perlbench
-            {
-               unpoison_longjmp(janus_context, instr, 1, 1);
-            }
+            unpoison_longjmp(janus_context, instr, 1, 1);
         }
         else{
             bool reads_mem = instr_reads_memory(instr);
@@ -331,7 +328,7 @@ generate_dynamic_events(JANUS_CONTEXT){
                         mem_instr[mem_count++] = instr;
                      }
                 }
-                if(reads_mem){/*check for stack canaries*/ 
+                else if(reads_mem){/*check for stack canaries*/ 
                     opnd_t src0 = instr_get_src(instr,0);
                     if(!opnd_is_far_base_disp(instr_get_src(instr,0))){
                         mem_instr[mem_count++] = instr;
@@ -343,10 +340,20 @@ generate_dynamic_events(JANUS_CONTEXT){
                            //mov    %rax,+0x8(%rsp)-> move canary to current stack frame. store -0x8(rbp) as the canary location
                            instr_t* next = instr_get_next_app(instr);
                            if(next != NULL){
+#if POISON_CLEANCALL
+                             load_mem_addr(janus_context, instr, 1, 0);
+                             dr_insert_clean_call(drcontext, bb, next, (void *)store_canary_clean, false, 1, OPND_CREATE_INT64(emulate_pc));
+#else
+                               
                                store_canary(janus_context, next, 1, 1);
+#endif
                                instr_t* next_to_next = instr_get_next_app(next);
                                if(next_to_next != NULL){
-                                 poison_canary_single(janus_context, next_to_next, 1, 1);
+#if POISON_CLEANCALL
+                                 dr_insert_clean_call(drcontext, bb, next_to_next, (void *)poison_canary_clean, false, 0);
+#else
+                                 poison_canary(janus_context, next_to_next, 1, 1);
+#endif
                                }
                            }
                        }
@@ -356,7 +363,11 @@ generate_dynamic_events(JANUS_CONTEXT){
                           //xor    %fs:0x28,%rdi             //checking if canary value has been modified
                            instr_t* prev = instr_get_prev_app(instr);
                            if(prev != NULL){
-                             unpoison_canary_memaddr(janus_context, prev, 1, 1);
+#if POISON_CLEANCALL
+                             dr_insert_clean_call(drcontext, bb, prev, (void *)unpoison_canary_clean, false, 0);
+#else
+                             unpoison_canary(janus_context, prev, 1, 1);
+#endif
                            }
                        }
                     }
@@ -368,7 +379,7 @@ generate_dynamic_events(JANUS_CONTEXT){
     //doing this is two rounds, so that we can check for memory on stack after we have first unpoisoned it
     for (int i=0; i< mem_count; i++)
     {
-        mem_rw_event_flags(janus_context, mem_instr[i], 1, 1);
+        mem_rw_event(janus_context, mem_instr[i], 1, 1);
     }
     return;
 }
@@ -413,7 +424,7 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
         case MEM_W_ACCESS:
         case MEM_RW_ACCESS:
              if(monitor_enable){
-                 mem_rw_event_flags(janus_context, instr, flag_live_on ? rule->reg0 : 1/*bitmask_flags*/, reg_live_on ? rule->reg1 : 1/*bitmask_reg*/);
+                 mem_rw_event(janus_context, instr, flag_live_on ? rule->reg0 : 1/*bitmask_flags*/, reg_live_on ? rule->reg1 : 1/*bitmask_reg*/);
              }
         break;
         case SAVE_AT_ENTRY: 
@@ -443,14 +454,11 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
                                     opnd_create_rel_addr(&(regs.slot2), OPSZ_8)));
             }
         break;
-        case PROF_START:
-            //dr_insert_clean_call(drcontext, bb, instr, (void *)print_instr, false, 1, OPND_CREATE_INTPTR(instr_get_app_pc(instr)));
-        break;
         case STORE_CANARY_SLOT:
              if(monitor_enable){
 #if POISON_CLEANCALL
                  load_mem_addr(janus_context, instr, 1, 0);
-                 dr_insert_clean_call(drcontext, bb, instr, (void *)store_canary, false, 1, OPND_CREATE_INT64(emulate_pc));
+                 dr_insert_clean_call(drcontext, bb, instr, (void *)store_canary_clean, false, 1, OPND_CREATE_INT64(emulate_pc));
                  emulate_pc++;
 #else
                  store_canary(janus_context, instr, flag_live_on ? rule->reg0 : 1, reg_live_on ? rule->reg1: 0);
@@ -460,20 +468,20 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
          case POISON_CANARY_SLOT:
              if(monitor_enable){
 #if POISON_CLEANCALL
-                 dr_insert_clean_call(drcontext, bb, instr, (void *)poison_canary, false, 0);
+                 dr_insert_clean_call(drcontext, bb, instr, (void *)poison_canary_clean, false, 0);
                  emulate_pc++;
 #else
-                poison_canary_single(janus_context, instr, flag_live_on ? rule->reg0: 1, reg_live_on ? rule->reg1: 0);
+                poison_canary(janus_context, instr, flag_live_on ? rule->reg0: 1, reg_live_on ? rule->reg1: 0);
 #endif
              }
          break;
          case UNPOISON_CANARY_SLOT:
              if(monitor_enable){
 #if POISON_CLEANCALL
-                 dr_insert_clean_call(drcontext, bb, instr, (void *)unpoison_canary, false, 0);
+                 dr_insert_clean_call(drcontext, bb, instr, (void *)unpoison_canary_clean, false, 0);
                  emulate_pc++;
 #else
-                 unpoison_canary_memaddr(janus_context, instr, flag_live_on ? rule->reg0 :  1, reg_live_on ? rule->reg1 : 0);
+                 unpoison_canary(janus_context, instr, flag_live_on ? rule->reg0 :  1, reg_live_on ? rule->reg1 : 0);
 
 #endif
              }
@@ -565,40 +573,18 @@ static inline bool AddressIsPoisoned(uptr a, int size) {
     }
     return false;
 }
-void check_mem_rw_access(int id, int size){
-    addr_t LEAddr = iList[id].LEAddr;
-    uint64_t *LEAddr_ptr = (uint64_t*)LEAddr;
-    bool error = false;
-    if (!AddrIsInMem(LEAddr) && !AddrIsInShadow(LEAddr)) return;
-    const uptr kAccessSize = size;
-    u8 *shadow_address = (u8*)MEM_TO_SHADOW(LEAddr); // (mem >> SHADOW_SCALE) + SHADOW_OFFSET
-    s8 shadow_value = *shadow_address;
-    if (shadow_value != 0) { //k!=0
-        if(kAccessSize == 8 || kAccessSize == 16) error = true;
-        else{
-            u8 last_accessed_byte = (LEAddr & (SHADOW_GRANULARITY - 1))+ kAccessSize - 1 ; // addr&7 + (acsz-1)
-            error = (last_accessed_byte >= shadow_value);    //addr&7 + acsz > k+1, address poisoned, else not.
-        }
-    }
-    if(error){
-        error_counter++;
-#ifdef DEBUG_VERBOSE
-        printf("ERROR: Address Poisoned: %#08" PRIx8 "\n", LEAddr);
-#endif
-    }
-}
 /*------------------------------------------------------------------------------*/
 /*-----------------Instrumentation Call Back Routines---------------------------*/
 /*------------------------------------------------------------------------------*/
 #if POISON_CLEANCALL
-void store_canary(int id){
+void store_canary_clean(int id){
     addr_t addr = iList[id].LEAddr;
     canarySlots.push(addr);
 #ifdef DEBUG_VERBOSE
    printf("STORE canary: %#08" PRIx8 "\n", addr);
 #endif
 }
-void poison_canary(void){
+void poison_canary_clean(void){
    assert(canarySlots.size()>0);
    addr_t addr= canarySlots.top();
    u8 *shadow_address = (u8*)MEM_TO_SHADOW(addr);
@@ -607,7 +593,7 @@ void poison_canary(void){
    printf("POISON shadow canary: %#08" PRIx8 "\n", addr);
 #endif
 }
-void unpoison_canary(void){
+void unpoison_canary_clean(void){
    assert(canarySlots.size()>0);
    addr_t canary_addr= canarySlots.top();
   /* addr_t addr= iList[id].LEAddr;
@@ -634,8 +620,6 @@ void unpoison_longjmp_clean(jmp_buf jmp_buffer, uintptr_t curr_sp){
         : "0" (stack_addr)      // Input operand (original 'stack_addr' value)
         : "%r8"           // Clobbered registers (list any registers modified by the assembly code)
     );
-
-   /*PTR_DEMANGLE();
    while(stack_addr != curr_sp){
        u8 *shadow_address = (u8*)MEM_TO_SHADOW(stack_addr);
        *shadow_address = 0x0;
@@ -643,9 +627,8 @@ void unpoison_longjmp_clean(jmp_buf jmp_buffer, uintptr_t curr_sp){
    }
 #ifdef DEBUG_VERBOSE
    printf("UNPOISON shadow canary: %#08" PRIx8 "\n", canary_addr);
-#endif*/
+#endif
 }
-#else
 static void store_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
     opnd_t mem_operand; 
     int i, num_srcs, num_dsts;
@@ -675,128 +658,6 @@ static void store_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, u
 }
 
 static void unpoison_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
-    instr_t *meta_instr;
-    
-    /*--------- saving RSI/RDI registers -----------------*/
-    if(inRegSet(bitmask_reg,DR_REG_RSI)) dr_save_reg(drcontext, bb, instr, DR_REG_RSI, SPILL_SLOT_2);
-    if(inRegSet(bitmask_reg,DR_REG_RDI)) dr_save_reg(drcontext, bb, instr, DR_REG_RDI, SPILL_SLOT_3);
-    if(inRegSet(bitmask_reg,DR_REG_RCX)) dr_save_reg(drcontext, bb, instr, DR_REG_RCX, SPILL_SLOT_5);
-    if(inRegSet(bitmask_reg,DR_REG_RDX)) dr_save_reg(drcontext, bb, instr, DR_REG_RDX, SPILL_SLOT_6);
-
-    /*----------- Calculate memory address --------------*/
-    if(bitmask_flag) 
-        dr_save_arith_flags(drcontext, bb, instr, SPILL_SLOT_4);
-    
-    /* mov &addrstack[0] -> rdx
-       load &top -> rcx
-       mov [rdx, rcx, 8] -> rsi
-       unposion on rsi addr*/
-    if(inRegSet(bitmask_reg,DR_REG_RAX)) dr_save_reg(drcontext, bb, instr, DR_REG_RAX, SPILL_SLOT_7);   //save arith flags
-
-    
-    meta_instr = INSTR_CREATE_mov_imm(drcontext,opnd_create_reg(DR_REG_RDX),  OPND_CREATE_INTPTR(&addrstack[0]));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-    meta_instr = INSTR_CREATE_mov_ld(drcontext, opnd_create_reg(DR_REG_EAX),  opnd_create_rel_addr(&top, OPSZ_4));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-    
-    meta_instr = XINST_CREATE_sub_s(drcontext,opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-   
-   //movslq eax -> rcx, doubleword to quadword 
-    meta_instr = INSTR_CREATE_movsxd(drcontext, opnd_create_reg(DR_REG_RCX),  opnd_create_reg(DR_REG_EAX));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-    meta_instr = INSTR_CREATE_mov_ld(drcontext, opnd_create_reg(DR_REG_RSI),  opnd_create_base_disp(DR_REG_RDX, DR_REG_RCX, 8, 0, OPSZ_8));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-    
-    //unpoison shadow value 
-    meta_instr = INSTR_CREATE_shr(drcontext,opnd_create_reg(DR_REG_RSI),OPND_CREATE_INT8(3));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-    meta_instr = INSTR_CREATE_mov_imm(drcontext, opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64(0x0));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-    
-    meta_instr = INSTR_CREATE_mov_st(drcontext, OPND_CREATE_MEM8(DR_REG_RSI,SHADOW_OFFSET), opnd_create_reg(DR_REG_DIL));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-          
-    //top--
-    
-    meta_instr = INSTR_CREATE_mov_st(drcontext, opnd_create_rel_addr(&top, OPSZ_4), opnd_create_reg(DR_REG_EAX));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-
-    
-    if(inRegSet(bitmask_reg, DR_REG_RAX)) dr_restore_reg(drcontext, bb, instr, DR_REG_RAX, SPILL_SLOT_7);//restore arith flags
-    /*--------- restoring RSI/RDI registers -----------------*/
-    if(bitmask_flag)
-        dr_restore_arith_flags(drcontext, bb, instr, SPILL_SLOT_4);                     //restore them from rax current, and fill rax with original
-    if(inRegSet(bitmask_reg, DR_REG_RSI))dr_restore_reg(drcontext, bb, instr, DR_REG_RSI, SPILL_SLOT_2);
-    if(inRegSet(bitmask_reg, DR_REG_RDI))dr_restore_reg(drcontext, bb, instr, DR_REG_RDI, SPILL_SLOT_3);
-    if(inRegSet(bitmask_reg, DR_REG_RCX)) dr_restore_reg(drcontext, bb, instr, DR_REG_RCX, SPILL_SLOT_5);
-    if(inRegSet(bitmask_reg, DR_REG_RDX)) dr_restore_reg(drcontext, bb, instr, DR_REG_RDX, SPILL_SLOT_6);
-}
-static void poison_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
-    instr_t *meta_instr;
-    /*--------- saving RSI/RDI registers -----------------*/
-    if(inRegSet(bitmask_reg,DR_REG_RSI)) dr_save_reg(drcontext, bb, instr, DR_REG_RSI, SPILL_SLOT_2);
-    if(inRegSet(bitmask_reg,DR_REG_RDI)) dr_save_reg(drcontext, bb, instr, DR_REG_RDI, SPILL_SLOT_3);
-    if(inRegSet(bitmask_reg,DR_REG_RCX)) dr_save_reg(drcontext, bb, instr, DR_REG_RCX, SPILL_SLOT_5);
-    if(inRegSet(bitmask_reg,DR_REG_RDX)) dr_save_reg(drcontext, bb, instr, DR_REG_RDX, SPILL_SLOT_6);
-    if(bitmask_flag){
-        dr_save_arith_flags(drcontext, bb, instr, SPILL_SLOT_4);
-    }
-    if(inRegSet(bitmask_reg,DR_REG_RAX)) dr_save_reg(drcontext, bb, instr, DR_REG_RAX, SPILL_SLOT_7);
-    meta_instr = INSTR_CREATE_mov_ld(drcontext,opnd_create_reg(DR_REG_RSI),  opnd_create_rel_addr(&canarySlot, OPSZ_8));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-    
-   
-    //push on the stack
-    meta_instr = INSTR_CREATE_mov_imm(drcontext,opnd_create_reg(DR_REG_RDX),  OPND_CREATE_INTPTR(&addrstack[0]));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-    meta_instr = INSTR_CREATE_mov_ld(drcontext, opnd_create_reg(DR_REG_EAX),  opnd_create_rel_addr(&top, OPSZ_4));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-    
-   //movslq eax -> rcx, doubleword to quadword 
-    meta_instr = INSTR_CREATE_movsxd(drcontext, opnd_create_reg(DR_REG_RCX),  opnd_create_reg(DR_REG_EAX));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-    meta_instr = INSTR_CREATE_mov_st(drcontext, opnd_create_base_disp(DR_REG_RDX, DR_REG_RCX, 8, 0 , OPSZ_8), opnd_create_reg(DR_REG_RSI));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-    //poison shadow value 
-    meta_instr = INSTR_CREATE_shr(drcontext,opnd_create_reg(DR_REG_RSI),OPND_CREATE_INT8(3));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-    
-    meta_instr = INSTR_CREATE_mov_imm(drcontext, opnd_create_reg(DR_REG_RDI), OPND_CREATE_INT64(0xFF));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-   
-    meta_instr = INSTR_CREATE_mov_st(drcontext, OPND_CREATE_MEM8(DR_REG_RSI,SHADOW_OFFSET),opnd_create_reg(DR_REG_DIL));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-   
-    //inc top 
-    meta_instr = XINST_CREATE_add_s(drcontext,opnd_create_reg(DR_REG_EAX),OPND_CREATE_INT32(1));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-    
-    meta_instr = INSTR_CREATE_mov_st(drcontext, opnd_create_rel_addr(&top, OPSZ_4), opnd_create_reg(DR_REG_EAX));
-    instrlist_meta_preinsert(bb, instr, meta_instr);
-
-   
-
-    if(inRegSet(bitmask_reg,DR_REG_RAX)) dr_restore_reg(drcontext, bb, instr, DR_REG_RAX, SPILL_SLOT_7);
-    
-    if(bitmask_flag){
-        dr_restore_arith_flags(drcontext, bb, instr, SPILL_SLOT_4);
-    }
-    if(inRegSet(bitmask_reg,DR_REG_RSI)) dr_restore_reg(drcontext, bb, instr, DR_REG_RSI, SPILL_SLOT_2);
-    if(inRegSet(bitmask_reg,DR_REG_RDI)) dr_restore_reg(drcontext, bb, instr, DR_REG_RDI, SPILL_SLOT_3);
-    if(inRegSet(bitmask_reg,DR_REG_RCX)) dr_restore_reg(drcontext, bb, instr, DR_REG_RCX, SPILL_SLOT_5);
-    if(inRegSet(bitmask_reg,DR_REG_RDX)) dr_restore_reg(drcontext, bb, instr, DR_REG_RDX, SPILL_SLOT_6);
-}
-#endif
-static void unpoison_canary_memaddr(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
     opnd_t mem_operand; 
     int i, num_srcs, num_dsts;
     int         mode = 0;
@@ -906,7 +767,7 @@ static void unpoison_longjmp(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_fla
     if(inRegSet(bitmask_reg,DR_REG_R9)) dr_restore_reg(drcontext, bb, instr, DR_REG_R9, SPILL_SLOT_3);
     if(inRegSet(bitmask_reg,DR_REG_RDI)) dr_restore_reg(drcontext, bb, instr, DR_REG_RDI, SPILL_SLOT_5);
 }
-static void poison_canary_single(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
+static void poison_canary(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
     instr_t *meta_instr;
     /*--------- saving RSI/RDI registers -----------------*/
     if(inRegSet(bitmask_reg,DR_REG_RSI)) dr_save_reg(drcontext, bb, instr, DR_REG_RSI, SPILL_SLOT_2);
@@ -935,6 +796,7 @@ static void poison_canary_single(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask
     if(inRegSet(bitmask_reg,DR_REG_RSI)) dr_restore_reg(drcontext, bb, instr, DR_REG_RSI, SPILL_SLOT_2);
     if(inRegSet(bitmask_reg,DR_REG_RDI)) dr_restore_reg(drcontext, bb, instr, DR_REG_RDI, SPILL_SLOT_3);
 }
+/*-- rountine to load effective address and store it to be used by subsequent instruction --- */
 static bool load_mem_addr(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
 
     dr_mcontext_t mc;
@@ -981,7 +843,7 @@ static bool load_mem_addr(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, 
    return true;
 
 }
-static void mem_rw_event_flags(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
+static void mem_rw_event(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_flag, uint64_t bitmask_reg){
     app_pc addr;
     opnd_t mem_operand; 
     int i, num_srcs, num_dsts;
@@ -1010,7 +872,7 @@ static void mem_rw_event_flags(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_f
     }
     size = opnd_get_size(mem_operand);
 
-#ifdef VERBOSE_DEBUG
+#ifdef DEBUG_VERBOSE
     printf("instr: %#08" PRIx64 "size: %d\n", instr_id, op_size[size]);
 #endif 
 
@@ -1054,7 +916,6 @@ static void mem_rw_event_flags(JANUS_CONTEXT, instr_t *instr, uint64_t bitmask_f
     //movq %rsi, %rdi   , move rsi to rdi (now rdi has mem address)
     meta_instr = XINST_CREATE_move(drcontext,opnd_create_reg(DR_REG_RDI),opnd_create_reg(DR_REG_RSI)); 
     instrlist_meta_preinsert(bb, instr,meta_instr);
-    //TODO: just for printing 
 
     //shrq $3, %rdi		    //mem >> SHADOW_SCALE(3) , multiply by 8
     meta_instr = INSTR_CREATE_shr(drcontext,opnd_create_reg(DR_REG_RDI),OPND_CREATE_INT8(3));

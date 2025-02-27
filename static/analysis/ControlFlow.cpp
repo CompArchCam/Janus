@@ -99,7 +99,6 @@ buildBasicBlocks(Function &function)
     for (InstID id=0; id<instrCount; id++) {
 
         Instruction &instr = instrs[id];
-        if(instr.pc == 0x80c760f) cout<<"instr: "<<instr<<endl;
         if (instr.isControlFlow()) {
             //for control flow instructions, mark this id as terminate
             marks[id] += BB_TERMINATOR;
@@ -214,7 +213,6 @@ buildBasicBlocks(Function &function)
         /* Corner case: final instruction not a cti */
         if (id == instrCount-1 && !instr.isControlFlow()) {
             
-            if(instr.pc == 0x80c7610) cout<<"corner case: instr: "<<instr<<endl;
             marks[id] += BB_TERMINATOR;
             cornerCase = true;
         }

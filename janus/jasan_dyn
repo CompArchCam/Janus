@@ -1,5 +1,5 @@
 #!/bin/bash     
-set -x
+#set -x
 my_dir="$(dirname "$0")"
 
 source $my_dir/janus_header
@@ -36,9 +36,7 @@ then
 fi
 
 
-#echo "$TOOLDIR/bin64/drrun -c $JANUSLIB/libjsbcets.so @$hintfile @1 @0 -- $binfile $*"
 #gdb --args $TOOLDIR/bin64/drrun -debug -c $JANUSLIB/libjsbcets.so @$hintfile @1 @0 -- $binfile $@
-#gdb --args $TOOLDIR/bin64/drrun -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
 #LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@
 LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -no_vm_base_near_app -vm_base 0x200000000000  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $engine $binfile $@
 #LD_PRELOAD=/local/scratch-2/ma843/llvm-project/build/lib/clang/12.0.1/lib/linux/libclang_rt.asan-x86_64.so $TOOLDIR/bin64/drrun -opt_cleancall 2  -c $JANUSLIB/libjasan.so @$hintfile @1 @0 -- $binfile $@

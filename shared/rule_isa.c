@@ -2,8 +2,7 @@
 
 #include <stdio.h>
 //location for storing rewrite schedule. change accordinly. //TODO: make this an input argument
-char rs_dir[] = "/local/scratch/ma843/rwdir-cfi-verify/";
-//char rs_dir[] = "/local/scratch/ma843/rwdir-cfi/";
+char rs_dir[] = "/local/scratch/ma843/rwdir/";
 const char *print_janus_mode(JMode mode) {
     switch(mode) {
         case JPARALLEL: return "Automatic Parallelisation";
@@ -36,7 +35,7 @@ const char *print_janus_mode(JMode mode) {
 const char *print_rule_opcode(RuleOp op)
 {
     switch (op) {
-        case GNORMAL: return "GNORMAL";
+        //case GNORMAL: return "GNORMAL";
         case PROF_START: return "PROF_START";
         case PROF_LOOP_START: return "PROF_LOOP_START";
         case PROF_LOOP_ITER: return "PROF_LOOP_ITER";

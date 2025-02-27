@@ -2,9 +2,11 @@
 include_directories(../include)
 
 #use c11 features
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -m32")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -m32")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -m32")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -m32")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g")
 ## a modified castone disassembler engine
 add_definitions(-DCAPSTONE_USE_SYS_DYN_MEM)
 add_definitions(-D_STATIC_ANALYSIS_COMPILED)

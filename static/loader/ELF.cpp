@@ -103,7 +103,6 @@ void Executable::parseELF64()
         //to scan for got offset addresses for pic binaries.
         if(sectionName == string(".got.plt") || sectionName == string(".got")){
             GOTAddress = section.startAddr;
-            cout<<sectionName<<" addr:"<<hex<<GOTAddress<<endl;
         }
     }
 

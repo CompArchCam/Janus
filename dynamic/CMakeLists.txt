@@ -1,5 +1,5 @@
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -O3 -m32 ")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -O3 -m32")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -O3")
 
 enable_language(C CXX)
 
@@ -37,23 +37,23 @@ set(DYN_INC_PATH
 include_directories(${DYN_INC_PATH})
 
 #automatic paralleliser
-#add_subdirectory(parallel)
+add_subdirectory(parallel)
 #profiler
-#add_subdirectory(coverage)
+add_subdirectory(coverage)
 #Cinnamon DSL
-#add_subdirectory(dsl)
+add_subdirectory(dsl)
 #timer
 if (JANUS_X86_SUPPORT)
-#add_subdirectory(prefetcher)
+add_subdirectory(prefetcher)
 #automatic vector
-#add_subdirectory(vector)
-#add_subdirectory(planner)
+add_subdirectory(vector)
+add_subdirectory(planner)
 #JASAN - AddressSanitizer
-#add_subdirectory(asan)
+add_subdirectory(asan)
 #JSBOUND - Softbound-CETS
 #add_subdirectory(sbcets)
 #DLL
-#add_subdirectory(dll)
+add_subdirectory(dll)
 add_subdirectory(cfi)
 #add_subdirectory(security)
 endif()

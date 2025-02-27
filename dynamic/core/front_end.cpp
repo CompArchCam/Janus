@@ -19,9 +19,9 @@
 //globals
 #define HASH_KEY_WIDTH 8
 //#define HASH_KEY_WIDTH 4
-//#define KEYBASE 0x400000
+#define KEYBASE 0x400000
 //For 32-bit 
-#define KEYBASE 0x8048000
+//#define KEYBASE 0x8048000
 #define MAX_OPTION_STRING_LENGTH 256
 
 #define MAX_MODS 32
