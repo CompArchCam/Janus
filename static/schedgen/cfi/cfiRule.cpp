@@ -14,8 +14,6 @@ using namespace janus;
 using namespace std;
 
 #define GCC_CODE 1
-#define BINARY_PIC 1
-#define BINARY_NONPIC 2
 #define BASE_32BIT 0x8048000
 static int count_rule=0;
 static bool has_debug_info = false;
@@ -25,53 +23,17 @@ static bool forward_cfi = true;
 PCAddress firstPC;
 PCAddress lastPC;
 PCAddress GOTAddress;
+uint32_t safeChecks=0;
 std::set<uintptr_t> ICF_targets;
 std::set<uintptr_t> callback_targets;
 std::set<uintptr_t> IJF_targets;//
 std::set<uintptr_t> IJF_srcs;    //id of instruction
 std::set<int> IJ_Func;     //id of function
+std::set<uintptr_t> safeICT;
 uintptr_t ro_start;
 uintptr_t ro_end;
 PCAddress ro_base; 
 #define PROLOGUE 0
-
-/*-----------------------Function Prototypes ----------------------*/
-/* 32-bit code on 32 or 64 bit (eax = 32bit, rax = 64 bit)
-
-  base registers: eax-edx, esp,ebp, esi, edi
-  index registers: eax-edx, ebp, esi, edi
-  64-bit code on 64-bit x86
-
-  base: GPR  rax-rdx, rsp, rbp, rsi, erdi, r8-r15
-  index: same as base
-
-  indirect address: mov 1, (%rax)
-  indirect with disp: mov 1, -24(%rbp)
-  indirect with displacement and scaled index
-  
- JVAR_MEMORY          Generic memory variables (in form: [base+index*scale+disp])
- -0x8(%rbp)             => base = rbp, value = -0x8
- +0x8(%rsp, rax, 4)     => base = rsp, index = rax, scale =4, value =0x8
- +0x8(%rbp, rax, 4)     => base = rbp, index = rax, scale =4, value =0x8
- +0x8(, rax, 4)         => base = 0, index = rax, scale =4, value =0x8
- +0x8(%rax, rcx, 4)     => base = rax, index = rcx, scale =4, value =0x8
- +0x8(%rax, rcx)        => base = rax, index = rcx, scale =1, value =0x8
- (%rax, rcx, 4)         => base = rax, index = rcx, scale =4, value =0x0
- +0x606180(, rcx, 4)    => base = 0,   index = rcx, scale =4, value = 0x606180 //global. static base address
-
-
- JVAR_ABSOLUTE        Absolute memory addresses (PC-relative addresses)
- 0x200bb5(%rip)         => base = rip, value = 0x200bb5 + pc
-
- JVAR_STACK            Stack variables (only in form stack with displacement) 
- +0x8(%rsp)             => base = rsp, value = 0x8
-
- JVAR_POLYNOMIAL        Polynomial variable type (reserved for x86), JVAR_MEM, JVAR_ABSOLUTE or JVAR_STACK used in LEA
- LEA  rbp, [rip + 0x2007be] 
-
- JVAR_CONSTANT          Immediate value
-
- */
 
 /*----------------- Routine to add security related rules -----------------------*/
 static bool isEndBranchAddr(JanusContext *jc,PCAddress addr);
@@ -87,6 +49,9 @@ static void insert_security_rule(Instruction *instr, RuleOp ruleID, int data1, i
     rule.reg3 = data4;
     insertRule(0, rule, bb);
     count_rule++;
+}
+bool isLongjmpFunc(string funcName){
+   return funcName.find("longjmp_chk") != std::string::npos || funcName.find("__longjmp_chk") != std::string::npos;
 }
 static string get_binfile_name(string filepath){
     // Make a copy of the string to avoid modifying const data
@@ -256,7 +221,9 @@ static void readCodePointers(JanusContext *jc){
             int current_pos = file.tellg();
             //TODO: check if we need to update it to ro_start-base, as curr_pos may not be the same.
             //if it is rodata section
-            if(current_pos >= ro_start && current_pos <= ro_end){
+            //TODO: for non-PIC, we subtract BASE OFFSET, for PIC, we dont
+            //if(current_pos >= (ro_start-BASE_32BIT) && current_pos <= (ro_end-BASE_32BIT)){
+            if(current_pos >= (ro_start) && current_pos <= (ro_end)){
                 PCAddress offsetAddr= address + GOTAddress;
                 if(isValidInstrAddr(jc, offsetAddr)){
                     IJF_targets.insert(offsetAddr);
@@ -272,6 +239,7 @@ static bool isValidInstrAddr(JanusContext *jc,PCAddress addr){
     //1. if it is less than start address of any section or greater than return exit
     //2. check for each function
     if(addr < firstPC || addr > lastPC) return false;
+    //TODO: check if it is within range of exe sections ).plt, .init, .fini etc)
     if(jc->instructionSet.find(addr) != jc->instructionSet.end()){
            return true; 
     }
@@ -321,6 +289,8 @@ enforceForwardCFI(JanusContext *jc){
                 insertRule(0, rule, &bb);
             }
             else if(instr.opcode  == Instruction::DirectBranch || instr.opcode == Instruction::ConditionalBranch){
+                if(safeICT.count(instr.pc)) continue;  //skip as it is bound-checked jmp table ICT 
+                //if(instr.pc == 0x11471b) continue; //TODO: replace it with isLongjmpFunc(func.name), special case, applicable to libc
                 IJ_Func.insert(func.fid);
                 rule = RewriteRule(VERIFY_JMP_TARGET, bb.instrs->pc, instr.pc, instr.id);
                 rule.reg0 = bitmask_flags;
@@ -334,7 +304,6 @@ enforceForwardCFI(JanusContext *jc){
         }
      }
      //STEP 3: if it is a pic binary go through global offset tables
-     //if(jc->program.binaryType != BINARY_PIC) return;
      for(auto &func: jc->functions){
          for(auto vs: func.allStates){
               if(vs->type == JVAR_CONSTANT || vs->type == JVAR_ABSOLUTE){
@@ -356,7 +325,6 @@ void dump_icf_targets(JanusContext *jc){
     fstream outfile; 
      //indirect calls (same for ij)
     string fname=string(rs_dir + get_binfile_name(jc->name)+ "_ic.txt");
-    cout<<"FILENAME: "<<fname<<endl;
     outfile.open(fname,std::ios::out | std::ios::trunc);
     outfile<<dec<<ICF_targets.size()<<endl;
     for(auto tgt : ICF_targets){
@@ -467,11 +435,11 @@ static void dump_eSym(JanusContext *jc){
     fstream outfile;
      string fn = string(rs_dir + get_binfile_name(jc->name)+ "_esym.txt");
      outfile.open(fn,std::ios::out| std::ios::trunc);
-     //TODO: add any function addresses not there already in callbacks?
      for(auto &sym: jc->program.exportedSymbols){
          //only dump address, skip symbols
-         if(!callback_targets.count(sym.first)) //avoid duplication
+         if(!callback_targets.count(sym.first)){ //avoid duplication
              outfile<<hex<<sym.first<<endl;
+         }
      }
      for(auto &addr : callback_targets){
          outfile<<hex<<addr<<endl;
@@ -480,123 +448,78 @@ static void dump_eSym(JanusContext *jc){
 }
 static void analyse_jmptable_targets(JanusContext *jc){
 //STEP 1: check for all the functions that have an indirect jmp
-    cout<<"Going to check for jmptables...."<<endl;
+    //cout<<"*******************Going to check for jmptables*************************"<<endl;
     for(auto &func: jc->functions){
         bool found = false; 
         if ((!func.entry && !func.instrs.size()) || func.isExternal) continue;
         for(auto &instr: func.instrs){
             int id = instr.id;
-            if(func.indirectCTIs.find(id) == func.indirectCTIs.end()) continue; //skip instructions which are not indirect calls
-            found = true;
+            if(func.indirectCTIs.find(id) != func.indirectCTIs.end()){ //skip instructions which are not indirect calls
             //jmp dword ptr [eax*4 + 0x812b600], which is for jmp *0x812b600(, %eax, 4)
-            std::regex pattern(R"(jmp dword ptr \[[a-zA-Z0-9]+[*][0-9]+ \+ 0x[0-9a-fA-F]+\])");
-            string input(instr.minstr->name);
-            std::smatch match;
-            if (std::regex_search(input, match, pattern)) {
-                //found an indirect jmp that matches the pattern for jmp table . TODO: //what about instructions which are like (1) mov *0x812b600(, %eax, 4), ecx (2) jmp *(%ecx),
-               if(id-2 >= 0){
-                   auto &ja_instr = func.instrs[id-1];
-                   auto &cmp_instr = func.instrs[id-2];
-                   if(ja_instr.minstr->opcode != X86_INS_JA || cmp_instr.minstr->opcode != X86_INS_CMP) continue;
-                   for(auto &vs : instr.inputs){
-                      bool matching_reg = false;
-                      int upper_limit = 0;
-                      if(vs->type == JVAR_MEMORY){
-                          cout<<"instr: "<<hex<<instr.pc<<instr<<" value: "<<hex<<vs->value<<endl;
-                          if(vs->value >= ro_start && vs->value  < ro_end){ // *0x812b600(, %eax, 4)
-                              cout<<"within limit"<<endl;
-                              if(vs->index){
-                                  for(auto &vm: cmp_instr.inputs){    // cmp eax, 0x9
-                                      if(vm->type == JVAR_REGISTER){
-                                            if(vm->value == vs->index){ //reg in comparison is same as the index reg of jmp 
-                                                cout<<"index reg: "<<get_reg_name(vm->value)<<endl;
-                                                matching_reg = true;
-                                            }
+                std::regex pattern(R"(jmp dword ptr \[[a-zA-Z0-9]+[*][0-9]+ \+ 0x[0-9a-fA-F]+\])");
+                string input(instr.minstr->name);
+                std::smatch match;
+                bool matching_reg = false;
+                int upper_limit = 0;
+                uintptr_t jmp_offset;
+                if (std::regex_search(input, match, pattern)) {
+                    //found an indirect jmp that matches the pattern for jmp table . TODO: //what about instructions which are like (1) mov *0x812b600(, %eax, 4), ecx (2) jmp *(%ecx),
+                   if(id-2 >= 0){
+                       auto &ja_instr = func.instrs[id-1];
+                       auto &cmp_instr = func.instrs[id-2];
+                       if(ja_instr.minstr->opcode != X86_INS_JA || cmp_instr.minstr->opcode != X86_INS_CMP) continue;
+                       for(auto &vs : instr.inputs){
+                          if(vs->type == JVAR_MEMORY && (vs->value >= ro_start && vs->value < ro_end) && vs->index){ // *0x812b600(, %eax, 4)
+                              jmp_offset = vs->value;
+                              for(auto &vm: cmp_instr.inputs){    // cmp eax, 0x9
+                                  if(vm->type == JVAR_REGISTER){
+                                      if(vm->value == vs->index){ //reg in comparison is same as the index reg of jmp 
+                                          matching_reg = true;
                                       }
-                                      else if(vm->type == JVAR_CONSTANT){
-                                          upper_limit = vm->value;
-                                          cout<<"upper limit: "<<vm->value<<endl;
-                                      }
-                                  } 
+                                  }
+                                  else if(vm->type == JVAR_CONSTANT){
+                                      upper_limit = vm->value;
+                                  }
                               }
+                              if(matching_reg && upper_limit) { 
+                                  safeICT.insert(instr.pc);
+                                  safeChecks++;
+                                  break; 
+                              } //found the combination, exit the loop
                           }
-                          //only check upper limit iff matching_reg is true i.e. all other conditions have been met too
-                          if(matching_reg){
-                                 //scan the binary for rodata and start scan from a memory address that matches the offset and then add all 4 byte addresses from that point onwards.
-                                 //start binary from the start to vs->value - base_32bit (starting offset) and keep going further until we reach starting point + 4*upper_limit. read in the chunks of 4 bytes.
-                                std::ifstream file(jc->name, std::ios::binary);
-                                cout<<"Going to read file"<<endl;
-                                if (!file.is_open()) {
-                                    std::cerr << "Error opening the file" << std::endl;
-                                    return;
-                                }
-                                 //set the stream to read binary
-                                 file >> std::noskipws;
-                                 uint32_t offset = vs->value - (uintptr_t)BASE_32BIT;
-                                 file.seekg(offset);
+                      }//end: going through instruction inputs to find 
+                   }//end: id-2>=0
+                }//end: matched pattern
 
-                                uintptr_t address;
-                                int count = 0;
-                                while (file.read(reinterpret_cast<char*>(&address), sizeof(address)) && count < upper_limit) {
-                                    // Display the hex address
-                                     if (isValidInstrAddr(jc, address)){
-                                       //  ICF_targets.insert(address);
-                                       cout<<"addr: "<<hex<<address<<endl;
-                                     
-                                     }
-                                     else{
-                                         cout<<"Looking for address:"<<hex<<address<<endl;
-                                         for(auto &i: func.instrs){
-                                            cout<<"instr: "<<hex<<i.pc<<endl;
-                                         }
-                                         
-                                     }
-                                     return;
-                                     count++;
-                                 }
-                                // Slide the cursor back by 3 bytes
-                                file.close();
-                            }
+            }//end: indirect CTI
+        }//end: loop over instrs
 
-                          }
-                      }
-                  }
-                }
-            }
-
-        }
+    }//end: loop over functions
     //STEP 2: for those functions, check for offsets or base addresses that might be pointing to jump table and add in a set 
     //STEP 3: scan .rodata and check for all 4 byte combinattions and see if any of them match it
-    //STEP 4: if it does, go back to 
+}
+void
+generateCFIRule(JanusContext *jc)
+{
+    cout<<"GENERATING CFI RULES....."<<endl;
+    ro_start =  jc->program.RODATA_offset;
+    ro_end =  ro_start + jc->program.RODATA_size - 3;
+    if(backward_cfi){
+        enforceBackwardCFI(jc);
     }
-    void
-    generateCFIRule(JanusContext *jc)
-    {
-        cout<<"GENERATING CFI RULES....."<<endl;
-        //HACK: mark entry of main, to avoid accessing shadow memory set up before it has been set up
-    /*    mark_main_entry(jc);
-        mark_main_exit(jc);
-      */  
-        ro_start =  jc->program.RODATA_offset;
-        ro_end =  ro_start + jc->program.RODATA_size - 3;
-        cout<<"rodata start: "<<hex<<ro_start<<" rodata end:"<<ro_end<<endl;
+    if(forward_cfi){
        analyse_jmptable_targets(jc);
-        if(backward_cfi){
-            enforceBackwardCFI(jc);
-            cout<<"STEP 1"<<endl;
-        }
-        if(forward_cfi){
-           enforceForwardCFI(jc);
-           dump_icf_targets(jc);
-           dump_eSym(jc);
-            cout<<"STEP 2"<<endl;
-        }
-        //use liveness for rsi, rdi and rax around function calls
-        if(jc->mode == JCFI_LIVE){
-            analyze_leaf_functions(jc);
-            analyze_call_sites(jc);
-        }
-        //attach null rules to remaining basic blocks, to indicate NOT to further processing dynamically
-        if(null_rules)
-          mark_null_rules(jc);
+       enforceForwardCFI(jc);
+       dump_icf_targets(jc);
+       dump_eSym(jc);
+       //cout<<"Number of Safe Checks: "<<dec<<safeChecks<<endl;
     }
+    //use liveness for rsi, rdi and rax around function calls
+    if(jc->mode == JCFI_LIVE){
+        analyze_leaf_functions(jc);
+        analyze_call_sites(jc);
+    }
+    //attach null rules to remaining basic blocks, to indicate NOT to further processing dynamically
+    if(null_rules)
+      mark_null_rules(jc);
+}

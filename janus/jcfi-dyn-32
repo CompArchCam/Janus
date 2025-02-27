@@ -31,7 +31,7 @@ then
 fi
 
 scratchdir=/local/scratch/ma843
-datadir=$scratchdir/rwdir-cfi
+datadir=$scratchdir/rwdir-cfi-verify
 binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
 hintfile=$datadir/$binname.jrs
 asmfile="$datadir/$binname.s"
@@ -41,7 +41,4 @@ echo -e "${bold_style}RWSchedule: ${blue_color} $hintfile ${reset}"
 
 #asmfile="$datadir/$binname.s"
 #echo "$TOOLDIR/bin64/drrun -c $JANUSLIB/libjguard.so @$hintfile @1 @0 -- $binfile $*"
-#gdb --args $TOOLDIR/bin64/drrun -c $JANUSLIB/libjguard.so @$hintfile @1 @0 -- $binfile $@
-#$TOOLDIR/bin32/drrun -debug -checklevel 0 -loglevel 4 -c $JANUSLIB/libjcfi.so @$hintfile @1 @0 -- $binfile $@
 $TOOLDIR/bin32/drrun  -ops "-opt_cleancall 3" -c $JANUSLIB/libjcfi.so @$hintfile @1 @0 -- $binfile $@
-#$TOOLDIR/bin64/drrun -max_bb_instrs 64 -c $JANUSLIB/libjcfi.so @$hintfile @1 @0 -- $binfile $@

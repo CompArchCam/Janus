@@ -57,7 +57,8 @@ void insert(HashTable *hashTable, uint32_t key, int value) {
     // Insert at the beginning of the linked list
     newNode->next = hashTable->table[index];
     hashTable->table[index] = newNode;
-    hashTable->curr_size++;
+    //TODO: only when CALCULATE_AIR is enabled
+    //hashTable->curr_size++;
 }
 // Function to retrieve the value associated with a key
 int lookupAddr(const HashTable *hashTable, uint32_t key) {
@@ -69,7 +70,6 @@ int lookupAddr(const HashTable *hashTable, uint32_t key) {
     while (current != NULL) {
         if (current->key == key) {
             // Key found, return the associated value
-            //cout<<"key found"<<hex<<key<<endl;
             return current->value;
         }
         current = current->next;
@@ -95,78 +95,6 @@ int get_size(HashTable *hashTable){
 }
 
 
-#if 0
-    // Function to initialize the hash table
-    void init(int init_size){
-        size = init_size;
-        if(!size) return;
-        table = (Node **)malloc(size * sizeof(Node *));
-        // Initialize each slot to NULL
-        for (int i = 0; i < size; i++) {
-           table[i] = NULL;
-        }
-        int num = size;
-        while (num > 1) {
-            num >>= 1; // Right shift num by 1 bit
-            p++;   // Increment the power
-        }
-    }
-    int get_size(){
-       return size;
-    }
-    int hashFunction(uintptr_t key) {
-        //return key % size;
-        //Knuth's multiplicative hash, assuming table size is power of 2
-    //    return (key * 2654435769) & (size - 1);
-       //assert(p>=0 && p<=32);
-        return ((uint32_t)(key * 2654435769) >> (32 - p));
-    }
-    // Function to insert a key-value pair into the hash table
-    void insert(uintptr_t key, int value) {
-        int index = hashFunction(key);
-        // Create a new node
-        Node *newNode = (Node *)malloc(sizeof(Node));
-        newNode->key = key;
-        newNode->value = value;
-        newNode->next = NULL;
-
-        // Insert at the beginning of the linked list
-        newNode->next = table[index];
-        table[index] = newNode;
-    }
-
-    int lookup(uintptr_t key) {
-        int index = hashFunction(key);
-
-        // Traverse the linked list at the hash index
-        Node *current = (Node*)table[index];
-        while (current != NULL) {
-            if (current->key == key) {
-                // Key found, return the associated value
-                return current->value;
-            }
-            current = current->next;
-        }
-
-        // Key not found
-        return 0;
-    }
-    void cleanup(){
-    // Function to free memory used by the hash table
-        for (int i = 0; i < size; i++) {
-            Node *current = table[i];
-            while (current != NULL) {
-                Node *temp = current;
-                current = current->next;
-                free(temp);
-            }
-        }
-
-        free(table);
-   }
-
-};
-#endif
 
 
 #if CLOSED_HASHING

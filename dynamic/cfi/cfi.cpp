@@ -3,7 +3,7 @@
 /* Header file to implement a JANUS client */
 #include "janus_api.h"
 #include "dr_api.h"
-
+# include "drsyms.h"
 #include <inttypes.h>
 #include <iostream>
 #include <cstring>
@@ -23,28 +23,12 @@ using namespace std;
 #define SELFMAG 4
 #endif
 //execution mode
-#define DYN_ONLY_MODE 0
-#define HYBRID_MODE 1
+#define DYN_ONLY_MODE 0         
+#define HYBRID_MODE 1           //default mode
 #define STAT_ONLY_MODE 0
-#define FORWARD_CFI 1
-#define BACKWARD_CFI 1
-#define DEBUG_VERBOSE 0
-#define DEBUG_CFI 0
-#define TEST_HASH 0
-#define TEST_HASH_LOOKUP 0
-#define TEST_OVERHEAD 0
-#define ENABLE_FLAG 0
-#define BB_PROFILE 0
-#define CALCULATE_AIR 1
-#define VERBOSE_ERROR
-#define ERROR_THRESHOLD 10
-#define BLUE "\e[34m"
-#define RED "\e[31m"
-#define BOLD "\e[1m"
-#define GREEN "\e[32m"
-#define RESET "\e[0m"
-#define BIN_32BIT 1
-#define BIN_64BIT 0
+#define FORWARD_CFI 1           //enabled by default
+#define BACKWARD_CFI 1          //enabled by default
+#define CALCULATE_AIR 0
 #define TAB_MAX_SIZE 1024
 #define MAX_STR_LEN 256
 #define MAX_MODULES_ALLOWED 16
@@ -54,31 +38,29 @@ using namespace std;
 #define KEYBASE 0x8048000
 //#define ESYM_TABLE_SIZE 8192
 #define ESYM_TABLE_SIZE 32768
+//colour codes
+#define BLUE "\e[34m"
+#define RED "\e[31m"
+#define BOLD "\e[1m"
+#define GREEN "\e[32m"
+#define RESET "\e[0m"
+
+/*this version is implemented for 32-bit binaries. to work properly, we need t use 32-bit DR version, and compile Dynamic compoenent with -m32 flags. also, all the code bases will need to be adjusted to 32-bit base for non-PIC code*/ 
 char name[MAX_SYM_RESULT];
 char file[MAX_SYM_RESULT];
+std::set<uintptr_t> exp_set[MAX_MODULES_ALLOWED];
 std::map<uintptr_t, int> ret_targets;
 bool ld_loaded = false;
 int vdso_id=-1;
-int BB_count = 0;
-std::set<uintptr_t> BBset;
 const char* main_module;
 int main_id= -1;
 uint64_t error_counter=0;
-uint64_t libc_count = 0;
-std::set<uintptr_t> libc_srcs;
-std::set<uintptr_t> libc_targets;
-bool monitor_enable = true;
-//bool monitor_enable = false;
-bool flag_live_on = false;
-bool reg_live_on = false;
-bool start_BB = false;
 uintptr_t ld_addr;
 app_pc orig_main;
 stack_thread_t *local;
 const char *app_name;
-static dr_emit_flags_t event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, bool translating);
 
-static void generate_trace_events(JANUS_CONTEXT);
+static dr_emit_flags_t event_basic_block(void *drcontext, void *tag, instrlist_t *bb, bool for_trace, bool translating);
 static void generate_security_events(JANUS_CONTEXT);
 static void generate_events_by_rule(JANUS_CONTEXT, instr_t *instr);
 
@@ -89,7 +71,8 @@ static void verify_jmp_target(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_
 static void verify_call_target(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uint64_t bitmask_reg, opnd_t target_opnd, int id);
 static void unwind_longjmp(JANUS_CONTEXT, instr_t* trigger, uint64_t bitmask_flags, uint64_t bitmask_reg);
 
-static void loadSymbolsAndHashTables(const char * binName, int id);
+static void loadSymbolsAndHashTables(const char * binName, int id, uintptr_t base);
+static int  getmodulo2size(int size);
 typedef struct{
     uint32_t key_count;
     uint32_t key_lookup;
@@ -101,34 +84,24 @@ std::set<uintptr_t> rets[MAX_MODULES_ALLOWED];
 int nr_icalls[MAX_MODULES_ALLOWED];
 int nr_ijmps[MAX_MODULES_ALLOWED];
 int nr_ret[MAX_MODULES_ALLOWED];
+typedef struct {
+    uintptr_t start;
+    uintptr_t end;
+} PLTsection;
+PLTsection PLT[MAX_MODULES_ALLOWED];
 HashTable hashTable_IC[MAX_MODULES_ALLOWED];            //indirect call
 HashTable hashTable_esym;            //indirect call
 HashTable hashTable_IJ[MAX_MODULES_ALLOWED];            //indirect jump targets which are func entries
 h_metadata histo_esym[ESYM_TABLE_SIZE];
 h_metadata* histo_IC[MAX_MODULES_ALLOWED];
 h_metadata* histo_IJ[MAX_MODULES_ALLOWED];
+ElfData elf_data[MAX_MODULES_ALLOWED]; 
 uint64_t counter[MAX_MODULES_ALLOWED] = {0};
-uint32_t BB_counter[MAX_MODULES_ALLOWED]= {0};
 #define R1 DR_REG_XDI
 #define R2 DR_REG_XSI
 #define R3 DR_REG_XCX
 #define R4 DR_REG_XDX
 #define OFFSET_STACK_TOP offsetof(stack_thread_t, top)
-#if TEST_HASH_LOOKUP
-void verify_call_target_clean(uintptr_t target, int id){
-      histo_IC[id][hashFunction(&hashTable_IC[id],target)].key_lookup++;
-      if(!lookupAddr(&hashTable_IC[id],target)){
-          histo_esym[hashFunction(&hashTable_esym,target)].key_lookup++;
-          //cout<<"CAME HERE. target: "<<hex<<target<<": hash"<<dec<<hashFunction(&hashTable_esym,target)<<endl;
-          if(!lookupAddr(&hashTable_esym,target)){
-                error_counter++;
-          }
-      }
-}
-void verify_jmp_target_clean(uintptr_t target, int id){
-      histo_IJ[id][hashFunction(&hashTable_IJ[id],target)].key_lookup++;
-}
-#endif
 /*------------------------------------------------------------------------------*/
 /*------------------------------ Utility Routines ------------------------------*/
 /*------------------------------------------------------------------------------*/
@@ -141,12 +114,6 @@ char* get_binfile_name(string filepath){
     char* token = strtok(filepathCopy, "/");
 
     char *filename = token;
-    // Keep printing tokens while one of the
-    // Keep printing tokens while one of the
-    // Keep printing tokens while one of the
-    // Keep printing tokens while one of the
-    // Keep printing tokens while one of the
-    // delimiters present in str.
     while (token != NULL)
     {
         token = strtok(NULL, "/");
@@ -234,162 +201,6 @@ unsigned long get_code_size(const char *file_path) {
 /*------------------------------------------------------------------------------*/
 /*-----------------Instrumentation Call Back Routines---------------------------*/
 /*------------------------------------------------------------------------------*/
-static void enable(app_pc bbAddr){
-    cout<<"ENABLED..."<<endl;
-    start_BB = true;
-    dr_mcontext_t mc = { sizeof(mc), DR_MC_ALL };
-    dr_get_mcontext(dr_get_current_drcontext(), &mc);
-    dr_flush_region(NULL, ~0UL ); //flush all the code
-    mc.pc = bbAddr;
-    dr_redirect_execution(&mc);
-}
-void print_tgt(uintptr_t pc, uintptr_t tgt){
-   cout<<"instr: "<<hex<<pc<<" target:"<<tgt<<endl;
-}
-bool enable_BB_flag = false;
-void enable_BB(app_pc bbAddr){
-    cout<<"ENABLED BB..."<<hex<<bbAddr<<endl;
-    enable_BB_flag = true;
-    dr_mcontext_t mc = { sizeof(mc), DR_MC_ALL };
-    dr_get_mcontext(dr_get_current_drcontext(), &mc);
-    dr_flush_region(NULL, ~0UL ); //flush all the code
-    mc.pc = bbAddr;
-    dr_redirect_execution(&mc);
-}
-void print_instr(uintptr_t pc){
-   cout<<"BB: "<<hex<<pc<<endl;
-}
-#if BB_PROFILE
-
-void count_BB(uintptr_t pc){
-   // BB_counter[id]++;
-    BBset.insert(pc);
-    BB_count++;
-}
-#endif
-int ret_count = 0;
-static void print_store_tgt(uintptr_t pc, uintptr_t ret_pc){
-    if(ret_count > 752)
-        cout<<"CALL instr:"<<hex<<pc<<" saving target:"<<ret_pc<<endl;
-}
-static void print_return_stack(uintptr_t pc, uintptr_t ret_pc/*R3*/, int top){
-     stack_thread_t *local = (stack_thread_t*)dr_get_tls_field(dr_get_current_drcontext());
-    cout<<"return instr:"<<hex<<pc<<" looking for target:"<<ret_pc<<" while address at stack top "<<dec<<top<<" is: "<<hex<<local->stack[top]<<endl;
-    if(ret_pc == local->stack[top])
-        cout<<"SUCCESS MATCH"<<endl;
-     ret_count++;
-}
-static void print_verify_tgt(uintptr_t pc, uintptr_t ret_pc/*R3*/, uintptr_t on_shadow/*R4*/){
-     stack_thread_t *local = (stack_thread_t*)dr_get_tls_field(dr_get_current_drcontext());
-    cout<<"return instr:"<<hex<<pc<<" looking for target:"<<ret_pc<<" while address at stack top is: "<<hex<<on_shadow<<endl;
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],(app_pc)pc)) {
-            if((uintptr_t)loaded_modules[i]->start != KEYBASE)
-                cout<<"ret instr: "<<hex<<(uintptr_t)pc-(uintptr_t)loaded_modules[i]->start<<" located in "<<loaded_modules[i]->full_path<<endl;
-            else
-                cout<<"ret instr: "<<hex<<(uintptr_t)pc<<" located in "<<loaded_modules[i]->full_path<<endl;
-            break;
-        }
-    }
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],(app_pc)ret_pc)) {
-            if((uintptr_t)loaded_modules[i]->start != KEYBASE)
-                cout<<"looking for target: "<<hex<<(uintptr_t)ret_pc-(uintptr_t)loaded_modules[i]->start<<" located in "<<loaded_modules[i]->full_path<<endl;
-            else
-                cout<<"looking for target: "<<hex<<(uintptr_t)ret_pc<<" located in "<<loaded_modules[i]->full_path<<endl;
-            break;
-        }
-    }
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],(app_pc)on_shadow)) {
-            if((uintptr_t)loaded_modules[i]->start != KEYBASE)
-                cout<<"while shadow addr is: "<<hex<<(uintptr_t)on_shadow-(uintptr_t)loaded_modules[i]->start<<" located in "<<loaded_modules[i]->full_path<<endl;
-            else
-                cout<<"while shadow addr is: "<<hex<<(uintptr_t)on_shadow<<" located in "<<loaded_modules[i]->full_path<<endl;
-            break;
-        }
-    }
-
-
-    if(error_counter>0) exit(0);
-}
-static void print_jmp_error(uintptr_t pc, uintptr_t addr){
-
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],(app_pc)pc)) {
-            if((uintptr_t)loaded_modules[i]->start != KEYBASE)
-                cout<<"jmp instr: "<<hex<<(uintptr_t)pc-(uintptr_t)loaded_modules[i]->start<<" located in "<<loaded_modules[i]->full_path<<endl;
-            else
-                cout<<"jmp instr: "<<hex<<(uintptr_t)pc<<" located in "<<loaded_modules[i]->full_path<<endl;
-            break;
-        }
-    }
-    cout<<"target:"<<(uintptr_t)addr<<endl;
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],(app_pc)addr)) {
-            if((uintptr_t)loaded_modules[i]->start != KEYBASE)
-                cout<<"looking for jmp target: "<<hex<<(uintptr_t)addr-(uintptr_t)loaded_modules[i]->start<<" located in "<<loaded_modules[i]->full_path<<endl;
-            else
-                cout<<"looking for jmp target: "<<hex<<(uintptr_t)addr<<" located in "<<loaded_modules[i]->full_path<<endl;
-        break;
-        }
-    }
-    cout<<"-----------------------------"<<endl;
-    if(error_counter > 100) exit(0);
-}
-
-static void print_return_error(uintptr_t pc, uintptr_t ret_pc/*R3*/, int top){
-     cout<<"****************ERROR************************ "<<endl;
-     stack_thread_t *local = (stack_thread_t*)dr_get_tls_field(dr_get_current_drcontext());
-     if(top>=0) cout<<"addrs on stack is:"<<hex<<local->stack[top]<<endl;
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],(app_pc)local->stack[top])) {
-            if((uintptr_t)loaded_modules[i]->start != KEYBASE)
-                cout<<"from: "<<hex<<(uintptr_t)local->stack[top]-(uintptr_t)loaded_modules[i]->start<<" located in "<<loaded_modules[i]->full_path<<endl;
-            else
-                cout<<"from: "<<hex<<(uintptr_t)local->stack[top]<<" located in "<<loaded_modules[i]->full_path<<endl;
-        }
-    }
-
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],(app_pc)pc)) {
-            if((uintptr_t)loaded_modules[i]->start != KEYBASE)
-                cout<<"ret instr: "<<hex<<(uintptr_t)pc-(uintptr_t)loaded_modules[i]->start<<" located in "<<loaded_modules[i]->full_path<<endl;
-            else
-                cout<<"ret instr: "<<hex<<(uintptr_t)pc<<" located in "<<loaded_modules[i]->full_path<<endl;
-            break;
-        }
-    }
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],(app_pc)ret_pc)) {
-            if((uintptr_t)loaded_modules[i]->start != KEYBASE)
-                cout<<"looking for ret target: "<<hex<<(uintptr_t)ret_pc-(uintptr_t)loaded_modules[i]->start<<" located in "<<loaded_modules[i]->full_path<<endl;
-            else
-                cout<<"looking for ret target: "<<hex<<(uintptr_t)ret_pc<<" located in "<<loaded_modules[i]->full_path<<endl;
-        break;
-        }
-    }
-    cout<<"-----------------------------"<<endl;
-    if(error_counter > 20) exit(0);
-}
-void enable_monitoring(app_pc main_pc){
-    cout<<"ENABLED..."<<endl;
-    dr_mcontext_t mc = { sizeof(mc), DR_MC_ALL };
-    dr_get_mcontext(dr_get_current_drcontext(), &mc);
-    monitor_enable = 1;
-    dr_flush_region(NULL, ~0UL ); //flush all the code
-    mc.pc = main_pc;
-    dr_redirect_execution(&mc);
-}
-void disable_monitoring(app_pc main_pc){
-    cout<<"DISABLED..."<<endl;
-    dr_mcontext_t mc = { sizeof(mc), DR_MC_ALL };
-    dr_get_mcontext(dr_get_current_drcontext(), &mc);
-    monitor_enable = 0;
-    dr_flush_region(NULL, ~0UL ); //flush all the code
-    mc.pc = main_pc;
-    dr_redirect_execution(&mc);
-}
 static void verify_jmp_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_flag, uint64_t bitmask_reg, opnd_t target_opnd, int id){
 
     instr_t *meta_instr;
@@ -419,12 +230,15 @@ static void verify_jmp_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_fla
     instrlist_meta_preinsert(bb, instr, meta_instr);
 
     meta_instr = INSTR_CREATE_cmp(drcontext,opnd_create_reg(DR_REG_XAX),OPND_CREATE_INT32(0));
-    instrlist_meta_preinsert(bb, instr,meta_instr);
+    instrlist_meta_preinsert(bb, instr,meta_instr); 
+
     
     meta_instr = INSTR_CREATE_jcc(drcontext,OP_jnz,opnd_create_instr(restore_label));
     instrlist_meta_preinsert(bb, instr, meta_instr);
     
     //dr_insert_clean_call(drcontext, bb, instr, (void *)print_jmp_error, false, 2, OPND_CREATE_INT32(instr_get_app_pc(instr)), target_opnd);
+    
+    
     meta_instr = INSTR_CREATE_inc(drcontext,OPND_CREATE_ABSMEM((byte *)&error_counter, OPSZ_4));
     instrlist_meta_preinsert(bb, instr, meta_instr);
     
@@ -447,7 +261,6 @@ static void verify_call_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_fl
     dr_save_reg(drcontext, bb, instr,R1, SPILL_SLOT_2); //RDI, for temporary data hold
     dr_save_reg(drcontext, bb, instr,R3, SPILL_SLOT_3); //RCX, caller-saved
     dr_save_reg(drcontext, bb, instr,R4, SPILL_SLOT_4); //RDX, caller-saved
-//    dr_insert_clean_call(drcontext, bb, instr, (void *)print_tgt, false, 2,OPND_CREATE_INT32(instr_get_app_pc(instr)), target_opnd);
    //load target operand value before saving arith flags 
     meta_instr = INSTR_CREATE_mov_ld(drcontext, opnd_create_reg(R1), target_opnd);
     instrlist_meta_preinsert(bb, instr,meta_instr);
@@ -497,7 +310,8 @@ static void verify_call_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_fl
     meta_instr = INSTR_CREATE_jcc(drcontext,OP_jnz,opnd_create_instr(restore_label));
     instrlist_meta_preinsert(bb, instr, meta_instr);
 
-    //dr_insert_clean_call(drcontext, bb, instr, (void *)print_jmp_error, false, 2, OPND_CREATE_INT32(instr_get_app_pc(instr)), opnd_create_reg(R1));
+   // dr_insert_clean_call(drcontext, bb, instr, (void *)print_call_error, false, 2, OPND_CREATE_INT32(instr_get_app_pc(instr)), opnd_create_reg(R1));
+
     meta_instr = INSTR_CREATE_inc(drcontext,OPND_CREATE_ABSMEM((byte *)&error_counter, OPSZ_4));
     instrlist_meta_preinsert(bb, instr, meta_instr);
     
@@ -514,9 +328,6 @@ static void verify_call_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_fl
 static void verify_return_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_flag, uint64_t bitmask_reg){
     instr_t *meta_instr;
     instr_t *restore_label, *unwind_label, *error_label;
-    /*instr_t *first_instr = instrlist_first_app(bb);
-    app_pc bb_pc = instr_get_app_pc(first_instr);
-    */
     restore_label = INSTR_CREATE_label(drcontext);
     unwind_label = INSTR_CREATE_label(drcontext);
     error_label = INSTR_CREATE_label(drcontext);
@@ -564,9 +375,6 @@ static void verify_return_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_
     meta_instr = INSTR_CREATE_mov_ld(drcontext, opnd_create_reg(R4), opnd_create_base_disp( R1, R2, 4, 0,OPSZ_4));
     instrlist_meta_preinsert(bb, instr, meta_instr);
 
-    /*if((PCAddress)bb_pc == 0x825762a)
-        dr_insert_clean_call(drcontext, bb, instr, (void *)print_return_stack, false, 3,OPND_CREATE_INT32(instr_get_app_pc(instr)), opnd_create_reg(R3), opnd_create_reg(R2));*/
-   // dr_insert_clean_call(drcontext, bb, instr, (void *)print_verify_tgt, false, 3,OPND_CREATE_INT32(instr_get_app_pc(instr)), opnd_create_reg(R3), opnd_create_reg(R4));
     
     //compare [rsp] with stack[top+4], if not equal, then jump to loop
     meta_instr = INSTR_CREATE_cmp(drcontext,opnd_create_reg(R3),opnd_create_reg(R4));
@@ -581,12 +389,9 @@ static void verify_return_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_
 
     instrlist_meta_preinsert(bb, instr, error_label);
    //  increment error counter
-
-
     meta_instr = INSTR_CREATE_inc(drcontext,OPND_CREATE_ABSMEM((byte *)&error_counter, OPSZ_4));
     instrlist_meta_preinsert(bb, instr, meta_instr);
     
-    //dr_insert_clean_call(drcontext, bb, instr, (void *)print_return_error, false, 3,OPND_CREATE_INT32(instr_get_app_pc(instr)), opnd_create_reg(R3), opnd_create_reg(R2));
 
     //insert label for flag/reg restore instructions
     instrlist_meta_preinsert(bb, instr, restore_label);
@@ -611,19 +416,9 @@ static void store_return_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_f
     app_pc instr_pc = instr_get_app_pc(instr);
     app_pc ret_pc = instr_pc + instr_length(drcontext, instr);
     instr_t *restore_label, *error_label;
-    //stack_thread_t * local = (stack_thread_t*)dr_get_tls_field(dr_get_current_drcontext());
-    /*bool main_binary = false;
-    for(int i =0 ; i< nmodules; i++){
-        if (dr_module_contains_addr(loaded_modules[i],instr_pc)) {
-            if((uintptr_t)loaded_modules[i]->start == KEYBASE)
-                main_binary = true;
-                break;
-        }
-    }*/
     /*--------- saving RSI/RDI registers -----------------*/
     dr_save_reg(drcontext, bb, instr, R1, SPILL_SLOT_2);
     dr_save_reg(drcontext, bb, instr, R2, SPILL_SLOT_3);
-    //dr_save_reg(drcontext, bb, instr, R4, SPILL_SLOT_6);
    
     restore_label = INSTR_CREATE_label(drcontext);
     error_label = INSTR_CREATE_label(drcontext);
@@ -641,22 +436,11 @@ static void store_return_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_f
                          OPND_CREATE_MEM32(R1, OFFSET_STACK_TOP)
                         ));
     //2. store the value of instr_pc+ size into local->stack[local->top]
-    /*PRE_INSERT(bb, instr,
-        INSTR_CREATE_lea(drcontext,
-                            opnd_create_reg(R4),
-                         opnd_create_base_disp(R1, R2, 4, 0, OPSZ_lea)
-                            //OPND_CREATE_INTPTR(ret_pc)
-                            ));*/
-    
     PRE_INSERT(bb, instr,
         INSTR_CREATE_mov_st(drcontext,
                          opnd_create_base_disp(R1, R2, 4, 0, OPSZ_4),
-                            //OPND_CREATE_INTPTR(ret_pc)
                             OPND_CREATE_INT32(ret_pc)
                             ));
-    //if(main_binary)
-    //    dr_insert_clean_call(drcontext, bb, instr, (void *)print_store_tgt, false, 2,OPND_CREATE_INT32(instr_get_app_pc(instr)), OPND_CREATE_INT32(ret_pc));
-
     //increment top (without affecting status flags)
     meta_instr = XINST_CREATE_add(drcontext,opnd_create_reg(R2), OPND_CREATE_INT32(1));
     instrlist_meta_preinsert(bb, instr, meta_instr);
@@ -669,87 +453,115 @@ static void store_return_target(JANUS_CONTEXT, instr_t *instr,uint64_t bitmask_f
                         ));
     
         
-    //dr_insert_clean_call(drcontext, bb, instr, (void *)print_store_tgt, false, 2,OPND_CREATE_INT32(instr_get_app_pc(instr)), OPND_CREATE_INT32(ret_pc));
     //insert label for flag/reg restore instructions
     instrlist_meta_preinsert(bb, instr, restore_label);
     dr_restore_reg(drcontext, bb, instr, R1, SPILL_SLOT_2);
     dr_restore_reg(drcontext, bb, instr, R2, SPILL_SLOT_3);
-    //dr_restore_reg(drcontext, bb, instr, R4, SPILL_SLOT_6);
 }
 //TODO: for dynamic only version, we need to check the return address, and then check if the difference between it and the top of the stack address is <= 8
 /*------------------------------------------------------------------------------*/
 /*----------------------  Symbol and HashTable Routines-------------------------*/
 /*------------------------------------------------------------------------------*/
-static void loadSymbolsAndHashTables(const char * binName, int id){
-
-//STEP 1: read symbols from ELF
-
-std::ifstream binFile(binName, std::ios::binary | std::ios::ate);
-
-if (!binFile.is_open()) {
-    std::cerr << "Error opening the file" <<binName<< std::endl;
-    return;
+static bool addr_in_code_section(uintptr_t address, ElfData& my_elf){
+   if((address >= my_elf.text_start && address < my_elf.text_end) || (address >= my_elf.init_start && address < my_elf.init_end) && (address >= my_elf.fini_start && address < my_elf.fini_end) || (address >= my_elf.plt_start && address < my_elf.plt_end)){
+        return true;
+   } 
+   return false;
 }
-uint32_t fileSize = binFile.tellg();
+static void loadSymbolsAndHashTables(const char * binName, int id, uintptr_t base){
 
-cout<<"Reading file \""<<binName<<"\" size: "<<fileSize<<" bytes."<<endl;
+    //STEP 1: read symbols from ELF
 
-uint8_t *filebuffer = new uint8_t[fileSize + 2048];
-binFile.seekg (0, ios::beg);
+    std::ifstream binFile(binName, std::ios::binary | std::ios::ate);
+
+    if (!binFile.is_open()) {
+        std::cerr << "Error opening the file: " <<binName<< std::endl;
+        return;
+    }
+    uint32_t fileSize = binFile.tellg();
+
+    cerr<<"Reading file \""<<binName<<"\" size: "<<fileSize<<" bytes."<<endl;
+
+    uint8_t *filebuffer = new uint8_t[fileSize + 2048];
+    binFile.seekg (0, ios::beg);
     binFile.read((char *)filebuffer,fileSize);
     if(strncmp((char *)filebuffer,ELFMAG,4)==0) {
         switch(filebuffer[EI_CLASS]) {
             case ELFCLASS32:
-                parseELF32(filebuffer);
+                parseELF32(filebuffer, &elf_data[id]);
             break;
             case ELFCLASS64:
                 parseELF64(filebuffer);
             break;
+            default:
+            break;
         }
     }
-
+    ElfData &my_elf = elf_data[id];
+    PLT[id].start = my_elf.plt_start;
+    PLT[id].end = my_elf.plt_end;
 
     //STEP 2: read binary addresses and build hashtables
 
      binFile.seekg (0, ios::beg);
      //set the stream to read binary
      binFile >> std::noskipws;
-
+    std::set<uintptr_t> ic_set, ij_set;
     uintptr_t address;
     while (binFile.read(reinterpret_cast<char*>(&address), sizeof(address))) {
         // Display the hex address
-         //if (jc->functionMap.count(address)){
-              //hashTable_IC[id]->insert(address, 1);
-              insert(&hashTable_IC[id], address, 1);
-         //}
+         if (my_elf.symbols.count(address)){
+              ic_set.insert(base+address);
+              ij_set.insert(base+address);
+              insert(&hashTable_esym, base+address, 1);
+
+         }
+         else{
+             if(addr_in_code_section(address, my_elf)){
+                  ij_set.insert(base+address);
+             }
+             else{
+                 int current_pos = binFile.tellg();
+                 if(current_pos >= (my_elf.ro_start) && current_pos <= (my_elf.ro_end)){
+                      uintptr_t offsetAddr= address + my_elf.GOTAddress;
+                      if(addr_in_code_section(offsetAddr, my_elf)){
+                          ij_set.insert(base+address);
+                      }
+                }
+                else{
+                      uintptr_t offsetAddr= address + my_elf.GOTAddress;
+                      if(addr_in_code_section(offsetAddr, my_elf)){
+                          ij_set.insert(base+address);
+                      }
+
+                }
+            }
+
+         }
         // Slide the cursor back by 3 bytes
         binFile.seekg(-3, std::ios::cur);
     }
-
+    //populate hash tables
+    uint32_t size;
+    //IC table
+    size = getmodulo2size(ic_set.size());
+    initHashTable(&hashTable_IC[id], size);
+    for(auto addr: ic_set){
+        insert(&hashTable_IC[id], addr, 1);
+    }
+    //IJ table
+    size = getmodulo2size(ij_set.size());
+    initHashTable(&hashTable_IJ[id], size);
+    for(auto addr: ij_set){
+        insert(&hashTable_IJ[id], addr, 1);
+    }
+    //ESYM table
+    if(ld_loaded){
+         insert(&hashTable_IJ[id], ld_addr, 1);
+     }
     // Close the file
     binFile.close();
 }
-/*static int  getmodulo2size(int size){
-    if(size & size - 1){
-        //size is not module 2, find the next closest module 2
-        unsigned int position = 0;
-        int x = size;
-        x |= (x >> 1);
-        x |= (x >> 2);
-        x |= (x >> 4);
-        x |= (x >> 8);
-        x |= (x >> 16);
-        position = (x >> 1) + 1;
-        int halfway = position >> 1;
-        if((size - position) < halfway){
-           return position;
-        }
-        else{
-            return position << 1;
-        }
-    } 
-    return size;
-}*/
 static int  getmodulo2size(int size){
     if(size & size - 1){
         //size is not module 2, find the next closest module 2
@@ -766,35 +578,6 @@ static int  getmodulo2size(int size){
     return size*2;
 }
 
-/*bool is_prime(int n) {
-    if (n <= 1) {
-        return false;
-    }
-    for (int i = 2; i * i <= n; i++) {
-        if (n % i == 0) {
-            return false;
-        }
-    }
-    return true;
-}
-
-int next_power_of_2_with_prime_exponent(int num) {
-    int power = 1;
-    int exponent = 0;
-    while (true) {
-        power *= 2;
-        exponent++;
-        if (is_prime(exponent) && power > num) {
-            return power;
-        }
-    }
-}
-static int  getmodulo2size(int size){
-    cout<<"original size:"<<size<<endl;
-    int newsize = next_power_of_2_with_prime_exponent(size);
-    cout<<"new size:"<<newsize<<endl;
-    return newsize;
-}*/
 static void loadHashTables(const char * binname, int id, uintptr_t base_offset){
     int size;
     std::ifstream infile;
@@ -819,9 +602,6 @@ static void loadHashTables(const char * binname, int id, uintptr_t base_offset){
     std::string str;
     uintptr_t addr;
   /*indirect call target*/
-#if DEBUG_CFI
-    cout<<"STEP 1: filling icall targets for:"<<ic_target<<endl;
-#endif
     infile.open(ic_target, std::ios::in);
     std::getline(infile, str);
     if(!str.empty()){
@@ -829,30 +609,16 @@ static void loadHashTables(const char * binname, int id, uintptr_t base_offset){
         //make it a module 2 size
         size = getmodulo2size(size);
         initHashTable(&hashTable_IC[id], size);
-#if TEST_HASH | TEST_HASH_LOOKUP
-        histo_IC[id] = (h_metadata*)malloc(sizeof(h_metadata)*size);
-        for(int i=0; i< size; i++){
-            histo_IC[id][i].key_count = 0;
-            histo_IC[id][i].key_lookup = 0;
-        }
-#endif
         while (std::getline(infile, str)) {
           std::istringstream iss(str);
           iss >>std::hex>>addr;
           addr += base_offset;
           insert(&hashTable_IC[id], addr,1);
-#if TEST_HASH
-          hash = hashFunction(&hashTable_IC[id],addr);
-          histo_IC[id][hash].key_count++;
-#endif
         }
     }
     infile.close();
 
     /*indirect jump target*/
-#if DEBUG_CFI
-    cout<<"STEP 2: filling ijmp targets for: "<<ij_target<<endl;
-#endif
     infile.open(ij_target, std::ios::in);
     std::getline(infile, str);
     if(!str.empty()){
@@ -860,47 +626,26 @@ static void loadHashTables(const char * binname, int id, uintptr_t base_offset){
         size = size + 1; //for adding loader symbol
         size = getmodulo2size(size);
         initHashTable(&hashTable_IJ[id], size);
-#if TEST_HASH || TEST_HASH_LOOKUP
-        histo_IJ[id] = (h_metadata*)malloc(sizeof(h_metadata)*size);
-        for(int i=0; i< size; i++){
-            histo_IJ[id][i].key_count = 0;
-            histo_IJ[id][i].key_lookup = 0;
-        }
-#endif
         while (std::getline(infile, str)) {
           std::istringstream iss(str);
           iss >>std::hex>>addr;
           addr += base_offset;
           insert(&hashTable_IJ[id], addr, 1);
-#if TEST_HASH
-          hash = hashFunction(&hashTable_IJ[id],addr);
-          histo_IJ[id][hash].key_count++;
-#endif
         }
         insert(&hashTable_IJ[id], addr, 1);
         if(ld_loaded){
              insert(&hashTable_IJ[id], ld_addr, 1);
-#if TEST_HASH
-          hash = hashFunction(&hashTable_IJ[id],ld_addr);
-          histo_IJ[id][hash].key_count++;
-#endif
         }
     }
     infile.close();
   //TODO: for dynamically loaded libraries.  
-#if DEBUG_CFI
-  cout<<"STEP 3: filling exported symbols for "<<base_name<<endl;
-#endif
+  uint32_t exp_count= 0; 
     infile.open(esym_file, std::ios::in);
     while (std::getline(infile, str)) {
         std::istringstream iss(str);
         iss >> std::hex >> addr;
         addr +=  base_offset;
-        insert(&hashTable_esym, addr,1);
-#if TEST_HASH
-          hash = hashFunction(&hashTable_esym,addr);
-          histo_esym[hash].key_count++;
-#endif
+       insert(&hashTable_esym, addr,1);
     }
     infile.close();
 }
@@ -941,13 +686,13 @@ generate_dynamic_events(JANUS_CONTEXT){
                nr_icalls[matched]++;
         }
 #endif
-        cout<<"instr: "<<hex<<(uintptr_t)instr_get_app_pc(last)-(uintptr_t)loaded_modules[matched]->start<<" from"<<loaded_modules[matched]->full_path<<endl;
         verify_call_target(janus_context, last,  1/*bitmask_flags*/, 0/*bitmask_reg*/, target_opnd, matched);
     }
     int opcode = instr_get_opcode(last);
     if(opcode == OP_jmp_ind || opcode == OP_jmp_far_ind)
     {
         target_opnd = instr_get_target(last);
+        app_pc icf_pc = instr_get_app_pc(last);
         for (id = 0; id < nmodules; ++id) {
             if (dr_module_contains_addr(loaded_modules[id],instr_get_app_pc(last))) {
                 matched = id;
@@ -958,15 +703,30 @@ generate_dynamic_events(JANUS_CONTEXT){
             cout<<"ERROR: instr  not in loaded modules"<<endl;
             return;
         }
-#if CALCULATE_AIR
+/*#if CALCULATE_AIR
        addr = (uintptr_t)instr_get_app_pc(last);
         if(!ijmps[matched].count(addr)){
                ijmps[matched].insert(addr);
                nr_ijmps[matched]++;
         }
+#endif*/
+        //special case for plt jmps - target set is cross-module callbacks or exported symbol addresses
+        if((uintptr_t)icf_pc >= PLT[matched].start && (uintptr_t)icf_pc < PLT[matched].end){
+        //    verify_call_target(janus_context, last,  1/*bitmask_flags*/, 0/*bitmask_reg*/, target_opnd, matched);
+           return;
+        }
+        else{
+#if CALCULATE_AIR
+            if(!ijmps[matched].count((uintptr_t)icf_pc)){
+                   ijmps[matched].insert((uintptr_t)icf_pc);
+                   nr_ijmps[matched]++;
+            }
 #endif
-        verify_jmp_target(janus_context, last,  1/*bitmask_flags*/, 0/*bitmask_reg*/, target_opnd, matched);
+            verify_jmp_target(janus_context, last,  1/*bitmask_flags*/, 0/*bitmask_reg*/, target_opnd, matched);
+            return;
+        }
    }
+
 #endif //end FORWARD_CFI 
     #if BACKWARD_CFI
     if(instr_is_call(last)){
@@ -1040,9 +800,7 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
     switch (rule_opcode) {
 #if BACKWARD_CFI
 	case SAVE_RETURN_TARGET:
-           //if(monitor_enable){
                 store_return_target(janus_context, trigger,  1/*bitmask_flags*/,  0/*bitmask_reg*/);
-            //}
 	break;
 	case VERIFY_RETURN_TARGET:
 #if CALCULATE_AIR
@@ -1061,7 +819,6 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
             }
 #endif
             verify_return_target(janus_context, trigger,  1/*bitmask_flags*/, 0/*bitmask_reg*/);
-        //verify_return_target(janus_context, trigger , flag_live_on ? rule->reg0 : 1/*bitmask_flags*/, reg_live_on ? rule->reg1 : 0/*bitmask_reg*/);
 	break;
 #endif
 #if 0
@@ -1070,7 +827,6 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
 	break;
 #endif
 #if FORWARD_CFI
-        
        case VERIFY_CALL_TARGET_INTRA:
             target_opnd = instr_get_target(instr);
             for (id = 0; id < nmodules; ++id) {
@@ -1090,7 +846,7 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
             verify_call_target(janus_context, trigger,  1/*bitmask_flags*/, 0/*bitmask_reg*/, target_opnd, matched);
 
         break;
-	case VERIFY_JMP_TARGET:
+        case VERIFY_JMP_TARGET:
             target_opnd = instr_get_target(instr);
             for (id = 0; id < nmodules; ++id) {
                 if (dr_module_contains_addr(loaded_modules[id],instr_get_app_pc(instr))) {
@@ -1108,53 +864,7 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
 #endif
             verify_jmp_target(janus_context, trigger,  1/*bitmask_flags*/, 0/*bitmask_reg*/, target_opnd, matched);
 	break;
-#endif
-#if 0
-        case SAVE_AT_ENTRY:
-             if(reg_live_on){
-                     int alive = 0;
-                     int slot = 0;
-                     uint64_t bitmask_reg = rule->reg0;
-                     for(int id= DR_REG_RCX; id< DR_REG_R12; id++){ //starting from id DR_REG_RCX, to DR_REG_11
-                         alive = (bitmask_reg >> id-1 ) & 1;
-                         if(alive){
-                             PRE_INSERT(bb, trigger,
-                            INSTR_CREATE_mov_st(drcontext,
-                                            opnd_create_rel_addr(&(regs[slot]), OPSZ_8),
-                                            opnd_create_reg(id)));
-                                  slot++;
-                         }
-                     }
-             }
-        break;
-        case RESTORE_AT_EXIT:
-             if(reg_live_on){
-                 int alive = 0;
-                 int slot = 0;
-                 uint64_t bitmask_reg = rule->reg0;
-                 for(int id= DR_REG_RCX; id< DR_REG_R12; id++){ //starting from id DR_REG_RCX, to DR_REG_11
-                     alive = (bitmask_reg >> id-1) & 1;
-                     if(alive){
-                         PRE_INSERT(bb, trigger,
-                         INSTR_CREATE_mov_ld(drcontext, opnd_create_reg(id),
-                                opnd_create_rel_addr(&(regs[slot]), OPSZ_8)));
-                          slot++;
-                     }
-                                         
-                 }
-             }
-         break;
-#endif
-#if 0
-         case ENABLE_MONITORING:
-             if(!monitor_enable){ //only do it first time
-                 dr_insert_clean_call(drcontext, bb, instr, (void *)enable_monitoring, false, 1, OPND_CREATE_INTPTR(instr_get_app_pc(instr)));
-             }
-         break;
-         case DISABLE_MONITORING:
-                 dr_insert_clean_call(drcontext, bb, instr, (void *)disable_monitoring, false, 1, OPND_CREATE_INTPTR(instr_get_app_pc(instr)));
-         break;
-#endif    
+#endif //FORWARD_CFI
 
         default:
                 //fprintf(stderr,"In basic block 0x%lx static rule not recognised %d\n",bbAddr,rule_opcode);
@@ -1179,15 +889,12 @@ generate_events_by_rule(JANUS_CONTEXT, instr_t *instr){
 static void
 exit_summary() {
 #if CALCULATE_AIR
+      cout<<"main_module:"<<main_module<<endl;
       char  binfilepath[MAX_STR_LEN];
       strcpy(binfilepath,rs_dir);
-      strcat(binfilepath,main_module);
+      strcat(binfilepath,app_name);
       strcat(binfilepath,"_AIR.txt");
       printf("binfilepath: %s\n", binfilepath);
-      /*FILE *airfile = fopen(binfilepath, "w");
-      if(airfile == NULL) {
-          cout<<"NO FILEEEEEEE"<<endl;
-      }*/
       std::ofstream airfile(binfilepath);
       double dair = 0; /* dynamic average indirect target reduction */
       unsigned long n = 0; /* counter for indirect target instructions */
@@ -1221,6 +928,7 @@ exit_summary() {
         unsigned long nr_dso_valid_ijmp_targets = 0;
         unsigned long nr_dso_valid_ret_targets = 0;
         s+= get_code_size(loaded_modules[m]->full_path);
+           cout<<"module:"<<loaded_modules[m]->full_path<<" intra targets: "<<get_size(&hashTable_IC[m])<<" inter targets: "<<get_size(&hashTable_esym)<<endl;
         for(i=0; i< nr_icalls[m]; i++){
            unsigned long nr_valid_targets = get_size(&hashTable_IC[m]) + get_size(&hashTable_esym);
            nr_dso_valid_icall_targets += nr_valid_targets;
@@ -1287,74 +995,8 @@ exit_summary() {
       airfile<<" * Total ret DAIR "<< (unsigned long)((dair_ret/(double)n_ret)*(double)10000)<<endl;
       airfile<<" *********************************"<<endl;     
 
-      airfile<<"icalls for main executable"<<endl;
-      cout<<"size:"<<icalls[main_id].size()<<endl;
-      cout<<"module:"<<dr_module_preferred_name(loaded_modules[main_id])<<endl;
-      for(auto& ic : icalls[main_id]){
-         airfile<<hex<<ic<<endl;
-      }
-      airfile<<"ijumps for main executable"<<endl;
-      for(auto& ij : ijmps[main_id]){
-         airfile<<hex<<ij<<endl;
-      }
 #endif
-    cout<<"Total overflow error: "<<dec<<error_counter<<endl;
-#if DEBUG_CFI && FORWARD_CFI
-    cout<<"Total libc error: "<<dec<<libc_count<<endl;
-#endif
-           // Open the file for appending
-    std::ofstream outputFile("/local/scratch/ma843/rwdir-cfi/outerr-400-full.txt", std::ios_base::app);
-//    std::ofstream outputFile("/local/scratch/ma843/rwdir-cfi/bb_count_dyn.txt", std::ios_base::app);
-
-    if (outputFile.is_open()) {
-        // Print output directly to the file
-        outputFile<<app_name<<" error: " <<dec<<error_counter<<endl;
-        outputFile.flush();
-        // Close the file
-        outputFile.close();
-    } else {
-        std::cerr << "Error opening file!\n";
-    }
-#if BB_PROFILE
-    cout<<"BBcount: "<<BB_count<<endl;
-   std::ofstream out1("/local/scratch/ma843/rwdir-cfi/435-dyn-bb.txt", std::ios_base::app);
-   for(auto bb: BBset){
-      out1<<"BB: " <<hex<<bb<<endl;
-
-   }
-    out1.flush();
-    out1.close();
-#endif
-#if TEST_HASH || TEST_HASH_LOOKUP
-    for(int m =0; m < nmodules; m++){
-        cout<<"module: "<<dr_module_preferred_name(loaded_modules[m])<<endl;
-         string fname = string("/local/scratch/ma843/rwdir-cfi/hashing/453.povray/multi_all_combined/histo_IC_") + string(dr_module_preferred_name(loaded_modules[m])) +string(".csv");
-         std::ofstream outfile(fname);
-         int size = get_size(&hashTable_IC[m]);
-         for(int j = 0; j < size; j++){
-               outfile <<j<<","<<histo_IC[m][j].key_count<<","<<histo_IC[m][j].key_lookup<<endl;
-         }
-         outfile.close();
-         fname = string("/local/scratch/ma843/rwdir-cfi/hashing/453.povray/multi_all_combined/histo_IJ_") + string(dr_module_preferred_name(loaded_modules[m]))+string(".csv");
-         std::ofstream outfile2(fname);
-         size = get_size(&hashTable_IJ[m]);
-         for(int j = 0; j < size; j++){
-               outfile2 <<j<<","<<histo_IJ[m][j].key_count<<","<<histo_IJ[m][j].key_lookup<<endl;
-         }
-         outfile2.close();
-    }
-     std::ofstream outfile3("/local/scratch/ma843/rwdir-cfi/hashing/453.povray/multi_all_combined/histo_esym.csv");
-
-    for(int i =0; i< ESYM_TABLE_SIZE; i++){
-        outfile3<<i<<","<<histo_esym[i].key_count<<","<<histo_esym[i].key_lookup<<endl;
-    }
-     outfile3.close();
-    for(int i=0; i< nmodules; i++){
-        free(histo_IC[i]);
-        free(histo_IJ[i]);
-    }
-#endif
-   
+    cerr<<"app: "<<app_name<<"   Total overflow error: "<<dec<<error_counter<<endl;
 }
 void on_thread(void *drcontext)
 {
@@ -1401,12 +1043,12 @@ event_module_load(void *drcontext, const module_data_t *info, bool loaded){
     bool load_schedule = true;
     bool rules_found = false;
     uintptr_t base;
-//#if (DEBUG_VERBOSE || DEBUG_CFI )
+#if (DEBUG_VERBOSE || DEBUG_CFI )
     dr_fprintf(STDOUT, " full_name %s \n", info->full_path);
     dr_fprintf(STDOUT, " module_name %s \n", dr_module_preferred_name(info));
     dr_fprintf(STDOUT, " start" PFX "\n", info->start);
     dr_fprintf(STDOUT, " end" PFX "\n", info->end);
-//#endif
+#endif
     loaded_modules[nmodules] = dr_copy_module_data(info);
     if(strcmp(dr_module_preferred_name(info), "linux-gate.so.1") == 0) {
 #if !TEST_OVERHEAD
@@ -1440,16 +1082,6 @@ event_module_load(void *drcontext, const module_data_t *info, bool loaded){
     }
 #endif
 #endif
-#if DYN_ONLY_MODE
-    if(strcmp(dr_module_preferred_name(info), main_module) == 0){
-        char* MAIN = "main";
-        //orig_main = (app_pc)dr_get_proc_address((module_handle_t)info->start, MAIN);
-        size_t offs;
-        if (drsym_lookup_symbol(info->full_path, MAIN, &offs, DRSYM_DEMANGLE) == DRSYM_SUCCESS) {
-            orig_main = offs + info->start;
-        }
-    }
-#endif
 #if !DYN_ONLY_MODE
     if(load_schedule && strcmp(dr_module_preferred_name(info), "linux-gate.so.1") != 0){
         char * binfile = get_binfile_name(info->full_path);
@@ -1457,34 +1089,43 @@ event_module_load(void *drcontext, const module_data_t *info, bool loaded){
         strcpy(binfilepath,rs_dir);
         strcat(binfilepath,binfile);
         strcat(binfilepath,".jrs");
-#if DEBUG_VERBOSE
-        printf("binfilepath: %s\n", binfilepath);
-#endif
         FILE *file = fopen(binfilepath, "r");
         if(file != NULL) {
             rules_found=true;
         }
     //fclose(file);
         if(rules_found){
-            cout<<"RULES FOUND"<<endl;
 #if FORWARD_CFI
             if((uintptr_t)info->start == (uintptr_t)KEYBASE)
                 base = 0;
             else
                 base = (uintptr_t)info->start;
-#if !TEST_OVERHEAD
-            loadHashTables(binfile, nmodules, base);
-#endif
 #endif
             nmodules++;
             load_static_rules_security(binfilepath, info);
         }
         else{ /* rules not found, analyze dynamically */
 #if FORWARD_CFI
-            //loadSymbolsAndHashTables(binfile, nmodules);
+            loadSymbolsAndHashTables(binfile, nmodules, base);
 #endif
             nmodules++;
         }
+    }
+#endif
+
+
+#if DYN_ONLY_MODE
+    if(strcmp(dr_module_preferred_name(info), "linux-gate.so.1") != 0){
+        char * binfile = get_binfile_name(info->full_path);
+        strcpy(filepath, info->full_path);
+        if((uintptr_t)info->start == (uintptr_t)KEYBASE)
+            base = 0;
+        else
+            base = (uintptr_t)info->start;
+#if FORWARD_CFI
+        loadSymbolsAndHashTables(filepath, nmodules, base);
+#endif
+        nmodules++;
     }
 #endif
 }
@@ -1496,18 +1137,6 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb,
     uint64_t num_instructions = 0;
     //get current basic block starting address
     PCAddress bbAddr = (PCAddress)dr_fragment_app_pc(tag);
-#if 0
-    if(enable_BB_flag == false && bbAddr == 0x8258140)
-            dr_insert_clean_call(drcontext, bb, instrlist_first_app(bb), (void *)enable_BB, false, 1, OPND_CREATE_INT32(bbAddr));
-    if(enable_BB_flag){
-        //for(int i =0 ; i< nmodules; i++){
-          //  if (dr_module_contains_addr(loaded_modules[i],(app_pc)bbAddr)) {
-            //    if((uintptr_t)loaded_modules[i]->start == KEYBASE)
-                    dr_insert_clean_call(drcontext, bb, instrlist_first_app(bb), (void *)print_instr, false, 1,OPND_CREATE_INT32(bbAddr));
-        //    }
-        //}
-    }
-#endif
     //lookup in the hashtable to check if there is any rule attached to the block
     RRule *rule;
 #if STAT_ONLY_MODE || HYBRID_MODE
@@ -1517,20 +1146,13 @@ event_basic_block(void *drcontext, void *tag, instrlist_t *bb,
             generate_security_events(janus_context);
         }
     }
-    //generate_trace_events(janus_context);
 #if HYBRID_MODE && !STAT_ONLY_MODE
-    else if(monitor_enable){                                //dynamically generated code, or not seen statically (e.g. vdso)
+    //dynamically generated code, or not seen statically (e.g. vdso)
         generate_dynamic_events(janus_context);
-    }
 #endif
 #endif
 #if DYN_ONLY_MODE && !STAT_ONLY_MODE && !HYBRID_MODE
-    if(bbAddr == (PCAddress)orig_main && !monitor_enable){
-         dr_insert_clean_call(drcontext, bb, instrlist_first_app(bb), (void *)enable_monitoring, false, 1, OPND_CREATE_INT64(instr_get_app_pc(instrlist_first_app(bb))));
-    }
-    if(monitor_enable){
         generate_dynamic_events(janus_context);
-    }
 #endif
     return DR_EMIT_DEFAULT;
 }
@@ -1551,18 +1173,21 @@ DR_EXPORT void dr_init(client_id_t id)
     module_data_t *main = dr_get_main_module();
     main_module = dr_module_preferred_name(main);
     app_name = dr_get_application_name();
+    dr_free_module_data(main);
 #if DYN_ONLY_MODE
     /*Initialise symbol library*/
-    if (drsym_init(0) != DRSYM_SUCCESS) {
+    /*if (drsym_init(0) != DRSYM_SUCCESS) {
             printf("WARNING: unable to initialize symbol translation\n");
-    }
+    }*/
 #endif
 #if !DYN_ONLY_MODE
     janus_init_asan(id);
 
     cout<<"\033[32m"<<"ENTERNED JANUS: mode is set to "<<print_janus_mode((JMode)get_client_mode())<<endl; 
 #endif
-    
+   
+
+#ifdef DEBUG_VERBOSE   
 #if STAT_ONLY_MODE
     cout<<"MODE is STATIC ONLY with flag_liveness="<<flag_live_on<<" reg_liveness="<<reg_live_on<<"\033[0m"<<endl;
 #endif
@@ -1572,6 +1197,8 @@ DR_EXPORT void dr_init(client_id_t id)
 #if DYN_ONLY_MODE
     cout<<"MODE is DYN_ONLY"<<"\033[0m"<<endl;
 #endif
+#endif
+
     /* Register event callbacks. */
        // Initialize each hash table in the array
 
