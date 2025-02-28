@@ -2,8 +2,7 @@
 
 #include <stdio.h>
 //location for storing rewrite schedule. change accordinly. //TODO: make this an input argument
-char rs_dir[] = "/local/scratch/ma843/rwdir-re/";
-//char rs_dir[] = "/local/scratch-2/ma843/rwdir-re/";
+char rs_dir[] = "/local/scratch/ma843/rwdir/";
 const char *print_janus_mode(JMode mode) {
     switch(mode) {
         case JPARALLEL: return "Automatic Parallelisation";
@@ -27,6 +26,8 @@ const char *print_janus_mode(JMode mode) {
         case JSBCETS: return "Softbound + CETS";
         case JSBCETS_NULL: return "Softbound + CETS null rules";
         case JSBCETS_LIVE: return "Softbound + CETS with livenes";
+        case JCFI: return "CFI";
+        case JCFI_LIVE: return "CFI with liveness";
         default: return "Free Mode";
     }
 }
@@ -34,7 +35,7 @@ const char *print_janus_mode(JMode mode) {
 const char *print_rule_opcode(RuleOp op)
 {
     switch (op) {
-        case GNORMAL: return "GNORMAL";
+        //case GNORMAL: return "GNORMAL";
         case PROF_START: return "PROF_START";
         case PROF_LOOP_START: return "PROF_LOOP_START";
         case PROF_LOOP_ITER: return "PROF_LOOP_ITER";
@@ -195,6 +196,8 @@ const char *print_rule_opcode(RuleOp op)
         case SAVE_AT_ENTRY: return "SAVE_AT_ENTRY";
         case RESTORE_AT_EXIT: return "RESTORE_AT_EXIT";
         case ENABLE_MONITORING: return "ENABLE_MONITORING";
+        case DISABLE_MONITORING: return "DISABLE_MONITORING";
+        case SAVE_MAIN_ENTRY: return "SAVE_MAIN_ENTRY";
         case BND_CHECK: return "BND_CHECK";
         //case BND_RECORD_SIZE: return "BND_RECORD_SIZE";
         case BND_RECORD_SIZE_MALLOC: return "BND_RECORD_SIZE_MALLOC";
@@ -209,6 +212,7 @@ const char *print_rule_opcode(RuleOp op)
         case TABLE_VALUE_MEM: return "TABLE_VALUE_MEM";
         case ABS_REG_MEM_STORE: return "ABS_REG_MEM_STORE";
         case ABS_MEM_REG_LOAD: return "ABS_MEM_REG_LOAD";
+        case ABS_VALUE_MEM: return "ABS_VALUE_MEM";
         case BND_REMOVE_RAX: return "BND_REMOVE_RAX";
         case MONITOR_FREE_CALL: return "MONITOR_FREE_CALL";
         case STORE_STACK_BOUNDS: return "STORE_STACK_BOUNDS";
@@ -221,7 +225,11 @@ const char *print_rule_opcode(RuleOp op)
         case ARITH_REG_MEM_STORE: return "ARITH_REG_MEM_STORE";
         case ARITH_VALUE_MEM: return "ARITH_VALUE_MEM";
         case GLOBAL_VALUE_REG: return "GLOBAL_VALUE_REG";
+        case GLOBAL_TABLE_VALUE_MEM: return "GLOBAL_TABLE_VALUE_MEM";
+        case GLOBAL_ARITH_VALUE_MEM: return "GLOBAL_ARITH_VALUE_MEM";
+        case GLOBAL_LEA_COPY_BASE: return "GLOBAL_LEA_COPY_BASE";
         case GLOBAL_REG_MEM_STORE: return "GLOBAL_REG_MEM_STORE";
+        case ABS_GLOBAL_MEM_REG_LOAD: return "ABS_GLOBAL_MEM_REG_LOAD";
         case GLOBAL_MEM_REG_LOAD: return "GLOBAL_MEM_REG_LOAD";
         case GLOBAL_ARITH_MEM_REG_LOAD: return "GLOBAL_ARITH_MEM_REG_LOAD";
         case GLOBAL_ARITH_REG_MEM_STORE: return "GLOBAL_ARITH_REG_MEM_STORE";
@@ -237,6 +245,11 @@ const char *print_rule_opcode(RuleOp op)
         case POP_STACK_REG: return "POP_STACK_REG";
         case POP_REG: return "POP_REG";
         case PASS_STACK_ARGS: return "PASS_STACK_ARGS";
+        case VERIFY_CALL_TARGET_INTRA: return "VERIFY_CALL_TARGET_INTRA";
+        case VERIFY_CALL_TARGET_INTER: return "VERIFY_CALL_TARGET_INTER";
+        case VERIFY_JMP_TARGET: return "VERIFY_JMP_TARGET";
+        case VERIFY_RETURN_TARGET: return "VERIFY_RETURN_TARGET";
+        case SAVE_RETURN_TARGET: return "SAVE_RETURN_TARGET";
 
         default: return "Null";
     }
@@ -245,8 +258,8 @@ const char *print_rule_opcode(RuleOp op)
 void print_rule(RRule *rule)
 {
     //printf("%s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx\n",print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1);
-    if(rule->pc == 0x4046a2) printf("rule for 4046a2: %lx\n",rule->block_address);
-    printf("%s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx, reg2:0x%lx, reg3:0x%lx\n",print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1, (uint64_t)rule->reg2,(uint64_t)rule->reg3);
+    //printf("%s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx, reg2:0x%lx, reg3:0x%lx\n",print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,(uint64_t)rule->reg0,(uint64_t)rule->reg1, (uint64_t)rule->reg2,(uint64_t)rule->reg3);
+    printf("%s 0x%lx:(%d)0x%lx reg0:0x%lx, reg1:0x%lx, reg2:0x%lx, reg3:0x%lx\n",print_rule_opcode(rule->opcode),rule->block_address,IF_VERBOSE_ELSE(rule->id,0),rule->pc,rule->reg0,rule->reg1, rule->reg2,rule->reg3);
 }
 
 void thread_print_rule(int tid, RRule *rule)

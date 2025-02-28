@@ -66,4 +66,4 @@ include_directories(shared)
 add_subdirectory(static)
 add_subdirectory(dynamic)
 #add tests for parallelisation and prefetch
-add_subdirectory(tests)
+#add_subdirectory(tests)

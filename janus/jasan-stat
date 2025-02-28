@@ -35,7 +35,7 @@ echo $binfile | rev | cut -d/ -f1 | rev
 
 
 scratchdir=/local/scratch/ma843
-datadir=$scratchdir/rwdir-re
+datadir=$scratchdir/rwdir-final
 binname=$( echo "$binfile" | rev | cut -d'/' -f1 | rev )
 hintfile=$datadir/$binname.jrs
 asmfile="$datadir/$binname.s"

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <map>
 
 #include "elf.h"
 
@@ -24,7 +25,8 @@ enum SectionType
     SECT_STRTAB,
     SECT_RELA,
     SECT_NOTE,
-    SECT_BSS
+    SECT_BSS,
+    SECT_REL
 };
 
 enum SymbolType
@@ -34,7 +36,8 @@ enum SymbolType
     SYM_FUNC,
     SYM_SECTION,
     SYM_OTHER,
-    SYM_RELA
+    SYM_RELA,
+    SYM_REL
 };
 
 enum ExecutableType
@@ -45,6 +48,11 @@ enum ExecutableType
     BINARY_MACHO_BE,
     BINARY_COFF,
     BINARY_LIBRARY
+};
+enum BinaryType{
+    BINARY_UNKNOWN,
+    BINARY_PIC, //position-independent (shared object)
+    BINARY_NONPIC //position dependent (executable)
 };
 
 struct Symbol;
@@ -88,6 +96,9 @@ public:
     bool                            hasStaticSymbolTable;
     bool                            hasDynamicSymbolTable;
     int                             wordSize;
+    int                             pltSectionIndex;            //.plt
+    int                             pltsecSectionIndex;         //.plt.sec
+    int                             pltGOTSectionIndex;         //.plt.got
 
     std::vector<Section>            sections;
     std::multiset<Symbol>           symbols;
@@ -95,13 +106,26 @@ public:
     ExecutableType                  type;
 
     uint32_t                        fileSize;
+    bool                             pltAvailable;
+    bool                             pltAlternative;
     PCAddress                        pltSectionStartAddr;
-    std::set<std::string>               externalFuncNames;
+    PCAddress                        pltsecSectionStartAddr;
+    PCAddress                        pltGOTSectionStartAddr;
+    std::set<std::string>            externalFuncNames;
+    std::multiset<Symbol>            externalSymbols;
+    std::map<PCAddress, std::string> exportedSymbols;
+    std::set<std::string>            importedSymbols;
+    PCAddress                        codeStartAddr;
+    PCAddress                        codeEndAddr;
+    int                              binaryType;
     ///load into the executable based on the file path
     void                            open(JanusContext *jc, const char *filename);
     ///lift to disassembly and functions
     void                            disassemble(JanusContext *jc);
     void                            printSection();
+    PCAddress                       GOTAddress;
+    PCAddress                       RODATA_offset;
+    PCAddress                       RODATA_size;
 
 protected:
     uint8_t                         *buffer;        //executable storage
@@ -114,6 +138,7 @@ private:
     void                            liftSymbolToFunction(JanusContext *jc);
     void                            retrieveHiddenSymbol(Section &section);
     void                            parseELF64();
+    void                            parseELF32();
 };
 
 }//end namespace janus

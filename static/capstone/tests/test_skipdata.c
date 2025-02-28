@@ -1,5 +1,5 @@
 /* Capstone Disassembler Engine */
-/* By Nguyen Anh Quynh <aquynh@gmail.com>, 2013 */
+/* By Nguyen Anh Quynh <aquynh@gmail.com>, 2013-2019 */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +12,7 @@ struct platform {
 	cs_mode mode;
 	unsigned char *code;
 	size_t size;
-	char *comment;
+	const char *comment;
 	cs_opt_type opt_type;
 	cs_opt_value opt_value;
 	cs_opt_type opt_skipdata;

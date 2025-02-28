@@ -222,7 +222,7 @@ Variable Operand::lift(PCAddress nextInstrPc)
             var.base = fullMem.base;
             var.scale = fullMem.scale;
             var.type = JVAR_MEMORY;
-        } else if(structure = OPND_SEGMEM){ //this sec added by MA
+        } else if(structure = OPND_SEGMEM){ 
             var.value = segMem.disp;
             var.index = segMem.index;
             var.base = segMem.base;

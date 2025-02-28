@@ -72,16 +72,20 @@ namespace janus {
         std::map<PCAddress, InstID>            minstrTable;
         ///All loop iterators
         std::map<VarState*, Iterator *>        iterators;
-        ///all instructions which performs a subcall
+        ///all instructions which performs a subcall to interal functions (does not include external or plt functions)
         std::map<InstID, Function *>           calls;
         ///all function id that is called by the current function
         std::set<FuncID>                       subCalls;
+        ///all instructions which performs a call, whether to internal or external 
+        std::map<InstID, Function *>           callSites;
         ///Block id which block target not determined in binary
         std::set<BlockID>                      unRecognised;
         ///Block id which block terminates this function
         std::set<BlockID>                      terminations;
         ///Instr id which calls a long jmp
         std::set<InstID>                      longjmps;
+        ///Instr id which indirect CTI (Jump or Call)
+        std::set<InstID>                      indirectCTIs;
         ///Block id which block ends with a return instruction
         std::set<BlockID>                      returnBlocks;
         ///Split point for oversized basic block (only used for dynamic modification)
@@ -129,6 +133,8 @@ namespace janus {
         /* Scratch Register info */
         ScratchSet                             stmRegs;
         RegSet                                 spillRegs;
+        RegSet                                 readSet;
+        RegSet                                 writeSet;
         /* --------------------------------------------------------------
          *   liveness information (Only available after calling livenessAnalysis)
          * ------------------------------------------------------------- */
@@ -154,9 +160,12 @@ namespace janus {
         uint32_t                               traverseStartStep;
         uint32_t                               traverseEndStep;
 
+
+
         Function(JanusContext *gc, FuncID fid, const Symbol &symbol, uint32_t size);
         ~Function();
 
+        bool isLeaf();
         //retrieve information from instructions
         void translate();
         void visualize(void *outputStream); //output to dot format

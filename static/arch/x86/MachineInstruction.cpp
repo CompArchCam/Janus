@@ -435,7 +435,7 @@ MachineInstruction::isADD()
             opcode == X86_INS_ADDPS  ||
             opcode == X86_INS_FADD  ||
             opcode == X86_INS_FIADD  ||
-            opcode == X86_INS_FADDP  ||
+            //opcode == X86_INS_FADDP  ||
             opcode == X86_INS_PADDB  ||
             opcode == X86_INS_PADDSB  ||
             opcode == X86_INS_PADDSW  ||
@@ -588,6 +588,9 @@ bool
 MachineInstruction::isFPinstruction(){
     return (isFPU87() || isFP_SSE() || isFP_AVX());
 }
+bool MachineInstruction::isEndBranch(){
+    return (opcode == X86_INS_ENDBR64 || opcode == X86_INS_ENDBR32);
+}
 
 //TODO: SSE1, SSE2 , SSE3, SSE4
 bool
@@ -639,7 +642,7 @@ MachineInstruction::isFPU87(){
     return
         (opcode == X86_INS_FABS ||
         opcode == X86_INS_FADD ||
-        opcode == X86_INS_FADDP ||
+        //opcode == X86_INS_FADDP ||
         opcode == X86_INS_FBLD ||
         opcode == X86_INS_FBSTP ||
         opcode == X86_INS_FCHS ||

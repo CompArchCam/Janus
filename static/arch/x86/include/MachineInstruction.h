@@ -153,6 +153,7 @@ namespace janus {
         bool                            isFPU87();
         bool                            isFP_SSE();
         bool                            isFP_AVX();
+        bool                            isEndBranch();
         /** \brief returns whether this instruction reads/writes any register (excluding EFLAGS) 
          *         which is not given as an operand.
          */

@@ -1,6 +1,5 @@
+from . import CS_OP_INVALID, CS_OP_REG, CS_OP_IMM, CS_OP_MEM
 # For Capstone Engine. AUTO-GENERATED FILE, DO NOT EDIT [evm_const.py]
-
-# EVM instruction
 
 EVM_INS_STOP = 0
 EVM_INS_ADD = 1
@@ -139,8 +138,6 @@ EVM_INS_REVERT = 253
 EVM_INS_SUICIDE = 255
 EVM_INS_INVALID = 512
 EVM_INS_ENDING = 513
-
-# Group of EVM instructions
 
 EVM_GRP_INVALID = 0
 EVM_GRP_JUMP = 1

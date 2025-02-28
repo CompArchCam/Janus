@@ -3,14 +3,13 @@
 
 #include <stdio.h>
 #include <capstone/capstone.h>
-
-void print_string_hex(char *comment, unsigned char *str, size_t len);
+#include "cstool.h"
 
 static const char *s_access[] = {
 	"UNCHANGED", "READ", "WRITE", "READ | WRITE",
 };
 
-void print_read_write_regs(csh handle, cs_detail *detail)
+static void print_read_write_regs(csh handle, cs_detail *detail)
 {
 	int i;
 
@@ -60,7 +59,7 @@ void print_insn_detail_m680x(csh handle, cs_insn *insn)
 
 	for (i = 0; i < m680x->op_count; i++) {
 		cs_m680x_op *op = &(m680x->operands[i]);
-		char *comment;
+		const char *comment;
 
 		switch ((int)op->type) {
 		default:
@@ -89,18 +88,18 @@ void print_insn_detail_m680x(csh handle, cs_insn *insn)
 			break;
 
 		case M680X_OP_DIRECT:
-			printf("\t\toperands[%u].type: DIRECT = 0x%02X\n", i,
+			printf("\t\toperands[%u].type: DIRECT = 0x%02x\n", i,
 				op->direct_addr);
 			break;
 
 		case M680X_OP_EXTENDED:
-			printf("\t\toperands[%u].type: EXTENDED %s = 0x%04X\n",
+			printf("\t\toperands[%u].type: EXTENDED %s = 0x%04x\n",
 				i, op->ext.indirect ? "INDIRECT" : "",
 				op->ext.address);
 			break;
 
 		case M680X_OP_RELATIVE:
-			printf("\t\toperands[%u].type: RELATIVE = 0x%04X\n", i,
+			printf("\t\toperands[%u].type: RELATIVE = 0x%04x\n", i,
 				op->rel.address);
 			break;
 
@@ -123,7 +122,7 @@ void print_insn_detail_m680x(csh handle, cs_insn *insn)
 				printf("\t\t\toffset: %d\n", op->idx.offset);
 
 				if (op->idx.base_reg == M680X_REG_PC)
-					printf("\t\t\toffset address: 0x%X\n",
+					printf("\t\t\toffset address: 0x%x\n",
 						op->idx.offset_addr);
 
 				printf("\t\t\toffset bits: %u\n",
@@ -131,9 +130,9 @@ void print_insn_detail_m680x(csh handle, cs_insn *insn)
 			}
 
 			if (op->idx.inc_dec) {
-				char *post_pre = op->idx.flags &
+				const char *post_pre = op->idx.flags &
 					M680X_IDX_POST_INC_DEC ? "post" : "pre";
-				char *inc_dec = (op->idx.inc_dec > 0) ?
+				const char *inc_dec = (op->idx.inc_dec > 0) ?
 					"increment" : "decrement";
 
 				printf("\t\t\t%s %s: %d\n", post_pre, inc_dec,

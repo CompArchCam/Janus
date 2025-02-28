@@ -93,7 +93,9 @@ typedef enum _jmode {
     JSBCETS,
     //sofbouts+CETS NULL
     JSBCETS_NULL,
-    JSBCETS_LIVE
+    JSBCETS_LIVE,
+    JCFI,
+    JCFI_LIVE
 } JMode;
 
 /* Rule ISA header defines the supported static rules */

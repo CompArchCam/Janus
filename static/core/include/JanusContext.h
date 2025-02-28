@@ -7,6 +7,7 @@
 #include "Function.h"
 #include "Loop.h"
 #include "IO.h"
+#include "MachineInstruction.h"
 
 #include <vector>
 #include <map>
@@ -36,6 +37,7 @@ public:
     //shared library calls or external functions
     std::map<PCAddress, janus::Function *>      externalFunctions;
 
+    std::map<PCAddress, janus::Instruction>     instructionSet;
     ///Shared library profiling, enabled by default. Disable with -noshared switch
     bool					sharedOn;
     

@@ -13,6 +13,7 @@
 #include <map>
 #include <queue>
 #include <utility>
+#include<stack>
 
 using namespace std;
 using namespace janus;
@@ -270,12 +271,10 @@ updateSSANodes(Function &function,
         Variable var = (Variable)(*phi);
         latestDefs[var] = phi;
     }
-
     for (int i=0; i<bb.size; i++) {
         Instruction &instr = bb.instrs[i];
         //update instruction inputs
         instr.getInputs(inputs);
-
         for (Variable var : inputs) {
             VarState *vs = getOrInitVarState(var, latestDefs, function);
             instr.inputs.push_back(vs);

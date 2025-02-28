@@ -10,7 +10,8 @@ extern char rs_dir[];
 //extern int client_mode;
 /* Rewrite Rules Specification */
 typedef enum _rr_type {
-    GNORMAL = 0,
+    /*GNORMAL = 0,*/
+    NO_RULE = 0,
     /* Generic Rewrite Rules */
     APP_SPLIT_BLOCK,
     /* -----------------------------------------------------
@@ -239,8 +240,7 @@ typedef enum _rr_type {
     MEM_RW_ACCESS,
     STORE_CANARY_SLOT,
     POISON_CANARY_SLOT,
-    NO_RULE,
-    RESTORE_AT_EXIT,
+    /*NO_RULE,*/
     /* ----------------------------------------------------
      * Bounds Checking for Security Rewrite Rules 
      * ----------------------------------------------------*/
@@ -299,18 +299,27 @@ typedef enum _rr_type {
     POP_STACK_REG,
     POP_REG,
     PASS_STACK_ARGS,
-    REMOVE_STACK_BOUNDS //last thing to do in a function
-
-
+    REMOVE_STACK_BOUNDS, //last thing to do in a function
+    /*-------- JCFI --------*/
+    VERIFY_CALL_TARGET_INTRA,
+    VERIFY_CALL_TARGET_INTER,
+    VERIFY_JMP_TARGET,
+    VERIFY_RETURN_TARGET,
+    SAVE_RETURN_TARGET,
+    SAVE_MAIN_ENTRY,
+    HANDLE_LONGJMP,
+    RESTORE_AT_EXIT,
+    DISABLE_MONITORING
 } RuleOp;
 
 typedef struct rule_reg_t {
-    uint32_t            up;
-    uint32_t            down;
+    uint32_t            up:16;
+    uint32_t            down:16;
 } RuleReg;
 
 //Static rule instruction format:
-//each is 4+4+8+8+8+8 = 40 bytes
+//each is 4+4+8+8+8+8+(8+8) = 56 bytes for 64-bit build
+//or 4+4+4+4+ (8*4) = 48bytes
 typedef struct rule_instr {
     RuleOp              opcode      :16;    //specifies the operation on the binary
     uint32_t            channel     :16;    //channel
@@ -323,20 +332,21 @@ typedef struct rule_instr {
     PCAddress           pc;                 //holds trigger address
 
     union {
-        uint64_t        reg0;
+        uintptr_t        reg0;
+        //uint64_t        reg0;
         RuleReg         ureg0;
     };
 
     union {
-        uint64_t        reg1;
+        uintptr_t        reg1;
         RuleReg         ureg1;
     };
     union {
-        uint64_t        reg2;
+        uintptr_t        reg2;
         RuleReg         ureg2;
     };
     union {
-        uint64_t        reg3;
+        uintptr_t        reg3;
         RuleReg         ureg3;
     };
 

@@ -45,7 +45,7 @@ instr_t *get_trigger_instruction(instrlist_t *bb, RRule *rule)
         if(trigger==NULL) {
             printf("In block %lx:\n",rule->block_address);
             printf("JANUS couldn't find the specified address %lx at runtime!\n",(PCAddress)pc);
-            instrlist_disassemble(NULL, 0, bb, STDOUT);
+            //instrlist_disassemble(NULL, 0, bb, STDERR);
             printf("\n");
             return NULL;
         }
@@ -541,6 +541,7 @@ split_block_handler(JANUS_CONTEXT)
 /* -------------------------------------------------------------------------------
  *                              Function Utilities
  * ------------------------------------------------------------------------------*/
+#define BIN_64BIT 0
 void dump_registers() {
 #ifdef JANUS_X86
     dr_mcontext_t mc;
@@ -549,13 +550,14 @@ void dump_registers() {
 
     //copy the machine state to my private copy
     dr_get_mcontext(dr_get_current_drcontext(),&mc);
-
+#if BIN_64BIT
     printf("\n-----------------------------------------------------\n");
     printf("rax %lx rcx %lx rdx %lx rbx %lx\n",mc.rax,mc.rcx, mc.rdx, mc.rbx);
     printf("rsp %lx rbp %lx rdi %lx rsi %lx\n",mc.rsp,mc.rbp, mc.rdi, mc.rsi);
     printf("r8 %lx r9 %lx r10 %lx r11 %lx\n",mc.r8,mc.r9, mc.r10, mc.r11);
     printf("r12 %lx r13 %lx r14 %lx r15 %lx\n",mc.r12,mc.r13, mc.r14, mc.r15);
     printf("-----------------------------------------------------\n");
+#endif
 #endif
 }
 

@@ -78,6 +78,7 @@ buildBasicBlocks(Function &function)
     auto &instrs = function.instrs;
     auto &instrTable = function.minstrTable;
     auto &functionMap = function.context->functionMap;
+    auto &externalFunctions = function.context->externalFunctions;
     auto &blocks = function.blocks;
 
     /* Each function has a vector of machine instructions, each insn has an ID
@@ -85,6 +86,7 @@ buildBasicBlocks(Function &function)
     map<InstID, uint32_t> marks;
     map<InstID,set<InstID>> edges;
     set<InstID> notRecognised;
+    set<PCAddress> succToDirectJmp;
 
     InstID id;
     int32_t offset;
@@ -97,7 +99,6 @@ buildBasicBlocks(Function &function)
     for (InstID id=0; id<instrCount; id++) {
 
         Instruction &instr = instrs[id];
-
         if (instr.isControlFlow()) {
             //for control flow instructions, mark this id as terminate
             marks[id] += BB_TERMINATOR;
@@ -130,7 +131,12 @@ buildBasicBlocks(Function &function)
                             Function *targetFunc = (*query2).second;
                             function.jumpToFunc[id] = targetFunc;
                             function.jumpCalls.insert(targetFunc->fid);
-                        }
+                        }/*
+                        else if(query2 != externalFunctions.end()){
+                            Function *targetFunc = (*query2).second;
+                            function.jumpToFunc[id] = targetFunc;
+                            function.jumpCalls.insert(0);
+                        }*/
                         notRecognised.insert(id);
                     }
                     //if found the target instruction, mark the target as a leader
@@ -142,7 +148,14 @@ buildBasicBlocks(Function &function)
                 }
                 //whether it is register or memory operands, it is an indirect jump which we don't bother to perform extensive analysis on it
                 else {
+                    function.indirectCTIs.insert(id);
                     notRecognised.insert(id);
+                }
+                if(instr.opcode == Instruction::DirectBranch){
+                     if(id+offset < instrCount){
+                         succToDirectJmp.insert(instrs[id+offset].pc);
+                     }
+
                 }
             }
 
@@ -169,18 +182,26 @@ buildBasicBlocks(Function &function)
                     //if found in the function map
                     else {
                         Function *targetFunc = (*query).second;
-                        if(targetFunc->name == "__longjmp_chk@plt"){
+                        function.calls[id] = targetFunc;
+                        function.subCalls.insert(targetFunc->fid);
+                        function.callSites[id] = targetFunc;
+                    }
+                    auto query2 = externalFunctions.find(callTarget);
+                    if(query2 != externalFunctions.end()){
+                        Function *targetExtFunc = (*query2).second;
+                        function.callSites[id] = targetExtFunc;
+                        if(targetExtFunc->name == "__longjmp_chk@plt"){
                             //isLongJmp = true;
                             function.longjmps.insert(instr.id);
                         }
-                        function.calls[id] = targetFunc;
-                        function.subCalls.insert(targetFunc->fid);
                     }
+                    //add this to instruction site
                     //updated: assumes all all calls would return except indirect call or call to longjmp
                 }
                 //whether it is register or memory operands, it is an indirect call which we don't bother to perform extensive analysis on it
                 else {
                     notRecognised.insert(id);
+                    function.indirectCTIs.insert(id);
                 }
             }
 
@@ -191,8 +212,13 @@ buildBasicBlocks(Function &function)
         }
         /* Corner case: final instruction not a cti */
         if (id == instrCount-1 && !instr.isControlFlow()) {
+            
             marks[id] += BB_TERMINATOR;
             cornerCase = true;
+        }
+        //to deal with endbranch
+        if(instr.minstr->isEndBranch()){
+            marks[id] += BB_LEADER;
         }
     }
 
@@ -352,14 +378,13 @@ buildBasicBlocks(Function &function)
             }
         }
     }
-    //Add all the basic blocks with no incoming edges as dangling set
+    //Add all the basic blocks with no incoming edges as dangling set, or Add basic blocks starting right after the unconditional jump as dangling. Although they may be not be truly dangling (i.e. they are reachable from instructions, but reachability of those instructions cannot either be established statically (if they are target of indirect calls), or the they are target of instructions that are themselves not reachable statically i.e. either BB loops back to itself, or from another BB which is also unreachable. 
     for(auto &bb : function.blocks){
-       if(bb.pred.empty()){
+       if(bb.pred.empty() || succToDirectJmp.find(bb.instrs->pc)!= succToDirectJmp.end()){
             function.danglingBlocks.insert(bb.bid);
-
        }
-       function.danglingBlocks.insert(function.blocks[0].bid); //corner case when entry is also target of jump
     }
+    function.danglingBlocks.insert(function.blocks[0].bid); //corner case when entry is also target of jump
    
 
 }

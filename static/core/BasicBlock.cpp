@@ -124,6 +124,18 @@ BasicBlock::alive(Variable var, int index) {
     return NULL;
 }
 
+RegSet 
+BasicBlock::liveRegSet(int index){
+    //get indexed instruction's id
+    //get encompassing function
+    int id = instrs[index].id; 
+    return parentFunction->liveRegIn[id];
+}
+bool 
+BasicBlock::isRegLive(uint32_t reg, int index){
+    return (liveRegSet(index).contains(reg));
+}
+
 void
 BasicBlock::printDot(void *outputStream)
 {

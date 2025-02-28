@@ -42,7 +42,7 @@ bool loopHasFPUInstructions(Loop &loop){
         BasicBlock &bb = function->entry[bid];
         for (int i=0; i<bb.size; i++) {
             Instruction &instr = bb.instrs[i];
-            if (instr.minstr->isFPU()){
+            if (instr.minstr->isFPU87()){
                 return true;
             }
         }

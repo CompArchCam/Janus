@@ -61,7 +61,7 @@ typedef struct _jvar
     uint8_t         shift_value;
     uint8_t         size;
     JVarType        type:16;
-    uint8_t         reg; //added by MA
+    int64_t         reg; //added by MA
 } JVar;
 
 /** \brief A package of JVar, can be casted from JVar */

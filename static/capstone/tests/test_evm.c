@@ -1,5 +1,5 @@
 /* Capstone Disassembler Engine */
-/* By Nguyen Anh Quynh <aquynh@gmail.com>, 2018 */
+/* By Nguyen Anh Quynh <aquynh@gmail.com>, 2018-2019 */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,10 +14,10 @@ struct platform {
 	cs_mode mode;
 	unsigned char *code;
 	size_t size;
-	char *comment;
+	const char *comment;
 };
 
-static void print_string_hex(char *comment, unsigned char *str, size_t len)
+static void print_string_hex(const char *comment, unsigned char *str, size_t len)
 {
 	unsigned char *c;
 

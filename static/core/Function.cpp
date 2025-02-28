@@ -46,7 +46,6 @@ Function::Function(JanusContext *gc,FuncID fid, const Symbol &symbol, uint32_t s
     liveFlagIn = NULL;
     liveFlagOut = NULL;
 }
-
 Function::~Function()
 {
     /* Now we free all the instructions */
@@ -98,6 +97,8 @@ Function::translate()
         context->mode != JSBCETS &&
         context->mode != JSBCETS_NULL &&
         context->mode != JSBCETS_LIVE &&
+        context->mode != JCFI &&
+        context->mode != JCFI_LIVE &&
         context->mode != JFETCH)
         return;
 
@@ -111,11 +112,11 @@ Function::translate()
     variableAnalysis(this);
 
     /* Peform liveness analysis for security - only for liveness version */
-    if(context->mode != JASAN && context->mode != JASAN_SCEV && context->mode != JSBCETS){
+    if(context->mode != JASAN && context->mode != JASAN_SCEV && context->mode != JSBCETS && context->mode != JCFI){
         livenessAnalysis(this);
     }
 
-    if(context->mode == JASAN_LIVE || context->mode == JASAN_OPT || context->mode == JSBCETS_LIVE){ //only needed for asan-liveness or full opt
+    if(context->mode == JASAN_LIVE || context->mode == JASAN_OPT || context->mode == JSBCETS_LIVE || context->mode == JCFI_LIVE){ //only needed for asan-liveness or full opt
         flagsAnalysis(this);
     }
 }
@@ -344,4 +345,8 @@ Function::needSync()
         return true;
     }
     return false;
+}
+bool
+Function::isLeaf(){
+     return (subCalls.size() == 0  && jumpCalls.size() == 0 );
 }

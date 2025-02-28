@@ -1,6 +1,7 @@
 /* x86 specific analysis in C */
 #include "janus_arch.h"
 
+#define JANUS_X86_32
 static const char *regNameMaps[] =
 {
     "NULL", /**< Sentinel value indicating no register", for address modes. */
@@ -549,6 +550,45 @@ static const uint64_t regBitMaps[] =
 
 uint32_t get_full_reg_id(uint32_t id)
 {
+#ifdef JANUS_X86_32
+    switch(id) {
+
+        /* 8-bit general purpose */
+        case JREG_AH: return JREG_EAX; /**< The "ax" register. */
+        case JREG_CH: return JREG_ECX; /**< The "cx" register. */
+        case JREG_DH: return JREG_EDX; /**< The "dx" register. */
+        case JREG_BH: return JREG_EBX; /**< The "bx" register. */
+
+        /* 8-bit general purpose */
+        case JREG_AL: return JREG_EAX; /**< The "ax" register. */
+        case JREG_CL: return JREG_ECX; /**< The "cx" register. */
+        case JREG_DL: return JREG_EDX; /**< The "dx" register. */
+        case JREG_BL: return JREG_EBX; /**< The "bx" register. */
+
+        /* 16-bit general purpose */
+        case JREG_AX: return JREG_EAX; /**< The "ax" register. */
+        case JREG_CX: return JREG_ECX; /**< The "cx" register. */
+        case JREG_DX: return JREG_EDX; /**< The "dx" register. */
+        case JREG_BX: return JREG_EBX; /**< The "bx" register. */
+        /* 32-bit general purpose */
+        case JREG_EAX: return JREG_EAX; /**< The "eax" register. */
+        case JREG_ECX: return JREG_ECX; /**< The "ecx" register. */
+        case JREG_EDX: return JREG_EDX; /**< The "edx" register. */
+        case JREG_EBX: return JREG_EBX; /**< The "ebx" register. */
+        
+        case JREG_ESP: return JREG_ESP; /**< The "esp" register. */
+        case JREG_EBP: return JREG_EBP; /**< The "ebp" register. */
+        case JREG_ESI: return JREG_ESI; /**< The "esi" register. */
+        case JREG_EDI: return JREG_EDI; /**< The "edi" register. */
+
+        case JREG_SP: return JREG_ESP; /**< The "sp" register. */
+        case JREG_BP: return JREG_EBP; /**< The "bp" register. */
+        case JREG_SI: return JREG_ESI; /**< The "si" register. */
+        case JREG_DI: return JREG_EDI; /**< The "di" register. */
+    default: return id;
+    }
+
+#else
     switch(id) {
 
         /* 8-bit general purpose */
@@ -634,6 +674,7 @@ uint32_t get_full_reg_id(uint32_t id)
         case JREG_DIL: return JREG_RDI; /**< The "dil" register. */
     default: return id;
     }
+#endif
 }
 
 //1+2+4+64+128+256+512+1024+2048+32768

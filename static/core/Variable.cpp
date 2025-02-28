@@ -23,6 +23,7 @@ VarState::VarState() {
     shift_value = 0;
     size = 0;
     type = JVAR_UNKOWN;
+    reg = 0;
 
     lastModified = NULL;
     block = NULL;
@@ -44,6 +45,7 @@ VarState::VarState(Variable var) {
     shift_value = var.shift_value;
     size = var.size;
     type = var.type;
+    reg = var.reg;
 
     lastModified = NULL;
     block = NULL;
@@ -67,6 +69,7 @@ VarState::VarState(Variable var, BasicBlock *block, Instruction* lastModified)
     shift_value = var.shift_value;
     size = var.size;
     type = var.type;
+    reg = var.reg;
 
     expr = NULL;
     isPHI = false;
@@ -88,6 +91,7 @@ VarState::VarState(Variable var, BasicBlock *block, bool isPHI)
     shift_value = var.shift_value;
     size = var.size;
     type = var.type;
+    reg = var.reg;
 
     expr = NULL;
     notUsed = true;
@@ -107,6 +111,7 @@ Variable::Variable(const JVar &var)
     shift_value = var.shift_value;
     size = var.size;
     type = var.type;
+    reg = var.reg;
 }
 
 Variable::Variable() {
@@ -118,18 +123,20 @@ Variable::Variable() {
     shift_type = 0;
     shift_value = 0;
     size = 0;
+    reg = 0;
 }
 
-Variable::Variable(uint32_t reg)
+Variable::Variable(uint32_t regid)
 {
     type = JVAR_REGISTER;
-    value = (uint64_t)reg;
+    value = (uint64_t)regid;
     base = 0;
     index = 0;
     scale = 0;
     shift_value = 0;
     shift_type = 0;
     size = 8;
+    reg = (uint64_t)regid;
 }
 
 Variable::Variable(uint64_t val)
@@ -142,6 +149,7 @@ Variable::Variable(uint64_t val)
     shift_value = 0;
     shift_type = 0;
     size = 8;
+    reg = val;
 }
 
 bool

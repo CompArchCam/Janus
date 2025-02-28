@@ -24,46 +24,7 @@ std::map<PCAddress, pair<Expr*, Expr*>> malloc_metadata;
 static std::pair<Expr*, Expr*> malloc_bb;
 std::set<PCAddress> safeAccess;
 
-std::set<PCAddress> asanlib_missing_blocks{140672, 370592, 370320, 371600, 370985, 370348, 370452, 371648, 142464, 371661, 371808, 370478, 142328, 370609, 370327,371613, 370362, 370584, 372932, 372963, 372967};
-
-
-/*-----------------------Function Prototypes ----------------------*/
-/* 32-bit code on 32 or 64 bit (eax = 32bit, rax = 64 bit)
-
-  base registers: eax-edx, esp,ebp, esi, edi
-  index registers: eax-edx, ebp, esi, edi
-  64-bit code on 64-bit x86
-
-  base: GPR  rax-rdx, rsp, rbp, rsi, erdi, r8-r15
-  index: same as base
-
-  indirect address: mov 1, (%rax)
-  indirect with disp: mov 1, -24(%rbp)
-  indirect with displacement and scaled index
-  
- JVAR_MEMORY          Generic memory variables (in form: [base+index*scale+disp])
- -0x8(%rbp)             => base = rbp, value = -0x8
- +0x8(%rsp, rax, 4)     => base = rsp, index = rax, scale =4, value =0x8
- +0x8(%rbp, rax, 4)     => base = rbp, index = rax, scale =4, value =0x8
- +0x8(, rax, 4)         => base = 0, index = rax, scale =4, value =0x8
- +0x8(%rax, rcx, 4)     => base = rax, index = rcx, scale =4, value =0x8
- +0x8(%rax, rcx)        => base = rax, index = rcx, scale =1, value =0x8
- (%rax, rcx, 4)         => base = rax, index = rcx, scale =4, value =0x0
- +0x606180(, rcx, 4)    => base = 0,   index = rcx, scale =4, value = 0x606180 //global. static base address
-
-
- JVAR_ABSOLUTE        Absolute memory addresses (PC-relative addresses)
- 0x200bb5(%rip)         => base = rip, value = 0x200bb5 + pc
-
- JVAR_STACK            Stack variables (only in form stack with displacement) 
- +0x8(%rsp)             => base = rsp, value = 0x8
-
- JVAR_POLYNOMIAL        Polynomial variable type (reserved for x86), JVAR_MEM, JVAR_ABSOLUTE or JVAR_STACK used in LEA
- LEA  rbp, [rip + 0x2007be] 
-
- JVAR_CONSTANT          Immediate value
-
- */
+//std::set<PCAddress> asanlib_missing_blocks{140672, 370592, 370320, 371600, 370985, 370348, 370452, 371648, 142464, 371661, 371808, 370478, 142328, 370609, 370327,371613, 370362, 370584, 372932, 372963, 372967};
 
 /*----------------- Routine to add security related rules -----------------------*/
 static void insert_asan_rule(Instruction *instr, RuleOp ruleID, int data1, int data2, int data3 = 0, int data4 = 0){
@@ -92,7 +53,6 @@ static string get_binfile_name(string filepath){
             filename = token;
     }
     string finalname =filename;
-    //printf("final file: %s\n", filename);
     return finalname;
 }
 
@@ -128,7 +88,7 @@ void search_plt(char * filename) {
         std::regex pattern_plt_t(const_cast<char*>(pattern_plt),std::regex_constants::grep);
         std::ifstream fp(filename);
         if(!fp.is_open()) {
-            std::cout << "Error in opening the file \n";
+            std::err << "Error in opening the file \n";
             exit(EXIT_FAILURE);
         }
         std::string line;
@@ -257,7 +217,6 @@ static void monitor_mem_access(JanusContext *jc){
                     bitmask_flags = func.liveFlagIn[raw_instr->id].bits;
                     bitmask_regs = func.liveRegIn[raw_instr->id].bits;
                 }
-
                 if (meminstr.type == MemoryInstruction::Read ||
                                         meminstr.type == MemoryInstruction::ReadAndRead) {
                     insert_asan_rule(raw_instr, (RuleOp)MEM_R_ACCESS,bitmask_flags,bitmask_regs);
@@ -280,12 +239,8 @@ monitor_stack_access(JanusContext* jc){
      if(!func.hasCanary) continue;
      if ((!func.entry && !func.instrs.size()) || func.isExternal) continue;
      if(gcc_clang_func.count(func.name)) continue;
-     if(func.name.compare("main") != 0) continue;
      PCAddress cr_instr = func.canaryReadIns;
      PCAddress cc_instr = func.canaryCheckIns;
-#ifdef DEBUG_VERBOSE
-     cout<<"canaryReadIns: "<<hex<<cr_instr<<" canarayCheckIns: "<<cc_instr<<endl;
-#endif
      BasicBlock* entry = func.entry;
      if(!entry || !(entry->instrs)) continue;
      int size = entry->size;
@@ -430,7 +385,7 @@ static void analyze_leaf_functions(JanusContext *jc){
      int save_rdi = 0; 
      int save_rsi = 0; 
      //if function has subcalls, skip
-     if(func.subCalls.size()  || func.jumpCalls.size() ) continue;
+     if(!func.isLeaf())         continue;
      //if function has no memory instructions, skip
      bool readWriteMem = false;
      for(auto &bb : func.blocks){
@@ -470,6 +425,38 @@ static void analyze_leaf_functions(JanusContext *jc){
      }
   }
 }
+static void analyze_call_sites(JanusContext *jc){
+    int save_rdi, save_rsi;
+  for(auto &func: jc->functions){
+     if ((!func.entry && !func.instrs.size()) || func.isExternal) continue;
+     if(gcc_clang_func.count(func.name) || func.name == "_plt" || func.name == "main") continue;
+     if(func.isLeaf()) continue; //already taken care of in the analyze_leaf_function
+     //only save rdi and rsi at the entry/exit of the function, if they have memory instructions AND they are not being written to. because, if they are being written to, the caller must have saved them.
+     bool readWriteMem = false;
+     for(auto &bb : func.blocks){
+       if(bb.minstrs.size()){ //even if one memory instruction found, we proceed
+           readWriteMem = true;
+           break;
+       }
+     }
+     if(!readWriteMem) continue;    //if not memory read/write instruction, no need to save/restore
+     save_rdi = (func.writeSet.contains(JREG_RDI)) ? 0 : 1; 
+     save_rsi = (func.writeSet.contains(JREG_RSI)) ? 0 : 1;
+     if(save_rsi || save_rdi){
+         //save
+         Instruction* entry_instr = &(func.entry->instrs[0]);
+         insert_asan_rule(entry_instr, SAVE_AT_ENTRY,save_rdi, save_rsi, 0,0);
+         //restore
+         for (auto retID : func.terminations) {
+            BasicBlock &bb = func.blocks[retID];
+            Instruction *exit_instr = bb.lastInstr();
+            if (exit_instr->opcode == Instruction::Return) { //TODO: look for lonjmp as well
+                insert_asan_rule(exit_instr, RESTORE_AT_EXIT, save_rdi, save_rsi, 0, 0);
+            }
+         }
+     }
+  }
+}
 void
 generateASANRule(JanusContext *jc)
 {
@@ -479,14 +466,14 @@ generateASANRule(JanusContext *jc)
     //for JASAN_NULL, mark all basic blocks with nulli(no-op) rules, to indicate no need to process it dynamically  
     if(jc->mode == JASAN_NULL){
         mark_null_rules(jc);
-        //HACK: to deal with the basic blocks not recognised in the elf
+        /*//HACK1: to deal with the basic blocks not recognised in the elf
         if(get_binfile_name(jc->name) == "libclang_rt.asan-x86_64.so"){
              mark_null_rules_missing_blocks();
-        }
+        }*/
         mark_noop_blocks(jc); //to solve the issue of DR starting bb from noop sometimes.
         return;
     }
-    //HACK: mark entry of main, to avoid accessing shadow memory set up before it has been set up
+    //HACK2: mark entry of main, to avoid accessing shadow memory set up before it has been set up
     mark_main_entry(jc);
 
     if(jc->mode == JASAN_OPT || jc->mode == JASAN_SCEV){
@@ -498,6 +485,7 @@ generateASANRule(JanusContext *jc)
     //use liveness for rsi, rdi and rax around function calls
     if(jc->mode == JASAN_LIVE || jc->mode == JASAN_OPT){
         analyze_leaf_functions(jc);
+        analyze_call_sites(jc);
     }
 
     //add rules for canary value shadowing and poisoning

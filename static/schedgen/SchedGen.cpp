@@ -14,6 +14,8 @@
 #endif
 #include "PlanRule.h"
 #include "asanRule.h"
+#include "sbCETSRule.h"
+#include "cfiRule.h"
 #include <cstdlib>
 #include <cstdio>
 
@@ -45,7 +47,7 @@ generateRules(JanusContext *gc)
 
     //skip generating rules if there are no loops. for jasan, we still want to generate rules so we move forward
     if (gc->mode != JFCOV && !numLoops 
-        && (gc->mode!=JDLL && gc->mode!=JASAN && gc->mode!=JASAN_SCEV && gc->mode!=JASAN_LIVE &&  gc->mode!=JASAN_OPT && gc->mode != JASAN_NULL)) {
+        && (gc->mode != JCFI && gc->mode != JCFI_LIVE && gc->mode!=JDLL && gc->mode!=JASAN && gc->mode!=JASAN_SCEV && gc->mode!=JASAN_LIVE &&  gc->mode!=JASAN_OPT && gc->mode != JASAN_NULL && gc->mode!=JSBCETS && gc->mode!=JSBCETS_NULL && gc->mode!=JSBCETS_LIVE)) {
         GSTEP("No rules generated"<<endl);
         return;
     }
@@ -97,6 +99,15 @@ generateRules(JanusContext *gc)
     case JASAN_NULL:
         generateASANRule(gc);
         break;
+    case JSBCETS:
+    case JSBCETS_NULL:
+    case JSBCETS_LIVE:
+        generateSBCETSRule(gc);
+    break;
+    case JCFI:
+    case JCFI_LIVE:
+       generateCFIRule(gc);
+   break;
     default:
         break;
     }
@@ -112,6 +123,31 @@ generateRules(JanusContext *gc)
     GSTEP("Rewrite schedule file: "<<rulefile<<" generated, "<<size<<" bytes "<<endl);
 }
 
+void insert_null_rule(PCAddress bb){
+    RewriteRule rule;
+    rule = RewriteRule(NO_RULE, bb , bb , 0);
+    rule.reg0 = 0;
+    rule.reg1 = 0;
+    rule.reg2 = 0;
+    rule.reg3 = 0;
+    insertRule_null(0, rule);
+//    count_rule++;
+}
+void mark_null_rules(JanusContext *jc){
+   for(auto &func: jc->functions){
+      for(auto &bb : func.blocks){
+         if(!rewriteRules[0].ruleMap.count(bb.instrs->pc)){ //if bb not found in map, insert empty rule
+             insert_null_rule(bb.instrs->pc);
+         } 
+      }
+   }  
+}
+void mark_noop_blocks(JanusContext *jc){
+
+   for(auto b : jc->nopInstrs){
+        insert_null_rule(b);
+   }
+}
 /* We have *fake* basic blocks which
  * doesn't terminate with a branch instruction,
  * this is different to dynamoRIO's interpretation
@@ -195,7 +231,7 @@ string get_binfile_name(string filepath){
             filename = token;
     }
     string finalname =filename;
-    printf("final rewrite schedule file: %s\n", filename);
+    //printf("final rewrite schedule file: %s\n", filename);
     return finalname;
 }
 /* Emit all relevant info in the rule file */
@@ -216,6 +252,7 @@ compileRewriteRulesToFile(JanusContext *gc)
         op = fopen(rulefile.c_str(),"w");
         //op = fopen(string((gc->name)+".jrs").c_str(),"w");
     }
+    printf("final rewrite schedule file: %s\n", rulefile.c_str());
     fpos_t pos;
     RSchedHeader header;
     uint32_t numRules = 0;
@@ -300,6 +337,8 @@ RewriteRule::RewriteRule(RuleOp op, PCAddress blockAddr, PCAddress ruleAddr, uin
 {
     reg0 = 0;
     reg1 = 0;
+    reg2 = 0;
+    reg3 = 0;
 }
 
 RewriteRule::RewriteRule(RuleOp op, BasicBlock *block, bool pre_insert)
@@ -307,6 +346,8 @@ RewriteRule::RewriteRule(RuleOp op, BasicBlock *block, bool pre_insert)
 {
     reg0 = 0;
     reg1 = 0;
+    reg2 = 0;
+    reg3 = 0;
     blockAddr = block->instrs->pc;
 
     if(pre_insert) {
@@ -332,6 +373,8 @@ RewriteRule::RewriteRule(RuleOp op, BasicBlock *block, uint32_t position)
 {
     reg0 = 0;
     reg1 = 0;
+    reg2 = 0;
+    reg3 = 0;
     blockAddr = block->instrs->pc;
     ruleAddr = block->instrs[position].pc;
     id = block->instrs[position].id;
@@ -348,6 +391,8 @@ RewriteRule::toRRule(uint32_t channel)
     rule.pc = ruleAddr;
     rule.reg0 = reg0;
     rule.reg1 = reg1;
+    rule.reg2 = reg2;
+    rule.reg3 = reg3;
     rule.next = NULL;
     return rule;
 }
@@ -356,7 +401,8 @@ void
 RewriteRule::print(void *outputStream) {
     ostream &os = *((ostream*)outputStream);
 
-    os << "HINT - " << opcode << " Block=" << blockAddr << ", Addr=" << ruleAddr << "(ID: " << ((uint16_t)ureg0.down) << "), r0=" << reg0 << ", r1=" << reg1 << endl;
+    //os << "HINT - " << opcode << " Block=" << blockAddr << ", Addr=" << ruleAddr << "(ID: " << ((uint16_t)ureg0.down) << "), r0=" << reg0 << ", r1=" << reg1 << endl;
+    os << "HINT - " << opcode << " Block=" << blockAddr << ", Addr=" << ruleAddr << "(ID: " << ((uint16_t)ureg0.down) << "), r0=" << reg0 << ", r1=" << reg1 << ", r2="<< reg2<< ", r3= "<<reg3<<endl;
 }
 
 /** \brief Encode the current JVar to rewrite rule (wrapper) */
@@ -393,12 +439,21 @@ bool janus::operator<(const RewriteRule &lhs, const RewriteRule &rhs)
                                return true;
                             else if (lhs.reg0 > rhs.reg0)
                                     return false;
-                                 else return (lhs.reg1 < rhs.reg1);
-    }
+                               else if (lhs.reg1 < rhs.reg1)
+                                       return true;
+                                    else if (lhs.reg1 > rhs.reg1)
+                                            return false;
+                                       else if (lhs.reg2 < rhs.reg2)
+                                               return true;
+                                            else if (lhs.reg2 > rhs.reg2)
+                                                    return false;
+                                                 else return (lhs.reg3 < rhs.reg3);
+                    }
     else return false;
 }
 
 bool janus::operator==(const RewriteRule &lhs, const RewriteRule&rhs)
 {
-    return (lhs.id == rhs.id) && (lhs.opcode == rhs.opcode) && (lhs.ruleAddr == rhs.ruleAddr) && (lhs.reg0 == rhs.reg0) && (lhs.reg1 == rhs.reg1);
+    //return (lhs.id == rhs.id) && (lhs.opcode == rhs.opcode) && (lhs.ruleAddr == rhs.ruleAddr) && (lhs.reg0 == rhs.reg0) && (lhs.reg1 == rhs.reg1);
+    return (lhs.id == rhs.id) && (lhs.opcode == rhs.opcode) && (lhs.ruleAddr == rhs.ruleAddr) && (lhs.reg0 == rhs.reg0) && (lhs.reg1 == rhs.reg1) && (lhs.reg2 == rhs.reg2) && (lhs.reg3 == rhs.reg3);
 }

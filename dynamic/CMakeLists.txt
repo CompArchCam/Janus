@@ -1,5 +1,5 @@
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -g")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -O3")
 
 enable_language(C CXX)
 
@@ -50,7 +50,11 @@ add_subdirectory(vector)
 add_subdirectory(planner)
 #JASAN - AddressSanitizer
 add_subdirectory(asan)
+#JSBOUND - Softbound-CETS
+#add_subdirectory(sbcets)
 #DLL
 add_subdirectory(dll)
+add_subdirectory(cfi)
+#add_subdirectory(security)
 endif()
 

@@ -16,7 +16,7 @@
 
 using namespace std;
 using namespace janus;
-
+#define FILE_TYPE_OFFSET 16
 Executable::~Executable()
 {
     delete[] buffer;
@@ -37,6 +37,11 @@ void Executable::open(JanusContext *jc, const char *filename)
     binFile.seekg (0, ios::beg);
     binFile.read((char *)buffer,fileSize);
     binFile.close();
+
+    //plt section 
+    pltSectionIndex = -1;
+    pltsecSectionIndex = -1;
+    pltGOTSectionIndex = -1;
 
     //recognise executable headers
     parseHeader();
@@ -62,7 +67,8 @@ void Executable::parseHeader()
         switch(buffer[EI_CLASS]) {
             case ELFCLASS32:                         
                 wordSize = 32; 
-                GASSERT_NOT_IMPLEMENTED(false,"ELF 32-bit header");
+                //GASSERT_NOT_IMPLEMENTED(false,"ELF 32-bit header");
+                parseELF32();
             break;
             case ELFCLASS64:                                                                                  
                 wordSize = 64; 
@@ -74,6 +80,17 @@ void Executable::parseHeader()
     else { 
         type = UNRECOGNISED;
     }
+    switch(buffer[FILE_TYPE_OFFSET]){
+         case ET_DYN:
+             binaryType = BINARY_PIC;
+         break;
+         case ET_EXEC:
+             binaryType = BINARY_NONPIC;
+         break;
+         default:
+              binaryType = BINARY_UNKNOWN;
+         break;
+    }
 }
 
 void Executable::parseFlat()
@@ -82,8 +99,11 @@ void Executable::parseFlat()
           " , recovering hidden symbols"<<endl);
     /* We only parse .text and .plt section */
     for(auto &section: sections) {
-        if(section.name == string(".text"))
+        if(section.name == string(".text")){
             retrieveHiddenSymbol(section);
+            codeStartAddr = section.startAddr;
+            codeEndAddr = section.endAddr;
+        }
     }
     GSTEP("Found "<<symbols.size()<<" hidden symbols"<<endl);
 }
@@ -95,7 +115,9 @@ void Executable::liftSymbolToFunction(JanusContext *jc)
     //Infer the symbol boundaries by looking at the next entry
     for (auto sit=symbols.begin(); sit != symbols.end(); sit++) {
         //cout <<(*sit).name<<" "<<hex<<(*sit).startAddr<<" type "<<(*sit).type<<" section start "<<(*sit).section->startAddr << " end " << (*sit).section->endAddr <<endl;
-        if ((*sit).type == SYM_FUNC || (*sit).type == SYM_RELA) {
+        int rel_type;
+        rel_type = (wordSize == 64) ? SYM_RELA : SYM_REL;
+        if ((*sit).type == SYM_FUNC || (*sit).type == SYM_RELA || (*sit).type == SYM_REL) {
             //since the symbols is already sorted, just look for the next different symbol
             auto sit_next = sit;
             sit_next++;
@@ -112,7 +134,6 @@ void Executable::liftSymbolToFunction(JanusContext *jc)
             
             //create new function and put it into the global vector
             jc->functions.emplace_back(jc,fid,(*sit),size);
-
             fid++;
         }
     }
@@ -125,6 +146,7 @@ void Executable::retrieveHiddenSymbol(Section &section)
     uint8_t *flatBuffer = section.contents;
     size_t bufferSize = section.size;
     set<PCAddress> callTargets;
+    set<PCAddress> endBranchTargets;
     PCAddress pc = section.startAddr;
     /* Insert the start of the section */
     callTargets.insert(pc);
@@ -155,9 +177,15 @@ void Executable::retrieveHiddenSymbol(Section &section)
                 detail->x86.operands[0].type == X86_OP_IMM)
             callTargets.insert(detail->x86.operands[0].imm);
         }
+        //ADDED for those instructions that are not call targets but have endbranch. TODO: do detailed prologue analysis
+        if(instr->id == X86_INS_ENDBR32 || instr->id == X86_INS_ENDBR64){
+            cs_detail *detail = instr->detail;
+            endBranchTargets.insert((uintptr_t)instr->address);
+        }
         /* JUMP targets could also be starts of function,
          * we will check this in building basic blocks */
     }
+    //TODO: also check for exported symbols. and retain the names of those addresses. in fact do this before anything else. also start of the .text section is also a function.
 
     cs_free(instr,1);
 
@@ -183,6 +211,7 @@ void Executable::retrieveHiddenSymbol(Section &section)
         ss.str(string());
         i++;
     }
+    //TODO: for endbranch targets, check if they are already part of some function, if not add them to symbols.
 
     cs_close(&cs_handle);
 }

@@ -388,22 +388,31 @@ variableAnalysis(janus::Function *function)
         for (auto vi: instr.inputs) {
             if (vi->type == JVAR_REGISTER){
                 instr.regReads.insert(vi->value);
+                function->readSet.insert(vi->value);
             }
             else if (vi->type == JVAR_MEMORY || vi->type == JVAR_POLYNOMIAL) {
                 for (auto vm : vi->pred)
-                    if (vm->type == JVAR_REGISTER)
+                    if (vm->type == JVAR_REGISTER){
                         instr.regReads.insert(vm->value);
+                        function->readSet.insert(vm->value);
+                    }
             }
         }
         for (auto vo: instr.outputs) {
             if (vo->type == JVAR_REGISTER){
-                if(vo->value > vo->reg) // if it is smaller than full version. only then kill it
+                function->writeSet.insert(vo->value);
+                //vo->value = 64bit version rax, vo->reg = actual byte size register e.g. eax, ah, al
+                //vo->value (64 bit version values) are always less than shorter bit versions
+                if(vo->value == vo->reg){ // 
                     instr.regWrites.insert(vo->value);
+                }
             }
             else if (vo->type == JVAR_MEMORY || vo->type == JVAR_POLYNOMIAL) {
                 for (auto vm : vo->pred)
-                    if (vm->type == JVAR_REGISTER)
+                    if (vm->type == JVAR_REGISTER){
                         instr.regReads.insert(vm->value);
+                        function->readSet.insert(vm->value);
+                    }
             }
         }
     }
@@ -464,6 +473,11 @@ livenessAnalysis(Function *function)
             Instruction &instr = bb.instrs[i];
             if(instr.opcode == Instruction::Call){ //this is because we dont always get a correst set from guessCallArguments
                 instr.regReads.merge(paramSet);
+            }
+            else if(instr.opcode == Instruction::Interupt && instr.minstr->opcode == X86_INS_SYSCALL){
+                instr.regReads.merge(paramSet);
+                instr.regReads.merge(JREG_R10);
+                instr.regReads.merge(JREG_RAX); //syscall number
             }
             //skip invisible reads within the same block
             regUses[b].merge(instr.regReads - regDefs[b]);

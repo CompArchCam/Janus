@@ -13,6 +13,10 @@ from distutils.command.build import build
 from distutils.command.sdist import sdist
 from setuptools.command.bdist_egg import bdist_egg
 
+PYTHON2 = sys.version_info[0] == 2
+if PYTHON2:
+    import io
+
 SYSTEM = sys.platform
 
 # adapted from commit e504b81 of Nguyen Tan Cong
@@ -52,12 +56,12 @@ if 'PKG_MAJOR' not in VERSION_DATA or \
     raise Exception("Malformed pkgconfig.mk")
 
 if 'PKG_TAG' in VERSION_DATA:
-    VERSION = '{PKG_MAJOR}.{PKG_MINOR}.{PKG_EXTRA}.{PKG_TAG}'.format(**VERSION_DATA)
+    VERSION = '{PKG_MAJOR}.{PKG_MINOR}.{PKG_EXTRA}{PKG_TAG}'.format(**VERSION_DATA)
 else:
     VERSION = '{PKG_MAJOR}.{PKG_MINOR}.{PKG_EXTRA}'.format(**VERSION_DATA)
 
 if SYSTEM == 'darwin':
-    VERSIONED_LIBRARY_FILE = "libcapstone.4.dylib"
+    VERSIONED_LIBRARY_FILE = "libcapstone.{PKG_MAJOR}.dylib".format(**VERSION_DATA)
     LIBRARY_FILE = "libcapstone.dylib"
     STATIC_LIBRARY_FILE = 'libcapstone.a'
 elif SYSTEM in ('win32', 'cygwin'):
@@ -65,7 +69,7 @@ elif SYSTEM in ('win32', 'cygwin'):
     LIBRARY_FILE = "capstone.dll"
     STATIC_LIBRARY_FILE = None
 else:
-    VERSIONED_LIBRARY_FILE = "libcapstone.so.4"
+    VERSIONED_LIBRARY_FILE = "libcapstone.so.{PKG_MAJOR}".format(**VERSION_DATA)
     LIBRARY_FILE = "libcapstone.so"
     STATIC_LIBRARY_FILE = 'libcapstone.a'
 
@@ -137,13 +141,14 @@ def build_libraries():
         #    - Run this command in an environment setup for MSVC
         if not os.path.exists("build"): os.mkdir("build")
         os.chdir("build")
-        # Do not build tests & static library
-        os.system('cmake -DCMAKE_BUILD_TYPE=RELEASE -DCAPSTONE_BUILD_TESTS=0 -DCAPSTONE_BUILD_STATIC=0 -G "NMake Makefiles" ..')
-        os.system("nmake")
-    else:   # Unix incl. cygwin
+        # Only build capstone.dll
+        os.system('cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DCAPSTONE_BUILD_TESTS=OFF -DCAPSTONE_BUILD_CSTOOL=OFF -G "NMake Makefiles" ..')
+        os.system("cmake --build .")
+    else:  # Unix incl. cygwin
         os.system("CAPSTONE_BUILD_CORE_ONLY=yes bash ./make.sh")
 
     shutil.copy(VERSIONED_LIBRARY_FILE, os.path.join(LIBS_DIR, LIBRARY_FILE))
+
     # only copy static library if it exists (it's a build option)
     if STATIC_LIBRARY_FILE and os.path.exists(STATIC_LIBRARY_FILE):
         shutil.copy(STATIC_LIBRARY_FILE, LIBS_DIR)
@@ -214,13 +219,16 @@ setup(
     author='Nguyen Anh Quynh',
     author_email='aquynh@gmail.com',
     description='Capstone disassembly engine',
-    url='http://www.capstone-engine.org',
+    url='https://www.capstone-engine.org',
+    long_description=io.open('README.txt', encoding="utf8").read() if PYTHON2 else open('README.txt', encoding="utf8").read(),
+    long_description_content_type='text/markdown',
+    python_requires='>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*',
     classifiers=[
         'License :: OSI Approved :: BSD License',
         'Programming Language :: Python :: 2',
+        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
     ],
-    requires=['ctypes'],
     cmdclass=cmdclass,
     zip_safe=True,
     include_package_data=True,
